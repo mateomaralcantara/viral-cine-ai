@@ -21,10 +21,11 @@ export function pilotSpendLimit() {
 export async function assertPilotShotBudget(project: FilmProject, shot: FilmShot) {
   if (!pilotModeEnabled()) return;
   const current = await reservedMovieSpend(project.id);
+  const visibleDialogue = Boolean(shot.spokenText.trim()) && Boolean(shot.speakerId) && shot.speakerId !== 'narrator';
   const additional =
     estimateOperationCost('voice', voiceCostUnits(shot.spokenText)) +
     estimateOperationCost('video', shot.durationSeconds) +
-    (shot.spokenText.trim() ? estimateOperationCost('lip-sync', shot.durationSeconds) : 0) +
+    (visibleDialogue ? estimateOperationCost('lip-sync', shot.durationSeconds) : 0) +
     estimateOperationCost('audit', 1);
   const limit = pilotSpendLimit();
   if (current + additional > limit + 0.0001) {
