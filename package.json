@@ -16,6 +16,7 @@
     "smoke": "node --import tsx scripts/smoke-pipeline.ts",
     "check:env": "node scripts/check-env.mjs",
     "migrate:4": "node --import tsx scripts/migrate-v4.ts",
+    "voices:4": "node --import tsx scripts/voices-v4.ts",
     "verify:4": "npm run typecheck && npm test"
   },
   "dependencies": {
