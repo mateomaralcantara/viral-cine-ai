@@ -5,6 +5,7 @@ import { projectAssetDir } from '@/lib/storage/project-store';
 import { generateSpeech } from '@/lib/providers/openai-media';
 import { generateElevenLabsSpeech, assertCharacterVoiceReady } from '@/lib/providers/elevenlabs';
 import { generateFalLipSync } from '@/lib/providers/fal-media';
+import { runFakeProviderStage } from '@/lib/providers/fake-cinema';
 import { createSilenceAudio } from '@/lib/media/ffmpeg';
 import { hasUsableCredential, safeErrorMessage } from '@/lib/engine/production-safety';
 import { appendSpend, estimateOperationCost, voiceCostUnits } from '@/lib/engine/spend-ledger';
@@ -41,18 +42,22 @@ export async function prepareAudioFirstVoice(
   }
 
   if (process.env.PRODUCTION_MODE !== 'real') {
-    await createSilenceAudio(shot.durationSeconds, voicePath);
-    await writeFile(alignmentPath, `${JSON.stringify({ provider: 'offline', speakerId, text }, null, 2)}\n`, 'utf8');
+    await runFakeProviderStage('voice', voicePath, async () => {
+      await createSilenceAudio(shot.durationSeconds, voicePath);
+      await writeFile(alignmentPath, `${JSON.stringify({ provider: 'offline', speakerId, text }, null, 2)}\n`, 'utf8');
+      return voicePath;
+    });
     return { voicePath, alignmentPath, speakerId, provider: 'offline' };
   }
 
   const character = speakerId && speakerId !== 'narrator'
     ? project.plan?.characters.find((item) => item.id === speakerId)
     : undefined;
+  const voiceProvider = character?.voiceProvider || 'elevenlabs';
   const idempotencyKey = `voice:${shot.id}:${speakerId || 'none'}:${text.length}`;
   const estimatedUsd = estimateOperationCost('voice', voiceCostUnits(text));
 
-  if (speakerId === 'narrator' || character?.voiceProvider === 'elevenlabs') {
+  if (speakerId === 'narrator' || voiceProvider === 'elevenlabs') {
     if (speakerId !== 'narrator') assertCharacterVoiceReady(character);
     await appendSpend(project.id, {
       operation: 'voice',
@@ -78,7 +83,7 @@ export async function prepareAudioFirstVoice(
     try {
       const result = await generateElevenLabsSpeech(character, text, voicePath, alignmentPath, {
         narrator: speakerId === 'narrator',
-        emotion: shot.dialogueLines[0]?.emotion
+        emotion: shot.dialogueLines?.[0]?.emotion
       });
       await appendSpend(project.id, {
         operation: 'voice',
@@ -110,7 +115,7 @@ export async function prepareAudioFirstVoice(
     }
   }
 
-  if (character?.voiceProvider === 'openai' && hasUsableCredential('OPENAI_API_KEY')) {
+  if (voiceProvider === 'openai' && character && hasUsableCredential('OPENAI_API_KEY')) {
     await appendSpend(project.id, {
       operation: 'voice',
       provider: 'openai',
@@ -170,7 +175,10 @@ export async function applyAudioFirstLipSync(
     return { outputPath, provider: 'none' };
   }
   if (process.env.PRODUCTION_MODE !== 'real') {
-    await copyFile(baseVideoPath, outputPath);
+    await runFakeProviderStage('lip-sync', outputPath, async () => {
+      await copyFile(baseVideoPath, outputPath);
+      return outputPath;
+    });
     return { outputPath, provider: 'offline' };
   }
   if (process.env.ENABLE_LIPSYNC === 'false') {
@@ -233,7 +241,7 @@ export async function applyAudioFirstLipSync(
 }
 
 function resolveSpeakerId(shot: FilmShot) {
-  return shot.speakerId || shot.dialogueLines[0]?.speakerId;
+  return shot.speakerId || shot.dialogueLines?.[0]?.speakerId;
 }
 
 async function exists(filePath: string) {
