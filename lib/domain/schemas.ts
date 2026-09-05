@@ -18,6 +18,22 @@ export const ProjectStatusSchema = z.enum([
 export const SceneModeSchema = z.enum(['ai-video', 'animated-image', 'avatar']);
 export const SceneStatusSchema = z.enum(['pending', 'rendering', 'review-required', 'ready', 'failed']);
 export const ShotModeSchema = z.enum(['video', 'avatar-video']);
+export const VoiceProviderSchema = z.enum(['elevenlabs', 'openai', 'offline']);
+
+export const DialogueLineSchema = z.object({
+  id: z.string(),
+  speakerId: z.string(),
+  text: z.string(),
+  emotion: z.string().optional(),
+  startSeconds: z.number().nonnegative().default(0),
+  endSeconds: z.number().nonnegative().optional()
+});
+
+export const SceneDialogueTurnSchema = z.object({
+  speakerId: z.string(),
+  text: z.string(),
+  emotion: z.string().optional()
+});
 
 export const FilmShotSchema = z.object({
   id: z.string(),
@@ -27,6 +43,8 @@ export const FilmShotSchema = z.object({
   visualPrompt: z.string(),
   camera: z.string(),
   spokenText: z.string(),
+  speakerId: z.string().optional(),
+  dialogueLines: z.array(DialogueLineSchema).max(4).default([]),
   mode: ShotModeSchema,
   characterIds: z.array(z.string()).max(3).default([]),
   preflightVersion: z.number().int().positive().optional(),
@@ -36,7 +54,11 @@ export const FilmShotSchema = z.object({
   status: SceneStatusSchema.default('pending'),
   imageAsset: z.string().optional(),
   voiceAsset: z.string().optional(),
+  alignmentAsset: z.string().optional(),
+  baseVideoAsset: z.string().optional(),
+  lipSyncAsset: z.string().optional(),
   videoAsset: z.string().optional(),
+  pipelineVersion: z.string().optional(),
   qualityScore: z.number().min(0).max(10).optional(),
   qualityAttempts: z.number().int().nonnegative().optional(),
   qualityIssues: z.array(z.string()).optional(),
@@ -74,6 +96,13 @@ export const CharacterSchema = z.object({
   wardrobe: z.string(),
   personality: z.string(),
   voiceInstructions: z.string(),
+  voiceProvider: VoiceProviderSchema.default('elevenlabs'),
+  voiceId: z.string().optional(),
+  voiceModel: z.string().optional(),
+  voiceStability: z.number().min(0).max(1).optional(),
+  voiceSimilarity: z.number().min(0).max(1).optional(),
+  voiceStyle: z.number().min(0).max(1).optional(),
+  voiceSpeed: z.number().min(0.7).max(1.2).optional(),
   imagePrompt: z.string(),
   referenceAsset: z.string().optional()
 });
@@ -87,6 +116,7 @@ export const SceneSchema = z.object({
   summary: z.string(),
   narration: z.string(),
   dialogue: z.string(),
+  dialogueTurns: z.array(SceneDialogueTurnSchema).max(32).default([]),
   visualPrompt: z.string(),
   negativePrompt: z.string(),
   camera: z.string(),
@@ -104,7 +134,7 @@ export const SceneSchema = z.object({
   qualityIssues: z.array(z.string()).optional(),
   qualityReportAsset: z.string().optional(),
   qualityOverrideApproved: z.boolean().optional(),
-  productionStrategy: z.enum(['video-shots-v1']).optional(),
+  productionStrategy: z.enum(['video-shots-v1', 'real-cinema-v2']).optional(),
   error: z.string().optional()
 });
 
@@ -126,6 +156,7 @@ export const BudgetSchema = z.object({
     images: z.number(),
     voice: z.number(),
     video: z.number(),
+    lipSync: z.number().default(0),
     avatars: z.number(),
     music: z.number(),
     quality: z.number().default(0)
@@ -142,6 +173,14 @@ export const ProgressSchema = z.object({
   updatedAt: z.string()
 });
 
+export const PilotSchema = z.object({
+  enabled: z.boolean().default(true),
+  maxScenes: z.number().int().min(1).max(3).default(1),
+  maxShotsPerScene: z.number().int().min(1).max(6).default(4),
+  maxSpendUsd: z.number().min(0.1).max(10).default(1),
+  approvedForFullProduction: z.boolean().default(false)
+});
+
 export const FilmProjectSchema = z.object({
   id: z.string(),
   createdAt: z.string(),
@@ -150,6 +189,7 @@ export const FilmProjectSchema = z.object({
   input: ProjectInputSchema,
   plan: FilmPlanSchema.optional(),
   budget: BudgetSchema.optional(),
+  pilot: PilotSchema.optional(),
   progress: ProgressSchema,
   finalVideoAsset: z.string().optional(),
   subtitleAsset: z.string().optional(),
@@ -160,6 +200,8 @@ export const FilmProjectSchema = z.object({
 
 export type ProjectInput = z.infer<typeof ProjectInputSchema>;
 export type Character = z.infer<typeof CharacterSchema>;
+export type DialogueLine = z.infer<typeof DialogueLineSchema>;
+export type SceneDialogueTurn = z.infer<typeof SceneDialogueTurnSchema>;
 export type FilmScene = z.infer<typeof SceneSchema>;
 export type FilmShot = z.infer<typeof FilmShotSchema>;
 export type FilmPlan = z.infer<typeof FilmPlanSchema>;
