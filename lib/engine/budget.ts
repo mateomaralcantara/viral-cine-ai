@@ -23,7 +23,7 @@ export function estimateBudget(input: ProjectInput, plan: FilmPlan): BudgetEstim
     .filter((shot) => shot.mode === 'video')
     .reduce((sum, shot) => sum + shot.durationSeconds, 0);
   const lipSyncSeconds = shots
-    .filter((shot) => Boolean(shot.spokenText.trim()))
+    .filter((shot) => Boolean(shot.spokenText.trim()) && Boolean(shot.speakerId) && shot.speakerId !== 'narrator')
     .reduce((sum, shot) => sum + shot.durationSeconds, 0);
   const avatarSeconds = shots
     .filter((shot) => shot.mode === 'avatar-video')
@@ -43,10 +43,11 @@ export function estimateBudget(input: ProjectInput, plan: FilmPlan): BudgetEstim
   const estimatedUsd = round(Object.values(breakdown).reduce((sum, value) => sum + value, 0));
   const notes = [
     `El cálculo incluye ${shots.length} segmentos de video real; las imágenes solo sirven como referencias internas de identidad.`,
-    `Video base: ${videoSeconds}s. Lip-sync sobre diálogo: ${lipSyncSeconds}s. Avatar legado: ${avatarSeconds}s.`,
+    `Video base: ${videoSeconds}s. Lip-sync solo sobre diálogo visible: ${lipSyncSeconds}s. Avatar legado: ${avatarSeconds}s.`,
     strictQuality
       ? `El estimado preventivo reserva hasta ${maximumAttempts} intentos por segmento para video, lip-sync y revisión; la voz se reutiliza desde checkpoint.`
       : 'La puerta de calidad estricta no está activa en este modo.',
+    'La narración en off se mezcla como audio y nunca paga lip-sync.',
     'El costo real depende del proveedor, regeneraciones, resolución y duración final.'
   ];
   if (estimatedUsd > input.budgetUsd) {
