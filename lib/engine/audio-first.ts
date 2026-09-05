@@ -170,7 +170,8 @@ export async function applyAudioFirstLipSync(
   voicePath: string,
   outputPath: string
 ) {
-  if (!shot.spokenText.trim()) {
+  const speakerId = resolveSpeakerId(shot);
+  if (!shot.spokenText.trim() || !speakerId || speakerId === 'narrator') {
     await copyFile(baseVideoPath, outputPath);
     return { outputPath, provider: 'none' };
   }
@@ -182,10 +183,10 @@ export async function applyAudioFirstLipSync(
     return { outputPath, provider: 'offline' };
   }
   if (process.env.ENABLE_LIPSYNC === 'false') {
-    throw new Error('Hay diálogo pero ENABLE_LIPSYNC=false. ViralCine 4.0 no publicará diálogo desincronizado.');
+    throw new Error('Hay diálogo visible pero ENABLE_LIPSYNC=false. ViralCine 4.0 no publicará diálogo desincronizado.');
   }
   if (!hasUsableCredential('FAL_KEY')) {
-    throw new Error('Hay diálogo pero falta FAL_KEY para el proveedor de lip-sync.');
+    throw new Error('Hay diálogo visible pero falta FAL_KEY para el proveedor de lip-sync.');
   }
 
   const estimatedUsd = estimateOperationCost('lip-sync', shot.durationSeconds);
