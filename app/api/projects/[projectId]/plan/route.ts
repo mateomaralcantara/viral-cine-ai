@@ -3,7 +3,7 @@ import { estimateBudget } from '@/lib/engine/budget';
 import { generateFilmPlan } from '@/lib/engine/planner';
 import { appendSpend, estimateOperationCost } from '@/lib/engine/spend-ledger';
 import { saveProject, updateProject } from '@/lib/storage/project-store';
-import { classifyProductionError, safeErrorMessage } from '@/lib/engine/production-safety';
+import { assertPaidGenerationAllowed, classifyProductionError, safeErrorMessage } from '@/lib/engine/production-safety';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -16,6 +16,7 @@ export async function POST(_request: Request, context: Context) {
   const realPlanning = process.env.PRODUCTION_MODE === 'real';
   const estimatedUsd = estimateOperationCost('script', 1);
   const idempotencyKey = `script:${projectId}:plan`;
+  let scriptSubmitted = false;
   try {
     project = await updateProject(projectId, (current) => {
       if (current.status === 'planning') throw new Error('La planificación ya está en curso.');
@@ -27,6 +28,7 @@ export async function POST(_request: Request, context: Context) {
     });
 
     if (realPlanning) {
+      assertPaidGenerationAllowed('generar guion y plan cinematográfico con OpenAI', 'OPENAI_API_KEY');
       await appendSpend(projectId, {
         operation: 'script',
         provider: 'openai',
@@ -43,10 +45,11 @@ export async function POST(_request: Request, context: Context) {
         estimatedUsd,
         idempotencyKey
       });
+      scriptSubmitted = true;
     }
 
     const plan = await generateFilmPlan(project.input);
-    if (realPlanning) {
+    if (scriptSubmitted) {
       await appendSpend(projectId, {
         operation: 'script',
         provider: 'openai',
@@ -64,7 +67,7 @@ export async function POST(_request: Request, context: Context) {
     project = await saveProject(project);
     return NextResponse.json({ ok: true, project });
   } catch (error) {
-    if (realPlanning) {
+    if (scriptSubmitted) {
       await appendSpend(projectId, {
         operation: 'script',
         provider: 'openai',
