@@ -1,0 +1,1035 @@
+[CmdletBinding()]
+param(
+    [string]$Root = "C:\Users\martin\Desktop\VSC\BestS\viral-cine-ai",
+    [switch]$RunBuild,
+    [switch]$RunTests,
+    [switch]$NetworkAudit
+)
+
+$ErrorActionPreference = "Stop"
+
+# ============================================================
+# VIRALCINE STUDIO - SCANNER 10/10
+# Auditoria local, segura y sin llamadas a APIs de IA.
+# No inicia Next.js, worker, FFmpeg, Veo, OpenAI, fal.ai ni Gemini.
+# ============================================================
+
+$StartedAt = Get-Date
+$Timestamp = $StartedAt.ToString("yyyyMMdd-HHmmss")
+$ReportDir = Join-Path $Root ".diagnostics"
+$TextReport = Join-Path $ReportDir "VIRALCINE-SCANNER-10-$Timestamp.txt"
+$JsonReport = Join-Path $ReportDir "VIRALCINE-SCANNER-10-$Timestamp.json"
+
+$Checks = New-Object System.Collections.Generic.List[object]
+$Findings = New-Object System.Collections.Generic.List[string]
+
+function Write-Section {
+    param([string]$Title)
+    Write-Host ""
+    Write-Host ("=" * 78) -ForegroundColor DarkGray
+    Write-Host (" " + $Title) -ForegroundColor Cyan
+    Write-Host ("=" * 78) -ForegroundColor DarkGray
+}
+
+function Add-Check {
+    param(
+        [string]$Area,
+        [string]$Name,
+        [ValidateSet("PASS","WARN","FAIL","INFO")]
+        [string]$Status,
+        [double]$Points,
+        [double]$Earned,
+        [string]$Details = "",
+        [bool]$Critical = $false
+    )
+
+    $obj = [PSCustomObject]@{
+        Area     = $Area
+        Check    = $Name
+        Status   = $Status
+        Points   = $Points
+        Earned   = $Earned
+        Critical = $Critical
+        Details  = $Details
+    }
+
+    [void]$Checks.Add($obj)
+
+    $color = switch ($Status) {
+        "PASS" { "Green" }
+        "WARN" { "Yellow" }
+        "FAIL" { "Red" }
+        default { "Gray" }
+    }
+
+    $criticalTag = if ($Critical) { " [CRITICO]" } else { "" }
+    Write-Host ("[{0}] {1}{2} :: {3}" -f $Status, $Name, $criticalTag, $Details) -ForegroundColor $color
+}
+
+function Read-TextSafe {
+    param([string]$Path)
+    try {
+        if (Test-Path -LiteralPath $Path -PathType Leaf) {
+            return [System.IO.File]::ReadAllText($Path)
+        }
+    }
+    catch {}
+    return ""
+}
+
+function Get-SourceFiles {
+    param([string]$Base)
+
+    $extensions = @(".ts",".tsx",".js",".jsx",".mjs",".cjs",".json",".ps1")
+    return @(
+        Get-ChildItem -LiteralPath $Base -Recurse -File -ErrorAction SilentlyContinue |
+        Where-Object {
+            $extensions -contains $_.Extension.ToLowerInvariant() -and
+            $_.FullName -notmatch "\\(node_modules|\.next|\.git|dist|build|coverage|\.data|\.diagnostics|\.hardening-backups)\\"
+        }
+    )
+}
+
+function Find-SourcePattern {
+    param(
+        [object[]]$Files,
+        [string]$Pattern
+    )
+
+    $matches = New-Object System.Collections.Generic.List[object]
+
+    foreach ($file in @($Files)) {
+        try {
+            $m = Select-String -LiteralPath $file.FullName -Pattern $Pattern -AllMatches -ErrorAction SilentlyContinue
+            foreach ($hit in @($m)) {
+                [void]$matches.Add([PSCustomObject]@{
+                    File = $file.FullName
+                    Line = $hit.LineNumber
+                    Text = $hit.Line.Trim()
+                })
+            }
+        }
+        catch {}
+    }
+
+    return $matches.ToArray()
+}
+
+function Get-EnvMap {
+    param([string]$Path)
+
+    $map = @{}
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return $map
+    }
+
+    foreach ($line in Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue) {
+        $trim = $line.Trim()
+        if ([string]::IsNullOrWhiteSpace($trim)) { continue }
+        if ($trim.StartsWith("#")) { continue }
+
+        if ($trim -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$') {
+            $name = $Matches[1]
+            $value = $Matches[2].Trim().Trim('"').Trim("'")
+            $map[$name] = $value
+        }
+    }
+
+    return $map
+}
+
+function Get-IntOrNull {
+    param([object]$Value)
+    $n = 0
+    if ($null -ne $Value -and [int]::TryParse([string]$Value, [ref]$n)) {
+        return $n
+    }
+    return $null
+}
+
+function Invoke-LocalCommand {
+    param(
+        [string]$FilePath,
+        [string[]]$Arguments,
+        [string]$WorkingDirectory = $Root,
+        [hashtable]$ExtraEnvironment = @{}
+    )
+
+    $old = @{}
+    foreach ($key in $ExtraEnvironment.Keys) {
+        $old[$key] = [Environment]::GetEnvironmentVariable($key, "Process")
+        [Environment]::SetEnvironmentVariable($key, [string]$ExtraEnvironment[$key], "Process")
+    }
+
+    try {
+        Push-Location $WorkingDirectory
+        try {
+            $output = & $FilePath @Arguments 2>&1 | Out-String
+            $exitCode = $LASTEXITCODE
+        }
+        finally {
+            Pop-Location
+        }
+
+        return [PSCustomObject]@{
+            ExitCode = $exitCode
+            Output   = $output.Trim()
+        }
+    }
+    catch {
+        return [PSCustomObject]@{
+            ExitCode = 999
+            Output   = $_.Exception.Message
+        }
+    }
+    finally {
+        foreach ($key in $ExtraEnvironment.Keys) {
+            [Environment]::SetEnvironmentVariable($key, $old[$key], "Process")
+        }
+    }
+}
+
+function Test-JsonFile {
+    param([string]$Path)
+    try {
+        $null = (Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json)
+        return $true
+    }
+    catch {
+        return $false
+    }
+}
+
+function Resolve-AssetPath {
+    param(
+        [string]$ProjectDir,
+        [string]$Asset
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Asset)) { return $null }
+
+    $clean = $Asset -replace '/', '\'
+
+    if ([System.IO.Path]::IsPathRooted($clean)) {
+        return $clean
+    }
+
+    if ($clean.StartsWith(".data\")) {
+        return Join-Path $Root $clean
+    }
+
+    return Join-Path $ProjectDir $clean
+}
+
+if (-not (Test-Path -LiteralPath $Root -PathType Container)) {
+    throw "No existe el proyecto: $Root"
+}
+
+New-Item -ItemType Directory -Path $ReportDir -Force | Out-Null
+Set-Location $Root
+
+Write-Host ""
+Write-Host "VIRALCINE STUDIO - SCANNER 10/10" -ForegroundColor Magenta
+Write-Host "Root: $Root" -ForegroundColor Gray
+Write-Host "Modo: auditoria local segura; NO inicia produccion ni llama APIs de IA." -ForegroundColor Green
+Write-Host ("PowerShell: {0}" -f $PSVersionTable.PSVersion.ToString()) -ForegroundColor Gray
+
+$SourceFiles = Get-SourceFiles -Base $Root
+$EnvPath = Join-Path $Root ".env.local"
+$Env = Get-EnvMap -Path $EnvPath
+$PackagePath = Join-Path $Root "package.json"
+$Package = $null
+
+if (Test-Path -LiteralPath $PackagePath) {
+    try { $Package = Get-Content -LiteralPath $PackagePath -Raw | ConvertFrom-Json } catch {}
+}
+
+# ------------------------------------------------------------
+# 1. SEGURIDAD DE GASTO Y SECRETOS - 25 puntos
+# ------------------------------------------------------------
+Write-Section "1. SEGURIDAD DE GASTO Y SECRETOS - 25 PUNTOS"
+
+if (Test-Path -LiteralPath $EnvPath) {
+    Add-Check "Seguridad" ".env.local presente" "PASS" 2 2 "Configuracion localizada."
+}
+else {
+    Add-Check "Seguridad" ".env.local presente" "FAIL" 2 0 "No existe .env.local." $true
+}
+
+$prodMode = if ($Env.ContainsKey("PRODUCTION_MODE")) { $Env["PRODUCTION_MODE"] } else { "" }
+if ($prodMode -eq "demo") {
+    Add-Check "Seguridad" "Produccion real bloqueada" "PASS" 4 4 "PRODUCTION_MODE=demo" $true
+}
+elseif ([string]::IsNullOrWhiteSpace($prodMode)) {
+    Add-Check "Seguridad" "Produccion real bloqueada" "FAIL" 4 0 "PRODUCTION_MODE no esta definido." $true
+}
+else {
+    Add-Check "Seguridad" "Produccion real bloqueada" "FAIL" 4 0 "PRODUCTION_MODE=$prodMode; el scanner recomienda demo durante pruebas." $true
+}
+
+$shotCap = if ($Env.ContainsKey("SHOT_MAX_TOTAL_GENERATIONS")) { Get-IntOrNull $Env["SHOT_MAX_TOTAL_GENERATIONS"] } else { $null }
+if ($shotCap -eq 1) {
+    Add-Check "Seguridad" "Maximo de generaciones por toma" "PASS" 4 4 "SHOT_MAX_TOTAL_GENERATIONS=1" $true
+}
+else {
+    Add-Check "Seguridad" "Maximo de generaciones por toma" "FAIL" 4 0 "Debe ser exactamente 1. Actual: $shotCap" $true
+}
+
+$qualityAttempts = if ($Env.ContainsKey("SCENE_QUALITY_MAX_ATTEMPTS")) { Get-IntOrNull $Env["SCENE_QUALITY_MAX_ATTEMPTS"] } else { $null }
+if ($qualityAttempts -eq 1) {
+    Add-Check "Seguridad" "Reintento automatico por calidad" "PASS" 3 3 "SCENE_QUALITY_MAX_ATTEMPTS=1" $true
+}
+else {
+    Add-Check "Seguridad" "Reintento automatico por calidad" "FAIL" 3 0 "Debe ser 1 para impedir regeneraciones automaticas. Actual: $qualityAttempts" $true
+}
+
+$concurrency = if ($Env.ContainsKey("PRODUCTION_CONCURRENCY")) { Get-IntOrNull $Env["PRODUCTION_CONCURRENCY"] } else { $null }
+if ($concurrency -eq 1) {
+    Add-Check "Seguridad" "Concurrencia de produccion" "PASS" 2 2 "PRODUCTION_CONCURRENCY=1"
+}
+elseif ($null -eq $concurrency) {
+    Add-Check "Seguridad" "Concurrencia de produccion" "WARN" 2 1 "No definida; durante pruebas conviene 1."
+}
+else {
+    Add-Check "Seguridad" "Concurrencia de produccion" "WARN" 2 0.5 "Actual: $concurrency. Aumenta el riesgo de gasto simultaneo."
+}
+
+$git = Get-Command git -ErrorAction SilentlyContinue
+$insideGit = $false
+if ($git) {
+    $gitCheck = Invoke-LocalCommand $git.Source @("rev-parse","--is-inside-work-tree")
+    $insideGit = ($gitCheck.ExitCode -eq 0 -and $gitCheck.Output -match "true")
+}
+
+if ($insideGit) {
+    $trackedEnv = Invoke-LocalCommand $git.Source @("ls-files",".env.local")
+    if ([string]::IsNullOrWhiteSpace($trackedEnv.Output)) {
+        Add-Check "Seguridad" ".env.local fuera de Git" "PASS" 4 4 "No esta versionado." $true
+    }
+    else {
+        Add-Check "Seguridad" ".env.local fuera de Git" "FAIL" 4 0 "PELIGRO: .env.local esta versionado." $true
+    }
+
+    $secretPattern = '(sk-[A-Za-z0-9_-]{20,}|AIza[A-Za-z0-9_-]{20,}|fal_[A-Za-z0-9_-]{15,}|xox[baprs]-[A-Za-z0-9-]{10,})'
+    $trackedFiles = Invoke-LocalCommand $git.Source @("ls-files")
+    $secretFiles = New-Object System.Collections.Generic.HashSet[string]
+
+    foreach ($rel in ($trackedFiles.Output -split "`r?`n")) {
+        if ([string]::IsNullOrWhiteSpace($rel)) { continue }
+        $full = Join-Path $Root $rel
+        if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { continue }
+
+        try {
+            $info = Get-Item -LiteralPath $full
+            if ($info.Length -gt 2MB) { continue }
+            $text = Read-TextSafe $full
+            if ($text -match $secretPattern) {
+                [void]$secretFiles.Add($rel)
+            }
+        }
+        catch {}
+    }
+
+    if ($secretFiles.Count -eq 0) {
+        Add-Check "Seguridad" "Secretos expuestos en archivos versionados" "PASS" 4 4 "No se detectaron patrones tipicos de API keys." $true
+    }
+    else {
+        Add-Check "Seguridad" "Secretos expuestos en archivos versionados" "FAIL" 4 0 ("Posibles secretos en {0} archivo(s). No se imprimen los valores." -f $secretFiles.Count) $true
+        foreach ($f in $secretFiles) { [void]$Findings.Add("Posible secreto versionado: $f") }
+    }
+}
+else {
+    Add-Check "Seguridad" ".env.local fuera de Git" "WARN" 4 2 "No se pudo confirmar porque el proyecto no parece ser un repo Git."
+    Add-Check "Seguridad" "Secretos expuestos en archivos versionados" "WARN" 4 2 "No se pudo auditar Git."
+}
+
+$providerCalls = Find-SourcePattern $SourceFiles '(new\s+OpenAI|openai\.|generateSpeech\s*\(|generateVideo|generateVideos|fal\.(subscribe|run)|api\.openai\.com|generativelanguage\.googleapis\.com|veo)'
+$gateMarkers = Find-SourcePattern $SourceFiles '(PRODUCTION_MODE|BLOCK_PAID_APIS|DISABLE_REAL_GENERATION|SHOT_MAX_TOTAL_GENERATIONS|budget|spend|cost|quota)'
+if ($providerCalls.Count -gt 0 -and $gateMarkers.Count -gt 0) {
+    Add-Check "Seguridad" "Controles de gasto alrededor del pipeline" "PASS" 2 2 ("Llamadas proveedor: {0}; marcadores de control: {1}" -f $providerCalls.Count, $gateMarkers.Count)
+}
+elseif ($providerCalls.Count -gt 0) {
+    Add-Check "Seguridad" "Controles de gasto alrededor del pipeline" "FAIL" 2 0 "Hay llamadas a proveedores y no se detectan suficientes controles de gasto." $true
+}
+else {
+    Add-Check "Seguridad" "Controles de gasto alrededor del pipeline" "WARN" 2 1 "No se detectaron llamadas a proveedores; verifica si el codigo esta en otra ubicacion."
+}
+
+# ------------------------------------------------------------
+# 2. BUILD, TYPESCRIPT Y TESTS - 20 puntos
+# ------------------------------------------------------------
+Write-Section "2. BUILD, TYPESCRIPT Y TESTS - 20 PUNTOS"
+
+if ($Package) {
+    $name = if ($Package.PSObject.Properties.Name -contains "name") { [string]$Package.name } else { "(sin nombre)" }
+    $version = if ($Package.PSObject.Properties.Name -contains "version") { [string]$Package.version } else { "(sin version)" }
+    Add-Check "Build" "package.json valido" "PASS" 2 2 "$name@$version"
+}
+else {
+    Add-Check "Build" "package.json valido" "FAIL" 2 0 "No existe o no parsea." $true
+}
+
+if (Test-Path -LiteralPath (Join-Path $Root "node_modules") -PathType Container) {
+    Add-Check "Build" "node_modules instalado" "PASS" 2 2 "Dependencias locales presentes."
+}
+else {
+    Add-Check "Build" "node_modules instalado" "FAIL" 2 0 "Ejecuta npm install antes del scanner profundo."
+}
+
+if (Test-Path -LiteralPath (Join-Path $Root "tsconfig.json") -PathType Leaf) {
+    Add-Check "Build" "tsconfig.json presente" "PASS" 2 2 "TypeScript configurado."
+}
+else {
+    Add-Check "Build" "tsconfig.json presente" "WARN" 2 1 "No existe tsconfig.json."
+}
+
+$node = Get-Command node -ErrorAction SilentlyContinue
+$npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
+if (-not $npm) { $npm = Get-Command npm -ErrorAction SilentlyContinue }
+
+if ($node) {
+    $nodeVersion = Invoke-LocalCommand $node.Source @("--version")
+    Add-Check "Build" "Node disponible" "PASS" 1 1 $nodeVersion.Output
+}
+else {
+    Add-Check "Build" "Node disponible" "FAIL" 1 0 "node no esta en PATH." $true
+}
+
+if ($npm) {
+    $npmVersion = Invoke-LocalCommand $npm.Source @("--version")
+    Add-Check "Build" "npm disponible" "PASS" 1 1 ("npm " + $npmVersion.Output)
+}
+else {
+    Add-Check "Build" "npm disponible" "FAIL" 1 0 "npm no esta en PATH." $true
+}
+
+$tsc = Join-Path $Root "node_modules\.bin\tsc.cmd"
+if (Test-Path -LiteralPath $tsc -PathType Leaf) {
+    $typecheck = Invoke-LocalCommand $tsc @("--noEmit","--pretty","false")
+    if ($typecheck.ExitCode -eq 0) {
+        Add-Check "Build" "TypeScript --noEmit" "PASS" 5 5 "0 errores."
+    }
+    else {
+        $preview = (($typecheck.Output -split "`r?`n") | Select-Object -First 8) -join " | "
+        Add-Check "Build" "TypeScript --noEmit" "FAIL" 5 0 $preview $true
+        [void]$Findings.Add("TypeScript fallo: $preview")
+    }
+}
+else {
+    Add-Check "Build" "TypeScript --noEmit" "WARN" 5 2 "No existe node_modules\.bin\tsc.cmd."
+}
+
+$safeEnv = @{
+    "PRODUCTION_MODE"              = "demo"
+    "SHOT_MAX_TOTAL_GENERATIONS"   = "1"
+    "SCENE_QUALITY_MAX_ATTEMPTS"   = "1"
+    "PRODUCTION_CONCURRENCY"       = "1"
+    "OPENAI_API_KEY"               = ""
+    "GOOGLE_API_KEY"               = ""
+    "GEMINI_API_KEY"               = ""
+    "FAL_KEY"                      = ""
+    "FAL_API_KEY"                  = ""
+    "ELEVENLABS_API_KEY"           = ""
+    "CI"                           = "1"
+}
+
+$hasBuild = $false
+if ($Package -and ($Package.PSObject.Properties.Name -contains "scripts") -and $Package.scripts) {
+    $hasBuild = ($Package.scripts.PSObject.Properties.Name -contains "build")
+}
+
+if ($RunBuild) {
+    if ($npm -and $hasBuild) {
+        $build = Invoke-LocalCommand $npm.Source @("run","build") $Root $safeEnv
+        if ($build.ExitCode -eq 0) {
+            Add-Check "Build" "npm run build seguro" "PASS" 4 4 "Build OK con claves de IA vacias."
+        }
+        else {
+            $preview = (($build.Output -split "`r?`n") | Select-Object -Last 12) -join " | "
+            Add-Check "Build" "npm run build seguro" "FAIL" 4 0 $preview $true
+            [void]$Findings.Add("Build fallo: $preview")
+        }
+    }
+    else {
+        Add-Check "Build" "npm run build seguro" "WARN" 4 2 "No existe script build o npm no esta disponible."
+    }
+}
+else {
+    Add-Check "Build" "npm run build seguro" "INFO" 4 4 "No ejecutado. Usa -RunBuild para validacion completa."
+}
+
+$testPoints = 3.0
+$testScript = ""
+if ($Package -and ($Package.PSObject.Properties.Name -contains "scripts") -and $Package.scripts) {
+    if ($Package.scripts.PSObject.Properties.Name -contains "test") {
+        $testScript = [string]$Package.scripts.test
+    }
+}
+
+if ($RunTests -and -not [string]::IsNullOrWhiteSpace($testScript) -and $npm) {
+    if ($testScript -match '(?i)vitest') {
+        $testArgs = @("test","--","--run")
+    }
+    elseif ($testScript -match '(?i)jest') {
+        $testArgs = @("test","--","--runInBand")
+    }
+    else {
+        $testArgs = @("test")
+    }
+
+    $tests = Invoke-LocalCommand $npm.Source $testArgs $Root $safeEnv
+    if ($tests.ExitCode -eq 0) {
+        Add-Check "Build" "Suite de tests" "PASS" $testPoints $testPoints "Tests OK."
+    }
+    else {
+        $preview = (($tests.Output -split "`r?`n") | Select-Object -Last 10) -join " | "
+        Add-Check "Build" "Suite de tests" "FAIL" $testPoints 0 $preview
+    }
+}
+elseif (-not [string]::IsNullOrWhiteSpace($testScript)) {
+    Add-Check "Build" "Suite de tests" "INFO" $testPoints $testPoints "Existe script test. Usa -RunTests para ejecutarlo."
+}
+else {
+    Add-Check "Build" "Suite de tests" "WARN" $testPoints 1 "No hay script test. Para 10/10 real conviene tener pruebas automatizadas."
+}
+
+# ------------------------------------------------------------
+# 3. WORKER Y RESILIENCIA - 15 puntos
+# ------------------------------------------------------------
+Write-Section "3. WORKER Y RESILIENCIA - 15 PUNTOS"
+
+$WorkerPath = Join-Path $Root "scripts\worker.ts"
+$ProducerPath = Join-Path $Root "lib\engine\producer.ts"
+
+if (Test-Path -LiteralPath $WorkerPath -PathType Leaf) {
+    Add-Check "Worker" "scripts/worker.ts" "PASS" 2 2 "Worker encontrado."
+}
+else {
+    Add-Check "Worker" "scripts/worker.ts" "FAIL" 2 0 "Falta worker." $true
+}
+
+if (Test-Path -LiteralPath $ProducerPath -PathType Leaf) {
+    Add-Check "Worker" "lib/engine/producer.ts" "PASS" 2 2 "Motor de produccion encontrado."
+}
+else {
+    Add-Check "Worker" "lib/engine/producer.ts" "FAIL" 2 0 "Falta producer.ts." $true
+}
+
+$lockMarkers = Find-SourcePattern $SourceFiles '(worker\.lock|lockfile|exclusive|acquireLock|releaseLock)'
+if ($lockMarkers.Count -gt 0) {
+    Add-Check "Worker" "Lock de worker" "PASS" 2 2 ("Marcadores detectados: {0}" -f $lockMarkers.Count)
+}
+else {
+    Add-Check "Worker" "Lock de worker" "WARN" 2 1 "No se detecto un mecanismo claro para impedir workers duplicados."
+}
+
+$workerText = Read-TextSafe $WorkerPath
+$packageText = Read-TextSafe $PackagePath
+$dangerExit = ($workerText -match 'process\.exit\s*\(\s*1\s*\)')
+$killCoupling = ($packageText -match 'concurrently[^"\r\n]*\s-k\b')
+
+if (-not $dangerExit -and -not $killCoupling) {
+    Add-Check "Worker" "Aislamiento de fallos del worker" "PASS" 4 4 "Un proyecto fallido no parece forzar el cierre total del Studio." $true
+}
+elseif ($dangerExit -and $killCoupling) {
+    Add-Check "Worker" "Aislamiento de fallos del worker" "FAIL" 4 0 "Se detecta process.exit(1) y concurrently -k: un 429 puede tumbar worker y web." $true
+}
+else {
+    Add-Check "Worker" "Aislamiento de fallos del worker" "WARN" 4 2 "Revisar cierre del worker o acoplamiento WEB/WORKER."
+}
+
+$resumeMarkers = Find-SourcePattern $SourceFiles '(resume|reanud|checkpoint|generationCount|videoAsset|status\s*[:=]|productionLog)'
+if ($resumeMarkers.Count -ge 5) {
+    Add-Check "Worker" "Estado reanudable / idempotencia" "PASS" 3 3 ("Marcadores: {0}" -f $resumeMarkers.Count)
+}
+elseif ($resumeMarkers.Count -gt 0) {
+    Add-Check "Worker" "Estado reanudable / idempotencia" "WARN" 3 1.5 ("Pocos marcadores: {0}" -f $resumeMarkers.Count)
+}
+else {
+    Add-Check "Worker" "Estado reanudable / idempotencia" "FAIL" 3 0 "No se detectan checkpoints ni estado persistente."
+}
+
+$queueMarkers = Find-SourcePattern $SourceFiles '(queue|queued|enqueue|PRODUCTION_CONCURRENCY|p-limit|semaphore)'
+if ($queueMarkers.Count -gt 0) {
+    Add-Check "Worker" "Cola/concurrencia controlada" "PASS" 2 2 ("Marcadores: {0}" -f $queueMarkers.Count)
+}
+else {
+    Add-Check "Worker" "Cola/concurrencia controlada" "WARN" 2 1 "No se detecta control claro de cola."
+}
+
+# ------------------------------------------------------------
+# 4. PERSISTENCIA, PROYECTOS Y ASSETS - 15 puntos
+# ------------------------------------------------------------
+Write-Section "4. PERSISTENCIA, PROYECTOS Y ASSETS - 15 PUNTOS"
+
+$ProjectsRoot = Join-Path $Root ".data\projects"
+if (Test-Path -LiteralPath $ProjectsRoot -PathType Container) {
+    Add-Check "Persistencia" ".data/projects presente" "PASS" 2 2 "Repositorio local de proyectos disponible."
+}
+else {
+    Add-Check "Persistencia" ".data/projects presente" "WARN" 2 1 "No existe todavia .data/projects."
+}
+
+$projectFiles = @()
+if (Test-Path -LiteralPath $ProjectsRoot -PathType Container) {
+    $projectFiles = @(Get-ChildItem -LiteralPath $ProjectsRoot -Filter "project.json" -Recurse -File -ErrorAction SilentlyContinue)
+}
+
+$invalidProjects = New-Object System.Collections.Generic.List[string]
+$staleRendering = New-Object System.Collections.Generic.List[string]
+$missingAssets = New-Object System.Collections.Generic.List[string]
+$totalShots = 0
+$totalGenerations = 0
+$totalSpend = 0.0
+
+foreach ($pf in $projectFiles) {
+    if (-not (Test-JsonFile $pf.FullName)) {
+        [void]$invalidProjects.Add($pf.FullName)
+        continue
+    }
+
+    try {
+        $p = Get-Content -LiteralPath $pf.FullName -Raw | ConvertFrom-Json
+        $projectDir = Split-Path -Parent $pf.FullName
+        $scenes = @($p.plan.scenes)
+
+        foreach ($scene in $scenes) {
+            foreach ($shot in @($scene.shots)) {
+                $totalShots++
+
+                if ($null -ne $shot.generationCount) {
+                    try { $totalGenerations += [int]$shot.generationCount } catch {}
+                }
+
+                if ($null -ne $shot.estimatedSpendUsd) {
+                    try { $totalSpend += [double]$shot.estimatedSpendUsd } catch {}
+                }
+
+                if ($shot.status -eq "rendering") {
+                    [void]$staleRendering.Add("$($p.id) :: $($shot.title)")
+                }
+
+                foreach ($propertyName in @("videoAsset","audioAsset","imageAsset")) {
+                    if ($shot.PSObject.Properties.Name -contains $propertyName) {
+                        $asset = [string]$shot.$propertyName
+                        if (-not [string]::IsNullOrWhiteSpace($asset)) {
+                            $resolved = Resolve-AssetPath $projectDir $asset
+                            if ($resolved -and -not (Test-Path -LiteralPath $resolved)) {
+                                [void]$missingAssets.Add("$($p.id) :: $propertyName :: $asset")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    catch {
+        [void]$invalidProjects.Add($pf.FullName)
+    }
+}
+
+if ($invalidProjects.Count -eq 0) {
+    Add-Check "Persistencia" "Integridad de project.json" "PASS" 3 3 ("Proyectos validos: {0}" -f $projectFiles.Count)
+}
+else {
+    Add-Check "Persistencia" "Integridad de project.json" "FAIL" 3 0 ("JSON invalidos: {0}" -f $invalidProjects.Count) $true
+}
+
+# Detectar worker activo solo para interpretar "rendering"
+$workerRunning = $false
+try {
+    $workerProcesses = @(
+        Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.Name -eq "node.exe" -and
+            $_.CommandLine -like "*viral-cine-ai*" -and
+            $_.CommandLine -like "*worker*"
+        }
+    )
+    $workerRunning = ($workerProcesses.Count -gt 0)
+}
+catch {}
+
+if ($staleRendering.Count -eq 0) {
+    Add-Check "Persistencia" "Tomas atascadas en rendering" "PASS" 3 3 "No hay tomas rendering persistidas."
+}
+elseif ($workerRunning) {
+    Add-Check "Persistencia" "Tomas atascadas en rendering" "WARN" 3 2 ("Hay {0} toma(s) rendering y el worker parece activo." -f $staleRendering.Count)
+}
+else {
+    Add-Check "Persistencia" "Tomas atascadas en rendering" "FAIL" 3 0 ("Hay {0} toma(s) rendering con worker detenido." -f $staleRendering.Count) $true
+    foreach ($x in $staleRendering | Select-Object -First 10) { [void]$Findings.Add("Rendering huerfano: $x") }
+}
+
+if ($missingAssets.Count -eq 0) {
+    Add-Check "Persistencia" "Referencias de assets" "PASS" 3 3 "No se detectan assets referenciados pero inexistentes."
+}
+else {
+    Add-Check "Persistencia" "Referencias de assets" "FAIL" 3 0 ("Assets faltantes: {0}" -f $missingAssets.Count)
+    foreach ($x in $missingAssets | Select-Object -First 10) { [void]$Findings.Add("Asset faltante: $x") }
+}
+
+$producerText = Read-TextSafe $ProducerPath
+$videoPos = -1
+$qualityPos = -1
+
+if (-not [string]::IsNullOrWhiteSpace($producerText)) {
+    $videoMarkers = @("videoAsset","writeFile","rename(","copyFile","saveAsset","persist")
+    foreach ($m in $videoMarkers) {
+        $p = $producerText.IndexOf($m, [System.StringComparison]::OrdinalIgnoreCase)
+        if ($p -ge 0 -and ($videoPos -lt 0 -or $p -lt $videoPos)) { $videoPos = $p }
+    }
+
+    $qualityMarkers = @("quality","score","review-required","evaluate")
+    foreach ($m in $qualityMarkers) {
+        $p = $producerText.IndexOf($m, [System.StringComparison]::OrdinalIgnoreCase)
+        if ($p -ge 0 -and ($qualityPos -lt 0 -or $p -lt $qualityPos)) { $qualityPos = $p }
+    }
+}
+
+if ($videoPos -ge 0 -and $qualityPos -ge 0 -and $videoPos -lt $qualityPos) {
+    Add-Check "Persistencia" "Guardar clip antes de evaluar calidad" "PASS" 4 4 "El primer marcador de persistencia aparece antes del primer marcador de calidad." $true
+}
+elseif ($videoPos -ge 0 -and $qualityPos -ge 0) {
+    Add-Check "Persistencia" "Guardar clip antes de evaluar calidad" "FAIL" 4 0 "La heuristica detecta evaluacion antes de persistencia. Revisar producer.ts." $true
+}
+else {
+    Add-Check "Persistencia" "Guardar clip antes de evaluar calidad" "WARN" 4 2 "No fue posible confirmar automaticamente el orden; revisar producer.ts."
+}
+
+# ------------------------------------------------------------
+# 5. ARQUITECTURA DE COSTO - 10 puntos
+# ------------------------------------------------------------
+Write-Section "5. ARQUITECTURA DE COSTO - 10 PUNTOS"
+
+$costMarkers = Find-SourcePattern $SourceFiles '(estimatedSpendUsd|spendUsd|budgetUsd|maxBudget|costUsd|Gasto|presupuesto)'
+if ($costMarkers.Count -gt 0) {
+    Add-Check "Costos" "Contabilidad de gasto por proyecto/toma" "PASS" 2 2 ("Marcadores: {0}" -f $costMarkers.Count)
+}
+else {
+    Add-Check "Costos" "Contabilidad de gasto por proyecto/toma" "FAIL" 2 0 "No se detecta contabilidad de gasto."
+}
+
+$budgetEnvNames = @(
+    "MAX_PROJECT_SPEND_USD",
+    "PROJECT_BUDGET_USD",
+    "PRODUCTION_BUDGET_USD",
+    "PILOT_BUDGET_USD",
+    "MAX_SPEND_USD"
+)
+$budgetDefined = $false
+$budgetValue = $null
+$budgetName = $null
+
+foreach ($n in $budgetEnvNames) {
+    if ($Env.ContainsKey($n) -and -not [string]::IsNullOrWhiteSpace($Env[$n])) {
+        $budgetDefined = $true
+        $budgetName = $n
+        $budgetValue = $Env[$n]
+        break
+    }
+}
+
+$budgetCode = Find-SourcePattern $SourceFiles '(MAX_PROJECT_SPEND_USD|PROJECT_BUDGET_USD|PRODUCTION_BUDGET_USD|PILOT_BUDGET_USD|MAX_SPEND_USD|budget.*throw|spend.*limit)'
+if ($budgetDefined -and $budgetCode.Count -gt 0) {
+    Add-Check "Costos" "Tope duro de presupuesto" "PASS" 3 3 "$budgetName=$budgetValue y control detectado en codigo." $true
+}
+elseif ($budgetCode.Count -gt 0) {
+    Add-Check "Costos" "Tope duro de presupuesto" "WARN" 3 2 "Hay control de presupuesto en codigo, pero no se detecta valor explicito en .env.local." $true
+}
+else {
+    Add-Check "Costos" "Tope duro de presupuesto" "FAIL" 3 0 "Falta un hard cap de gasto antes de cualquier llamada facturable." $true
+}
+
+$retryDanger = Find-SourcePattern $SourceFiles '(while\s*\(.*quality|for\s*\(.*attempt|retry.*generate|regenerat|SCENE_QUALITY_MAX_ATTEMPTS)'
+$retryConfigSafe = ($qualityAttempts -eq 1 -and $shotCap -eq 1)
+
+if ($retryConfigSafe) {
+    Add-Check "Costos" "Cero regeneracion automatica" "PASS" 3 3 ("Config segura; patrones relacionados encontrados: {0}" -f $retryDanger.Count) $true
+}
+else {
+    Add-Check "Costos" "Cero regeneracion automatica" "FAIL" 3 0 "Los limites actuales permiten o no descartan mas de una generacion." $true
+}
+
+$pilotMarkers = Find-SourcePattern $SourceFiles '(pilot|piloto|PILOT_BUDGET_USD|pilotBudget|previewProduction)'
+if ($pilotMarkers.Count -gt 0) {
+    Add-Check "Costos" "Modo piloto" "PASS" 2 2 ("Marcadores: {0}" -f $pilotMarkers.Count)
+}
+else {
+    Add-Check "Costos" "Modo piloto" "WARN" 2 1 "No se detecta un modo piloto dedicado con presupuesto propio."
+}
+
+# ------------------------------------------------------------
+# 6. RUTAS API Y GATING - 5 puntos
+# ------------------------------------------------------------
+Write-Section "6. RUTAS API Y GATING - 5 PUNTOS"
+
+$routeFiles = @(
+    $SourceFiles | Where-Object {
+        $_.FullName -match "\\app\\api\\" -and $_.Name -match '^route\.(ts|js)$'
+    }
+)
+
+if ($routeFiles.Count -gt 0) {
+    Add-Check "API" "Rutas API detectadas" "PASS" 2 2 ("Rutas: {0}" -f $routeFiles.Count)
+}
+else {
+    Add-Check "API" "Rutas API detectadas" "WARN" 2 1 "No se encontraron app/api/**/route.ts."
+}
+
+$produceRoutes = @(
+    $routeFiles | Where-Object {
+        $_.FullName -match "\\produce\\|production|generate"
+    }
+)
+$produceGateOk = $true
+$checkedProduceRoutes = 0
+
+foreach ($rf in $produceRoutes) {
+    $text = Read-TextSafe $rf.FullName
+    $checkedProduceRoutes++
+
+    if ($text -notmatch '(PRODUCTION_MODE|budget|spend|SHOT_MAX_TOTAL_GENERATIONS|demo|blocked|allowProduction)') {
+        $produceGateOk = $false
+        [void]$Findings.Add("Ruta de produccion sin gate evidente: $($rf.FullName)")
+    }
+}
+
+if ($checkedProduceRoutes -eq 0) {
+    Add-Check "API" "Gate antes de producir" "WARN" 3 1.5 "No se identifico automaticamente una ruta produce/generate."
+}
+elseif ($produceGateOk) {
+    Add-Check "API" "Gate antes de producir" "PASS" 3 3 "Las rutas de produccion tienen marcadores de bloqueo/control." $true
+}
+else {
+    Add-Check "API" "Gate antes de producir" "FAIL" 3 0 "Existe al menos una ruta de produccion sin gate evidente." $true
+}
+
+# ------------------------------------------------------------
+# 7. FRONTEND / SERVICE WORKER - 5 puntos
+# ------------------------------------------------------------
+Write-Section "7. FRONTEND / SERVICE WORKER - 5 PUNTOS"
+
+$swRef = Find-SourcePattern $SourceFiles '(/sw\.js|navigator\.serviceWorker|serviceWorker\.register)'
+$swPath = Join-Path $Root "public\sw.js"
+
+if ($swRef.Count -gt 0 -and (Test-Path -LiteralPath $swPath -PathType Leaf)) {
+    Add-Check "Frontend" "Service Worker" "PASS" 2 2 "sw.js referenciado y presente."
+}
+elseif ($swRef.Count -gt 0) {
+    Add-Check "Frontend" "Service Worker" "FAIL" 2 0 "Se referencia sw.js pero public\sw.js no existe; producira 404."
+}
+else {
+    Add-Check "Frontend" "Service Worker" "PASS" 2 2 "No se referencia service worker."
+}
+
+$proxyPath = Join-Path $Root "proxy.ts"
+$middlewarePath = Join-Path $Root "middleware.ts"
+if ((Test-Path -LiteralPath $proxyPath) -or (Test-Path -LiteralPath $middlewarePath)) {
+    Add-Check "Frontend" "Proxy/middleware localizado" "PASS" 1 1 "Existe capa de proxy/middleware."
+}
+else {
+    Add-Check "Frontend" "Proxy/middleware localizado" "INFO" 1 1 "No es obligatorio para todos los proyectos."
+}
+
+$headersMarkers = Find-SourcePattern $SourceFiles '(Content-Security-Policy|X-Frame-Options|Referrer-Policy|Permissions-Policy|headers\s*\(\))'
+if ($headersMarkers.Count -gt 0) {
+    Add-Check "Frontend" "Headers de seguridad" "PASS" 2 2 ("Marcadores: {0}" -f $headersMarkers.Count)
+}
+else {
+    Add-Check "Frontend" "Headers de seguridad" "WARN" 2 1 "No se detectan headers de seguridad explicitos."
+}
+
+# ------------------------------------------------------------
+# 8. DEPENDENCIAS Y HIGIENE - 5 puntos
+# ------------------------------------------------------------
+Write-Section "8. DEPENDENCIAS Y HIGIENE - 5 PUNTOS"
+
+$lockPath = Join-Path $Root "package-lock.json"
+if (Test-Path -LiteralPath $lockPath -PathType Leaf) {
+    Add-Check "Dependencias" "package-lock.json" "PASS" 1 1 "Dependencias reproducibles."
+}
+else {
+    Add-Check "Dependencias" "package-lock.json" "WARN" 1 0.5 "No existe package-lock.json."
+}
+
+if ($NetworkAudit -and $npm) {
+    $audit = Invoke-LocalCommand $npm.Source @("audit","--json")
+    try {
+        $auditJson = $audit.Output | ConvertFrom-Json
+        $v = $auditJson.metadata.vulnerabilities
+        $critical = [int]$v.critical
+        $high = [int]$v.high
+        $moderate = [int]$v.moderate
+        $low = [int]$v.low
+
+        if ($critical -eq 0 -and $high -eq 0) {
+            Add-Check "Dependencias" "npm audit" "PASS" 3 3 "critical=0, high=0, moderate=$moderate, low=$low"
+        }
+        elseif ($critical -eq 0) {
+            Add-Check "Dependencias" "npm audit" "WARN" 3 1.5 "high=$high, moderate=$moderate, low=$low"
+        }
+        else {
+            Add-Check "Dependencias" "npm audit" "FAIL" 3 0 "critical=$critical, high=$high, moderate=$moderate, low=$low" $true
+        }
+    }
+    catch {
+        Add-Check "Dependencias" "npm audit" "WARN" 3 1.5 "No se pudo interpretar npm audit."
+    }
+}
+else {
+    Add-Check "Dependencias" "npm audit" "INFO" 3 3 "No ejecutado. Usa -NetworkAudit para consultar el registro npm."
+}
+
+if ($insideGit) {
+    $gitStatus = Invoke-LocalCommand $git.Source @("status","--porcelain")
+    $dirtyLines = @($gitStatus.Output -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if ($dirtyLines.Count -eq 0) {
+        Add-Check "Dependencias" "Estado Git" "PASS" 1 1 "Working tree limpio."
+    }
+    else {
+        Add-Check "Dependencias" "Estado Git" "WARN" 1 0.5 ("Cambios sin commit: {0}" -f $dirtyLines.Count)
+    }
+}
+else {
+    Add-Check "Dependencias" "Estado Git" "INFO" 1 1 "No auditado."
+}
+
+# ------------------------------------------------------------
+# RESUMEN
+# ------------------------------------------------------------
+Write-Section "RESUMEN FINAL"
+
+$totalPossible = [double](($Checks | Measure-Object -Property Points -Sum).Sum)
+$totalEarned = [double](($Checks | Measure-Object -Property Earned -Sum).Sum)
+
+if ($totalPossible -le 0) {
+    $score = 0
+}
+else {
+    $score = [math]::Round(($totalEarned / $totalPossible) * 100, 1)
+}
+
+$score10 = [math]::Round($score / 10, 1)
+$criticalFails = @($Checks | Where-Object { $_.Critical -and $_.Status -eq "FAIL" })
+$fails = @($Checks | Where-Object { $_.Status -eq "FAIL" })
+$warns = @($Checks | Where-Object { $_.Status -eq "WARN" })
+
+$grade = if ($score -ge 98 -and $criticalFails.Count -eq 0) {
+    "10/10 - LISTO PARA PILOTO CONTROLADO"
+}
+elseif ($score -ge 90 -and $criticalFails.Count -eq 0) {
+    "9/10 - MUY BUENO, FALTAN AJUSTES"
+}
+elseif ($score -ge 80) {
+    "8/10 - BUENA BASE, NO PRODUCIR AUN"
+}
+elseif ($score -ge 70) {
+    "7/10 - REQUIERE HARDENING"
+}
+else {
+    "NO APTO PARA PRODUCCION"
+}
+
+$summary = [PSCustomObject]@{
+    ScannerVersion       = "10.2-PS51"
+    StartedAt            = $StartedAt.ToString("o")
+    FinishedAt           = (Get-Date).ToString("o")
+    Root                 = $Root
+    ScorePercent         = $score
+    Score10              = $score10
+    Grade                = $grade
+    CriticalFailures     = $criticalFails.Count
+    Failures             = $fails.Count
+    Warnings             = $warns.Count
+    SourceFilesScanned   = $SourceFiles.Count
+    ProjectFiles         = $projectFiles.Count
+    TotalShots           = $totalShots
+    TotalGenerations     = $totalGenerations
+    EstimatedSpendUsd    = [math]::Round($totalSpend, 2)
+    WorkerRunning        = $workerRunning
+    ProductionMode       = $prodMode
+    ShotMaxGenerations   = $shotCap
+    QualityMaxAttempts   = $qualityAttempts
+    ProductionConcurrency = $concurrency
+}
+
+Write-Host ""
+Write-Host ("PUNTUACION: {0}/100  ({1}/10)" -f $score, $score10) -ForegroundColor Magenta
+Write-Host ("VEREDICTO : {0}" -f $grade) -ForegroundColor Magenta
+Write-Host ("CRITICOS  : {0}" -f $criticalFails.Count) -ForegroundColor $(if ($criticalFails.Count -eq 0) { "Green" } else { "Red" })
+Write-Host ("FALLOS    : {0}" -f $fails.Count) -ForegroundColor $(if ($fails.Count -eq 0) { "Green" } else { "Red" })
+Write-Host ("WARNINGS  : {0}" -f $warns.Count) -ForegroundColor $(if ($warns.Count -eq 0) { "Green" } else { "Yellow" })
+Write-Host ("PROYECTOS : {0}" -f $projectFiles.Count)
+Write-Host ("TOMAS     : {0}" -f $totalShots)
+Write-Host ("GENERADAS : {0}" -f $totalGenerations)
+Write-Host ("GASTO REG.: US$ {0}" -f ([math]::Round($totalSpend, 2)))
+
+if ($criticalFails.Count -gt 0) {
+    Write-Host ""
+    Write-Host "FALLOS CRITICOS:" -ForegroundColor Red
+    foreach ($c in $criticalFails) {
+        Write-Host (" - {0}: {1}" -f $c.Check, $c.Details) -ForegroundColor Red
+    }
+}
+
+# Reporte TXT
+$report = New-Object System.Collections.Generic.List[string]
+[void]$report.Add("VIRALCINE STUDIO - SCANNER 10/10")
+[void]$report.Add(("Fecha: {0}" -f (Get-Date)))
+[void]$report.Add(("Root: {0}" -f $Root))
+[void]$report.Add("")
+[void]$report.Add(("PUNTUACION: {0}/100 ({1}/10)" -f $score, $score10))
+[void]$report.Add(("VEREDICTO: {0}" -f $grade))
+[void]$report.Add(("CRITICOS: {0} | FALLOS: {1} | WARNINGS: {2}" -f $criticalFails.Count, $fails.Count, $warns.Count))
+[void]$report.Add(("PROYECTOS: {0} | TOMAS: {1} | GENERACIONES: {2} | GASTO REGISTRADO USD: {3}" -f $projectFiles.Count, $totalShots, $totalGenerations, ([math]::Round($totalSpend, 2))))
+[void]$report.Add("")
+[void]$report.Add("CHECKS:")
+
+foreach ($c in $Checks) {
+    [void]$report.Add(("[{0}] [{1}] {2} => {3}/{4} :: {5}" -f $c.Status, $c.Area, $c.Check, $c.Earned, $c.Points, $c.Details))
+}
+
+if ($Findings.Count -gt 0) {
+    [void]$report.Add("")
+    [void]$report.Add("HALLAZGOS:")
+    foreach ($f in $Findings) {
+        [void]$report.Add(("- " + $f))
+    }
+}
+
+$encoding = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllLines($TextReport, $report, $encoding)
+
+$jsonObject = [PSCustomObject]@{
+    Summary  = $summary
+    Checks   = $Checks.ToArray()
+    Findings = $Findings.ToArray()
+}
+[System.IO.File]::WriteAllText(
+    $JsonReport,
+    (($jsonObject | ConvertTo-Json -Depth 20) + [Environment]::NewLine),
+    $encoding
+)
+
+Write-Host ""
+Write-Host "REPORTES:" -ForegroundColor Cyan
+Write-Host " TXT : $TextReport"
+Write-Host " JSON: $JsonReport"
+
+if ($criticalFails.Count -gt 0) {
+    Write-Host ""
+    Write-Host "NO INICIES PRODUCCION REAL. Corrige primero los fallos criticos." -ForegroundColor Red
+    exit 2
+}
+
+if ($score -lt 98) {
+    Write-Host ""
+    Write-Host "Aun no alcanza 10/10. Corrige FAIL/WARN y repite el scanner." -ForegroundColor Yellow
+    exit 1
+}
+
+Write-Host ""
+Write-Host "SCANNER APROBADO: ViralCine alcanza nivel 10/10 para un PILOTO CONTROLADO." -ForegroundColor Green
+Write-Host "Esto NO autoriza una pelicula completa sin hard cap de presupuesto y piloto previo." -ForegroundColor Green
+exit 0
