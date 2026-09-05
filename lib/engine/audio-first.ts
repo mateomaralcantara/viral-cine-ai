@@ -6,7 +6,7 @@ import { generateSpeech } from '@/lib/providers/openai-media';
 import { generateElevenLabsSpeech, assertCharacterVoiceReady } from '@/lib/providers/elevenlabs';
 import { generateFalLipSync } from '@/lib/providers/fal-media';
 import { runFakeProviderStage } from '@/lib/providers/fake-cinema';
-import { createSilenceAudio } from '@/lib/media/ffmpeg';
+import { createSilenceAudio, createSyntheticSpeechAudio } from '@/lib/media/ffmpeg';
 import { hasUsableCredential, safeErrorMessage } from '@/lib/engine/production-safety';
 import { appendSpend, estimateOperationCost, voiceCostUnits } from '@/lib/engine/spend-ledger';
 
@@ -43,8 +43,8 @@ export async function prepareAudioFirstVoice(
 
   if (process.env.PRODUCTION_MODE !== 'real') {
     await runFakeProviderStage('voice', voicePath, async () => {
-      await createSilenceAudio(shot.durationSeconds, voicePath);
-      await writeFile(alignmentPath, `${JSON.stringify({ provider: 'offline', speakerId, text }, null, 2)}\n`, 'utf8');
+      await createSyntheticSpeechAudio(shot.durationSeconds, voicePath);
+      await writeFile(alignmentPath, `${JSON.stringify({ provider: 'offline', speakerId, text, syntheticAudibleSignal: true }, null, 2)}\n`, 'utf8');
       return voicePath;
     });
     return { voicePath, alignmentPath, speakerId, provider: 'offline' };
