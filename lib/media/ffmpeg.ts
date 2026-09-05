@@ -29,12 +29,14 @@ export async function createSilenceAudio(durationSeconds: number, outputPath: st
  */
 export async function createSyntheticSpeechAudio(durationSeconds: number, outputPath: string) {
   const duration = Math.max(0.25, durationSeconds);
+  const fadeDuration = Math.min(0.05, duration / 4);
+  const fadeOutStart = Math.max(0, duration - fadeDuration);
   await run([
     '-y',
     '-f', 'lavfi',
     '-i', 'sine=frequency=620:sample_rate=48000',
     '-t', String(duration),
-    '-af', 'volume=0.12,afade=t=in:st=0:d=0.05,afade=t=out:st=0.15:d=0.05',
+    '-af', `volume=0.25,afade=t=in:st=0:d=${fadeDuration},afade=t=out:st=${fadeOutStart}:d=${fadeDuration}`,
     '-ac', '2',
     '-c:a', 'libmp3lame',
     '-b:a', '128k',
