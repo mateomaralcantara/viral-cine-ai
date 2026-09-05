@@ -80,10 +80,53 @@ export function assertProductionCanQueue(project?: Pick<FilmProject, 'plan'>) {
   }
   assertPaidGenerationAllowed('iniciar la producción');
   if (!hasUsableCredential('OPENAI_API_KEY')) {
-    throw new ProductionSafetyError('Bloqueo de seguridad: falta una credencial utilizable de OpenAI para imagen y voz.');
+    throw new ProductionSafetyError('Bloqueo de seguridad: falta una credencial utilizable de OpenAI para referencias visuales y auditoría.');
   }
   if (!hasUsableCredential('GEMINI_API_KEY') && !hasUsableCredential('FAL_KEY')) {
     throw new ProductionSafetyError('Bloqueo de seguridad: falta una credencial utilizable de Gemini o Fal para video.');
+  }
+
+  const plan = project?.plan;
+  if (!plan) return;
+  const speakingCharacterIds = new Set(
+    plan.scenes.flatMap((scene) => scene.shots)
+      .map((shot) => shot.speakerId)
+      .filter((speakerId): speakerId is string => Boolean(speakerId && speakerId !== 'narrator'))
+  );
+  const hasNarration = plan.scenes.some((scene) =>
+    scene.shots.some((shot) => shot.speakerId === 'narrator' && Boolean(shot.spokenText.trim()))
+  );
+  if (hasNarration) {
+    if (!hasUsableCredential('ELEVENLABS_API_KEY')) {
+      throw new ProductionSafetyError('Bloqueo de seguridad: existe narración pero falta ELEVENLABS_API_KEY.');
+    }
+    if (!isUsableCredentialValue(process.env.ELEVENLABS_NARRATOR_VOICE_ID)) {
+      throw new ProductionSafetyError('Bloqueo de seguridad: existe narración pero falta ELEVENLABS_NARRATOR_VOICE_ID.');
+    }
+  }
+
+  const missing: string[] = [];
+  for (const characterId of speakingCharacterIds) {
+    const character = plan.characters.find((item) => item.id === characterId);
+    if (!character) {
+      missing.push(`personaje desconocido (${characterId})`);
+      continue;
+    }
+    const provider = character.voiceProvider || 'elevenlabs';
+    if (provider === 'elevenlabs') {
+      if (!hasUsableCredential('ELEVENLABS_API_KEY')) {
+        missing.push(`${character.name}: falta ELEVENLABS_API_KEY`);
+      } else if (!isUsableCredentialValue(character.voiceId)) {
+        missing.push(`${character.name}: falta voiceId`);
+      }
+    } else if (provider === 'openai') {
+      if (!hasUsableCredential('OPENAI_API_KEY')) missing.push(`${character.name}: falta OPENAI_API_KEY`);
+    } else {
+      missing.push(`${character.name}: proveedor offline no permitido en producción real`);
+    }
+  }
+  if (missing.length) {
+    throw new ProductionSafetyError(`Casting vocal incompleto: ${missing.slice(0, 8).join(' | ')}`);
   }
 }
 
