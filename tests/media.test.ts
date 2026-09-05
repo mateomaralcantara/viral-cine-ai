@@ -7,7 +7,13 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { ProjectInputSchema } from '../lib/domain/schemas';
 import { checkFfmpeg } from '../lib/media/ffmpeg-check';
-import { createPlaceholderImage, createSceneContactSheet, createSilenceAudio, renderAnimatedImage } from '../lib/media/ffmpeg';
+import {
+  createPlaceholderImage,
+  createSceneContactSheet,
+  createSilenceAudio,
+  createSyntheticSpeechAudio,
+  renderAnimatedImage
+} from '../lib/media/ffmpeg';
 import { assertCinematicSceneVideo, assertPlayableSceneVideo } from '../lib/media/probe';
 
 const execFileAsync = promisify(execFile);
@@ -37,6 +43,29 @@ test('FFmpeg produce un clip MP4 reproducible desde imagen y audio', async (cont
   assert.equal(probe.hasAudio, true);
   await createSceneContactSheet(video, 1, contactSheet);
   assert.ok((await stat(contactSheet)).size > 1_000);
+});
+
+test('la voz sintética offline supera el umbral audible sin relajar producción real', async (context) => {
+  if (!(await checkFfmpeg())) return context.skip('FFmpeg no está disponible');
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'viralcine-audible-demo-'));
+  const image = path.join(directory, 'scene.png');
+  const audio = path.join(directory, 'synthetic-voice.mp3');
+  const video = path.join(directory, 'scene.mp4');
+  const input = ProjectInputSchema.parse({
+    title: 'Prueba de audio offline',
+    premise: 'Una señal local prueba el transporte de voz sin llamadas externas.',
+    durationMinutes: 5,
+    genre: 'Técnico',
+    audience: 'Equipo interno',
+    visualStyle: 'Cinematográfico',
+    budgetUsd: 50
+  });
+  await createPlaceholderImage('Audio offline', 'Validación audible sin proveedor pagado.', image, input);
+  await createSyntheticSpeechAudio(2, audio);
+  await renderAnimatedImage(image, audio, 2, video, '16:9');
+  await assert.doesNotReject(
+    () => assertCinematicSceneVideo(video, 2, { requireAudibleAudio: true })
+  );
 });
 
 test('rechaza un MP4 negro antes de enviarlo a la auditoria de calidad', async (context) => {
