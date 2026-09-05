@@ -1,9 +1,9 @@
 {
   "name": "viralcine-studio-pro",
-  "version": "3.3.0",
+  "version": "4.0.0",
   "private": true,
   "type": "module",
-  "description": "Estudio privado de producción audiovisual larga con guion, avatares, voz, video IA y montaje FFmpeg.",
+  "description": "Estudio privado de producción audiovisual larga con pipeline audio-first, voces persistentes, video IA real, lip-sync y montaje FFmpeg.",
   "scripts": {
     "dev": "next dev --webpack",
     "worker": "node --import tsx scripts/worker.ts",
@@ -14,7 +14,9 @@
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts",
     "smoke": "node --import tsx scripts/smoke-pipeline.ts",
-    "check:env": "node scripts/check-env.mjs"
+    "check:env": "node scripts/check-env.mjs",
+    "migrate:4": "node --import tsx scripts/migrate-v4.ts",
+    "verify:4": "npm run typecheck && npm test"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",
