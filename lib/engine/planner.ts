@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import OpenAI from 'openai';
 import { zodTextFormat } from 'openai/helpers/zod';
 import { z } from 'zod';
-import { FilmPlanSchema, type FilmPlan, type ProjectInput } from '@/lib/domain/schemas';
+import { FilmPlanSchema, type FilmPlan, type ProjectInput, type SceneDialogueTurn } from '@/lib/domain/schemas';
 import { createDemoPlan } from '@/lib/engine/demo-plan';
 import { MAX_SCENES, normalizeSceneDurations, sceneCountForDuration } from '@/lib/engine/duration-policy';
 import { ensurePlanShots } from '@/lib/engine/shot-plan';
@@ -114,13 +114,13 @@ export async function generateFilmPlan(input: ProjectInput): Promise<FilmPlan> {
     characters,
     scenes: raw.scenes.slice(0, MAX_SCENES).map((rawScene, index) => {
       const { characterNames, dialogueTurns, ...scene } = rawScene;
-      const mappedTurns = dialogueTurns
-        .map((turn) => ({
-          speakerId: characterIdByName.get(turn.speakerName.toLocaleLowerCase()),
-          text: turn.text.trim(),
-          emotion: turn.emotion?.trim() || undefined
-        }))
-        .filter((turn): turn is { speakerId: string; text: string; emotion?: string } => Boolean(turn.speakerId && turn.text));
+      const mappedTurns: SceneDialogueTurn[] = dialogueTurns.flatMap((turn) => {
+        const speakerId = characterIdByName.get(turn.speakerName.toLocaleLowerCase());
+        const text = turn.text.trim();
+        if (!speakerId || !text) return [];
+        const emotion = turn.emotion?.trim();
+        return [{ speakerId, text, ...(emotion ? { emotion } : {}) }];
+      });
       return {
         ...scene,
         id: randomUUID(),
