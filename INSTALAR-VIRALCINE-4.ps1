@@ -129,10 +129,12 @@ if ($branch -ne 'feat/viralcine-4-real-cinema') {
   throw "Rama incorrecta: '$branch'. Cambia primero a feat/viralcine-4-real-cinema."
 }
 
-$dirty = git status --porcelain
+$dirty = @(git status --porcelain)
 if ($LASTEXITCODE -ne 0) { throw 'No fue posible leer git status.' }
-if ($dirty) {
-  throw "Hay cambios locales sin guardar. Haz commit o git stash antes de instalar ViralCine 4.0."
+if ($dirty.Count -gt 0) {
+  Write-Host 'Cambios locales detectados:' -ForegroundColor Yellow
+  $dirty | ForEach-Object { Write-Host "  $_" -ForegroundColor Yellow }
+  throw "Hay cambios locales sin guardar. El instalador se detuvo para no sobrescribirlos. Revisa la lista anterior antes de continuar."
 }
 
 Write-Host "Rama: $branch" -ForegroundColor Green
