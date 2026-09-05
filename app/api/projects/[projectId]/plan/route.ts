@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { estimateBudget } from '@/lib/engine/budget';
 import { generateFilmPlan } from '@/lib/engine/planner';
+import { appendSpend, estimateOperationCost } from '@/lib/engine/spend-ledger';
 import { saveProject, updateProject } from '@/lib/storage/project-store';
 import { classifyProductionError, safeErrorMessage } from '@/lib/engine/production-safety';
 
@@ -12,6 +13,9 @@ type Context = { params: Promise<{ projectId: string }> };
 export async function POST(_request: Request, context: Context) {
   const { projectId } = await context.params;
   let project;
+  const realPlanning = process.env.PRODUCTION_MODE === 'real';
+  const estimatedUsd = estimateOperationCost('script', 1);
+  const idempotencyKey = `script:${projectId}:plan`;
   try {
     project = await updateProject(projectId, (current) => {
       if (current.status === 'planning') throw new Error('La planificación ya está en curso.');
@@ -22,7 +26,36 @@ export async function POST(_request: Request, context: Context) {
       return current;
     });
 
+    if (realPlanning) {
+      await appendSpend(projectId, {
+        operation: 'script',
+        provider: 'openai',
+        model: process.env.OPENAI_SCRIPT_MODEL || 'gpt-5.6-terra',
+        state: 'reserved',
+        estimatedUsd,
+        idempotencyKey
+      });
+      await appendSpend(projectId, {
+        operation: 'script',
+        provider: 'openai',
+        model: process.env.OPENAI_SCRIPT_MODEL || 'gpt-5.6-terra',
+        state: 'submitted',
+        estimatedUsd,
+        idempotencyKey
+      });
+    }
+
     const plan = await generateFilmPlan(project.input);
+    if (realPlanning) {
+      await appendSpend(projectId, {
+        operation: 'script',
+        provider: 'openai',
+        model: process.env.OPENAI_SCRIPT_MODEL || 'gpt-5.6-terra',
+        state: 'succeeded',
+        estimatedUsd,
+        idempotencyKey
+      });
+    }
     project.plan = plan;
     project.budget = estimateBudget(project.input, plan);
     project.status = 'planned';
@@ -31,6 +64,17 @@ export async function POST(_request: Request, context: Context) {
     project = await saveProject(project);
     return NextResponse.json({ ok: true, project });
   } catch (error) {
+    if (realPlanning) {
+      await appendSpend(projectId, {
+        operation: 'script',
+        provider: 'openai',
+        model: process.env.OPENAI_SCRIPT_MODEL || 'gpt-5.6-terra',
+        state: 'failed-unknown',
+        estimatedUsd,
+        idempotencyKey,
+        error: safeErrorMessage(error)
+      }).catch(() => undefined);
+    }
     if (project) {
       const kind = classifyProductionError(error);
       project.status = kind === 'billing' ? 'paused-billing' : kind === 'safety' ? 'paused-safety' : 'failed';
