@@ -34,6 +34,81 @@ function Set-EnvValue([System.Collections.Generic.List[string]]$Lines, [string]$
   $Lines.Add("$Name=$Value")
 }
 
+function Stop-ProjectDevProcesses([string]$Root) {
+  if ($env:OS -ne 'Windows_NT') { return 0 }
+
+  $stopped = 0
+  $candidates = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+    if ($_.Name -notin @('node.exe', 'esbuild.exe')) { return $false }
+    $commandLine = [string]$_.CommandLine
+    $executable = [string]$_.ExecutablePath
+    return (
+      ($commandLine -and $commandLine.IndexOf($Root, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) -or
+      ($executable -and $executable.IndexOf($Root, [System.StringComparison]::OrdinalIgnoreCase) -eq 0)
+    )
+  })
+
+  foreach ($process in $candidates) {
+    try {
+      Write-Host "Cerrando proceso del proyecto: $($process.Name) PID=$($process.ProcessId)" -ForegroundColor Yellow
+      Stop-Process -Id $process.ProcessId -Force -ErrorAction Stop
+      $stopped += 1
+    } catch {
+      Write-Warning "No se pudo cerrar PID $($process.ProcessId): $($_.Exception.Message)"
+    }
+  }
+
+  if ($stopped -gt 0) { Start-Sleep -Milliseconds 1200 }
+  return $stopped
+}
+
+function Remove-LockedEsbuildIfPossible([string]$Root) {
+  if ($env:OS -ne 'Windows_NT') { return }
+  $esbuildPath = Join-Path $Root 'node_modules\@esbuild\win32-x64\esbuild.exe'
+  if (-not (Test-Path -LiteralPath $esbuildPath)) { return }
+
+  for ($attempt = 1; $attempt -le 4; $attempt++) {
+    try {
+      Remove-Item -LiteralPath $esbuildPath -Force -ErrorAction Stop
+      Write-Host 'Binario esbuild bloqueado eliminado correctamente.' -ForegroundColor Green
+      return
+    } catch {
+      if ($attempt -eq 4) {
+        Write-Warning "esbuild.exe continúa bloqueado: $($_.Exception.Message)"
+        return
+      }
+      Start-Sleep -Milliseconds (350 * $attempt)
+    }
+  }
+}
+
+function Invoke-NpmCiWithWindowsRecovery([string]$Root) {
+  for ($attempt = 1; $attempt -le 3; $attempt++) {
+    Write-Host "npm ci - intento $attempt/3"
+    & npm ci
+    if ($LASTEXITCODE -eq 0) { return }
+
+    if ($env:OS -ne 'Windows_NT') { break }
+
+    Write-Warning 'npm ci falló. Aplicando recuperación de bloqueos Windows (Node/Next/esbuild) solo para este proyecto.'
+    $closed = Stop-ProjectDevProcesses $Root
+    if ($closed -eq 0) {
+      Write-Host 'No se encontraron procesos Node/esbuild del proyecto.' -ForegroundColor DarkYellow
+    }
+    Remove-LockedEsbuildIfPossible $Root
+    Start-Sleep -Seconds 1
+  }
+
+  throw @"
+npm ci falló después de 3 intentos.
+Si el error sigue siendo EPERM sobre esbuild.exe:
+  1) cierra cualquier terminal que esté ejecutando npm run dev / npm run studio en ViralCine;
+  2) pausa temporalmente el análisis en tiempo real del antivirus para esta carpeta si está bloqueando el binario;
+  3) abre PowerShell como Administrador y vuelve a ejecutar este instalador.
+No habilites APIs pagadas mientras la instalación no termine correctamente.
+"@
+}
+
 $ProjectRoot = (Resolve-Path -LiteralPath $ProjectRoot).Path
 Set-Location -LiteralPath $ProjectRoot
 
@@ -101,9 +176,18 @@ Set-Content -LiteralPath $envLocal -Value $envLines -Encoding utf8
 Write-Host 'Entorno forzado a OFFLINE SEGURO. Las claves existentes no fueron borradas.' -ForegroundColor Green
 
 if (-not $SkipInstall) {
+  Write-Step 'PREPARANDO WINDOWS PARA INSTALACION LIMPIA'
+  if ($env:OS -eq 'Windows_NT') {
+    $closed = Stop-ProjectDevProcesses $ProjectRoot
+    if ($closed -gt 0) {
+      Write-Host "Procesos del proyecto cerrados: $closed" -ForegroundColor Green
+    } else {
+      Write-Host 'No hay procesos Node/esbuild activos de ViralCine.'
+    }
+  }
+
   Write-Step 'INSTALANDO DEPENDENCIAS'
-  npm ci
-  if ($LASTEXITCODE -ne 0) { throw 'npm ci fallo.' }
+  Invoke-NpmCiWithWindowsRecovery $ProjectRoot
 }
 
 if (-not $SkipVerify) {
