@@ -30,7 +30,13 @@ export async function generateFalVideo(imagePath: string, prompt: string, output
   const safePrompt = normalizeFalVideoPrompt(prompt);
   const safeDuration = Math.min(16, Math.max(1, Math.round(durationSeconds)));
   const result = await withFalContext(`generar el video con ${model}`, () => fal.subscribe(model, {
-    input: { image_url: imageUrl, prompt: safePrompt, duration: safeDuration, resolution: '720p', audio: true },
+    input: {
+      image_url: imageUrl,
+      prompt: safePrompt,
+      duration: safeDuration,
+      resolution: '720p',
+      audio: process.env.REAL_CINEMA_NATIVE_AUDIO === 'true'
+    },
     logs: true
   }));
   return saveRemote(findMediaUrl(result.data, 'video'), outputPath);
@@ -42,6 +48,21 @@ export async function generateFalAvatar(imagePath: string, audioPath: string, pr
   const model = process.env.FAL_AVATAR_MODEL || 'fal-ai/longcat-single-avatar/image-audio-to-video';
   const result = await withFalContext('generar el avatar', () => fal.subscribe(model, {
     input: { image_url: imageUrl, audio_url: audioUrl, prompt },
+    logs: true
+  }));
+  return saveRemote(findMediaUrl(result.data, 'video'), outputPath);
+}
+
+export async function generateFalLipSync(videoPath: string, audioPath: string, outputPath: string) {
+  configure('sincronizar labios con Fal.ai');
+  const [videoUrl, audioUrl] = await Promise.all([upload(videoPath), upload(audioPath)]);
+  const model = process.env.FAL_LIPSYNC_MODEL || 'fal-ai/sync-lipsync/v3';
+  const result = await withFalContext(`sincronizar labios con ${model}`, () => fal.subscribe(model, {
+    input: {
+      video_url: videoUrl,
+      audio_url: audioUrl,
+      sync_mode: process.env.FAL_LIPSYNC_SYNC_MODE || 'cut_off'
+    },
     logs: true
   }));
   return saveRemote(findMediaUrl(result.data, 'video'), outputPath);
@@ -91,8 +112,12 @@ function mimeFor(filePath: string) {
   if (ext === '.png') return 'image/png';
   if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
   if (ext === '.wav') return 'audio/wav';
+  if (ext === '.ogg') return 'audio/ogg';
+  if (ext === '.m4a' || ext === '.aac') return 'audio/mp4';
   if (ext === '.mp3') return 'audio/mpeg';
-  if (ext === '.mp4') return 'video/mp4';
+  if (ext === '.mp4' || ext === '.m4v') return 'video/mp4';
+  if (ext === '.mov') return 'video/quicktime';
+  if (ext === '.webm') return 'video/webm';
   return 'application/octet-stream';
 }
 
@@ -105,6 +130,9 @@ async function withFalContext<T>(operation: string, work: () => Promise<T>): Pro
     const request = failure.requestId ? ` Solicitud Fal: ${failure.requestId}.` : '';
     if (failure.status === 422 || /\b422\b|unprocessable entity/i.test(failure.message)) {
       throw new Error(`Fal.ai rechazó los datos para ${operation} (HTTP 422): ${detail}.${request}`);
+    }
+    if (failure.status === 429 || /\b429\b|rate.?limit/i.test(failure.message)) {
+      throw new Error(`Fal.ai limitó temporalmente ${operation} (HTTP 429). No se debe repetir automáticamente una operación pagada sin reconciliar primero.${request}`);
     }
     if (failure.status === 403 || /\b403\b|forbidden/i.test(failure.message)) {
       throw new Error(`Fal.ai rechazó ${operation} (HTTP 403). Verifica que FAL_KEY sea válida, que la cuenta tenga saldo y que el modelo configurado esté habilitado.`);
