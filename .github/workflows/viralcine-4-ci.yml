@@ -33,3 +33,7 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+      - name: Production dependency audit
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=high
