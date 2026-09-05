@@ -11,7 +11,7 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,11 +25,26 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: FFmpeg availability
+        run: |
+          ffmpeg -version | head -n 1
+          ffprobe -version | head -n 1
+
       - name: Typecheck
         run: npm run typecheck
 
       - name: Tests
         run: npm test
+
+      - name: Real Cinema offline smoke
+        env:
+          PRODUCTION_MODE: demo
+          REAL_CINEMA_PIPELINE: 'true'
+          ALLOW_EXTERNAL_API_CALLS: 'false'
+          ALLOW_PAID_GENERATION: 'false'
+          PILOT_MODE: 'false'
+          FAKE_PROVIDER_SCENARIO: success
+        run: npm run smoke
 
       - name: Production build
         run: npm run build
