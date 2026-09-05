@@ -6,6 +6,7 @@ import { FilmPlanSchema, type FilmPlan, type ProjectInput, type SceneDialogueTur
 import { createDemoPlan } from '@/lib/engine/demo-plan';
 import { MAX_SCENES, normalizeSceneDurations, sceneCountForDuration } from '@/lib/engine/duration-policy';
 import { ensurePlanShots } from '@/lib/engine/shot-plan';
+import { assertPaidGenerationAllowed } from '@/lib/engine/production-safety';
 
 const AiCharacterSchema = z.object({
   name: z.string(),
@@ -53,7 +54,7 @@ const AiFilmPlanSchema = z.object({
 
 export async function generateFilmPlan(input: ProjectInput): Promise<FilmPlan> {
   if (process.env.PRODUCTION_MODE !== 'real') return createDemoPlan(input);
-  if (!process.env.OPENAI_API_KEY) throw new Error('Falta OPENAI_API_KEY para crear el guion real.');
+  assertPaidGenerationAllowed('generar guion y plan cinematográfico con OpenAI', 'OPENAI_API_KEY');
 
   const sceneCount = sceneCountForDuration(input.durationMinutes);
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
