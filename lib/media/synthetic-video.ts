@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import type { ProjectInput } from '@/lib/domain/schemas';
+import { runFakeProviderStage } from '@/lib/providers/fake-cinema';
 
 const ffmpeg = () => process.env.FFMPEG_PATH || 'ffmpeg';
 
@@ -8,23 +9,25 @@ export async function createSyntheticMotionVideo(
   outputPath: string,
   aspectRatio: ProjectInput['aspectRatio']
 ) {
-  const { width, height } = aspectRatio === '9:16'
-    ? { width: 720, height: 1280 }
-    : { width: 1280, height: 720 };
-  const source = `testsrc2=size=${width}x${height}:rate=25`;
-  await run([
-    '-y',
-    '-f', 'lavfi',
-    '-i', source,
-    '-t', String(durationSeconds),
-    '-vf', 'format=yuv420p',
-    '-c:v', 'libx264',
-    '-preset', 'veryfast',
-    '-crf', '22',
-    '-an',
-    outputPath
-  ]);
-  return outputPath;
+  return runFakeProviderStage('video', outputPath, async () => {
+    const { width, height } = aspectRatio === '9:16'
+      ? { width: 720, height: 1280 }
+      : { width: 1280, height: 720 };
+    const source = `testsrc2=size=${width}x${height}:rate=25`;
+    await run([
+      '-y',
+      '-f', 'lavfi',
+      '-i', source,
+      '-t', String(durationSeconds),
+      '-vf', 'format=yuv420p',
+      '-c:v', 'libx264',
+      '-preset', 'veryfast',
+      '-crf', '22',
+      '-an',
+      outputPath
+    ]);
+    return outputPath;
+  });
 }
 
 async function run(args: string[]) {
