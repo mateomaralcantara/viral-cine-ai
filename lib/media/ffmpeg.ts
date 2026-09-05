@@ -21,6 +21,28 @@ export async function createSilenceAudio(durationSeconds: number, outputPath: st
   return outputPath;
 }
 
+/**
+ * Generates an audible deterministic signal for offline/demo speech segments.
+ * This is intentionally NOT speech synthesis. Its purpose is to exercise the
+ * complete audio transport, muxing, checkpoint and audible-audio validation
+ * path without making any external or paid provider call.
+ */
+export async function createSyntheticSpeechAudio(durationSeconds: number, outputPath: string) {
+  const duration = Math.max(0.25, durationSeconds);
+  await run([
+    '-y',
+    '-f', 'lavfi',
+    '-i', 'sine=frequency=620:sample_rate=48000',
+    '-t', String(duration),
+    '-af', 'volume=0.12,afade=t=in:st=0:d=0.05,afade=t=out:st=0.15:d=0.05',
+    '-ac', '2',
+    '-c:a', 'libmp3lame',
+    '-b:a', '128k',
+    outputPath
+  ]);
+  return outputPath;
+}
+
 export async function renderAnimatedImage(
   imagePath: string,
   audioPath: string,
