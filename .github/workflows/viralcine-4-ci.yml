@@ -8,10 +8,13 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write
+
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,13 +25,31 @@ jobs:
           node-version: '24'
           cache: npm
 
-      - name: Install
-        run: npm ci
-
-      - name: FFmpeg availability
+      - name: Install FFmpeg
         run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
           ffmpeg -version | head -n 1
           ffprobe -version | head -n 1
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Refresh safe dependency lock
+        run: npm audit fix --package-lock-only
+
+      - name: Commit audited lockfile
+        if: github.event_name == 'push'
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            echo "package-lock.json already audited"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "chore(security): refresh audited dependency lock"
+          git push origin HEAD:feat/viralcine-4-real-cinema
 
       - name: Typecheck
         run: npm run typecheck
@@ -50,5 +71,4 @@ jobs:
         run: npm run build
 
       - name: Production dependency audit
-        continue-on-error: true
         run: npm audit --omit=dev --audit-level=high
