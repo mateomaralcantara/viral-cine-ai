@@ -1,14 +1,15 @@
 import { basename } from 'node:path';
 import { readFile, writeFile } from 'node:fs/promises';
 import OpenAI, { toFile } from 'openai';
+import { assertPaidGenerationAllowed } from '@/lib/engine/production-safety';
 
-function client() {
-  if (!process.env.OPENAI_API_KEY) throw new Error('Falta OPENAI_API_KEY');
+function client(operation: string) {
+  assertPaidGenerationAllowed(operation, 'OPENAI_API_KEY');
   return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 }
 
 export async function generateImage(prompt: string, outputPath: string) {
-  const response = await client().images.generate({
+  const response = await client('generar una imagen con OpenAI').images.generate({
     model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2',
     prompt,
     size: '1536x1024',
@@ -27,7 +28,7 @@ export async function generateImageWithReferences(referencePaths: string[], prom
       toFile(await readFile(referencePath), basename(referencePath), { type: 'image/png' })
     )
   );
-  const response = await client().images.edit({
+  const response = await client('editar una imagen con OpenAI').images.edit({
     model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2',
     image: images,
     prompt,
@@ -41,7 +42,7 @@ export async function generateImageWithReferences(referencePaths: string[], prom
 }
 
 export async function generateSpeech(text: string, instructions: string, outputPath: string) {
-  const response = await client().audio.speech.create({
+  const response = await client('generar voz con OpenAI').audio.speech.create({
     model: process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts',
     voice: (process.env.OPENAI_TTS_VOICE || 'marin') as 'marin',
     input: text.slice(0, 4096),

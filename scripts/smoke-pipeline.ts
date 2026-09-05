@@ -23,7 +23,13 @@ const input = ProjectInputSchema.parse({
 
 let project = await createProject(input);
 const plan = createDemoPlan(input);
-plan.scenes = plan.scenes.slice(0, 12).map((scene) => ({ ...scene, durationSeconds: 5, shots: [] }));
+plan.scenes = plan.scenes.slice(0, 12).map((scene) => ({
+  ...scene,
+  durationSeconds: 5,
+  narration: `Prueba técnica de la escena ${scene.order}.`,
+  dialogue: '',
+  shots: []
+}));
 project.plan = plan;
 project.budget = estimateBudget(input, plan);
 project.status = 'queued';

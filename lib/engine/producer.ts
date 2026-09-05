@@ -45,7 +45,14 @@ import {
   strictSceneQualityEnabled
 } from '@/lib/engine/quality-review';
 import { preflightPlan } from '@/lib/engine/shot-plan';
-import { reserveShotGeneration } from '@/lib/engine/spend-guard';
+import { estimateBudget } from '@/lib/engine/budget';
+import { assertEstimatedBudgetAllowed, reserveShotGeneration } from '@/lib/engine/spend-guard';
+import {
+  assertProductionCanQueue,
+  classifyProductionError,
+  hasUsableCredential,
+  safeErrorMessage
+} from '@/lib/engine/production-safety';
 
 const GOOGLE_BILLING_COOLDOWN_MS = 15 * 60 * 1000;
 let googleBillingBlockedUntil = 0;
@@ -55,20 +62,6 @@ export async function produceProject(projectId: string) {
   if (!project.plan) throw new Error('El proyecto todavía no tiene un plan de escenas.');
   if (!['queued', 'planned', 'failed'].includes(project.status)) return project;
 
-  if (process.env.REQUIRE_REAL_MEDIA === 'true' && process.env.PRODUCTION_MODE !== 'real') {
-    throw new Error('Produccion bloqueada: REQUIRE_REAL_MEDIA=true exige PRODUCTION_MODE=real. No se crearan galerias ni silencio.');
-  }
-  if (process.env.REQUIRE_REAL_MEDIA === 'true' && !process.env.OPENAI_API_KEY) {
-    throw new Error('Produccion bloqueada: falta OPENAI_API_KEY para crear imagenes y voces reales.');
-  }
-  if (
-    process.env.REQUIRE_REAL_MEDIA === 'true' &&
-    !process.env.GEMINI_API_KEY &&
-    !process.env.FAL_KEY
-  ) {
-    throw new Error('Produccion bloqueada: configura GEMINI_API_KEY o FAL_KEY para generar video real.');
-  }
-
   try {
     const preflight = preflightPlan(project.plan);
     if (!preflight.passed) {
@@ -76,11 +69,14 @@ export async function produceProject(projectId: string) {
         `Preproduccion bloqueada antes de consumir video: ${preflight.issues.slice(0, 8).join(' | ')}`
       );
     }
+    assertProductionCanQueue(project);
+    project.budget = estimateBudget(project.input, project.plan);
+    assertEstimatedBudgetAllowed(project);
     project = await persist(project, {
       status: 'producing',
       error: undefined,
       progress: progress('characters', 2, 'Preflight 10/10; preparando identidades visuales', 0, requirePlan(project).scenes.length)
-    }, `Preproduccion aprobada ${preflight.score}/10; produccion de video real iniciada`);
+    }, `Preproduccion aprobada ${preflight.score}/10; producción ${process.env.PRODUCTION_MODE === 'real' ? 'real' : 'offline'} iniciada`);
 
     project = await prepareCharacters(project);
     await removePartialSceneFiles(project.id);
@@ -190,12 +186,14 @@ export async function produceProject(projectId: string) {
     }, 'Película final terminada');
     return project;
   } catch (error) {
-    project.status = 'failed';
+    const kind = classifyProductionError(error);
+    project.status = kind === 'billing' ? 'paused-billing' : kind === 'safety' ? 'paused-safety' : 'failed';
     project.error = messageOf(error);
-    project.progress = progress('failed', project.progress.percent, project.error, project.progress.currentScene, project.progress.totalScenes);
-    project.productionLog.push(`${new Date().toISOString()} Producción detenida: ${project.error}`);
+    const phase = project.status;
+    project.progress = progress(phase, project.progress.percent, project.error, project.progress.currentScene, project.progress.totalScenes);
+    project.productionLog.push(`${new Date().toISOString()} Producción pausada (${kind}): ${project.error}`);
     await saveProject(project);
-    throw error;
+    return project;
   }
 }
 
@@ -268,20 +266,9 @@ async function produceShot(project: FilmProject, sceneIndex: number, shotIndex: 
       scene = requirePlan(project).scenes[sceneIndex];
       shot = scene.shots[shotIndex];
 
-      if (process.env.PRODUCTION_MODE === 'real') {
-        const reservation = reserveShotGeneration(project, scene, shot);
-        project.productionLog.push(
-          `${new Date().toISOString()} Gasto reservado para escena ${scene.order}, plano ${shot.order}: ` +
-          `generacion ${reservation.generationNumber}, US$${reservation.reservedUsd.toFixed(2)}, ` +
-          `acumulado US$${reservation.movieReservedUsd.toFixed(2)}`
-        );
-        project = await saveProject(project);
-        scene = requirePlan(project).scenes[sceneIndex];
-        shot = scene.shots[shotIndex];
-      }
-
       const rendered = await renderShot(project, scene, shot, correctionPrompt);
       Object.assign(shot, rendered);
+      await saveShotCheckpoint(project, scene, shot, rendered);
       project.progress = progress(
         strictQuality ? 'quality' : 'shots',
         scenePercent(sceneIndex, shotIndex + 0.5, scene.shots.length, totalScenes),
@@ -316,16 +303,16 @@ async function produceShot(project: FilmProject, sceneIndex: number, shotIndex: 
         shot = scene.shots[shotIndex];
       }
 
-      await saveShotCheckpoint(project, scene, shot, rendered);
       return acceptShot(project, sceneIndex, shotIndex, rendered, acceptanceReason);
     }
     return pauseForQualityReview(project, sceneIndex, shotIndex, shot.qualityScore || 0);
   } catch (error) {
     scene = requirePlan(project).scenes[sceneIndex];
     shot = scene.shots[shotIndex];
-    shot.status = 'failed';
+    const kind = classifyProductionError(error);
+    shot.status = kind === 'technical' ? 'failed' : 'pending';
     shot.error = messageOf(error);
-    scene.status = 'failed';
+    scene.status = kind === 'technical' ? 'failed' : 'pending';
     scene.error = `Plano ${shot.order}: ${shot.error}`;
     project.productionLog.push(`${new Date().toISOString()} Escena ${scene.order}, plano ${shot.order} falló: ${shot.error}`);
     throw error;
@@ -344,7 +331,7 @@ async function prepareCharacters(project: FilmProject) {
         character.referenceAsset = undefined;
       }
     }
-    const real = process.env.PRODUCTION_MODE === 'real' && Boolean(process.env.OPENAI_API_KEY);
+    const real = process.env.PRODUCTION_MODE === 'real' && hasUsableCredential('OPENAI_API_KEY');
     const destination = path.join(projectAssetDir(project.id, 'images'), `character-${character.id}.png`);
     if (real) {
       await generateImage(
@@ -372,17 +359,9 @@ async function renderShot(project: FilmProject, scene: FilmScene, shot: FilmShot
 
   const key = `scene-${pad(scene.order)}-shot-${padShot(shot.order)}`;
   const voicePath = path.join(projectAssetDir(project.id, 'audio'), `${key}.mp3`);
-  let voiceExists = false;
-  if (correctionPrompt) {
-    try {
-      await access(voicePath);
-      voiceExists = true;
-    } catch {
-      voiceExists = false;
-    }
-  }
+  const voiceExists = await fileExists(voicePath);
   if (!voiceExists) {
-    if (process.env.PRODUCTION_MODE === 'real' && process.env.OPENAI_API_KEY && shot.spokenText.trim()) {
+    if (process.env.PRODUCTION_MODE === 'real' && hasUsableCredential('OPENAI_API_KEY') && shot.spokenText.trim()) {
       await generateSpeech(shot.spokenText, lead.voiceInstructions, voicePath);
     } else {
       await createSilenceAudio(shot.durationSeconds, voicePath);
@@ -397,13 +376,14 @@ async function renderShot(project: FilmProject, scene: FilmScene, shot: FilmShot
   const continuity = characters
     .map((character) => `${character.name}: ${character.appearance}; wardrobe: ${character.wardrobe}`)
     .join(' | ');
-  if (process.env.PRODUCTION_MODE === 'real' && process.env.OPENAI_API_KEY) {
+  const imageExists = !correctionPrompt && await fileExists(imagePath);
+  if (!imageExists && process.env.PRODUCTION_MODE === 'real' && hasUsableCredential('OPENAI_API_KEY')) {
     await generateImageWithReferences(
       characterReferences,
       `${shot.visualPrompt} Continuity bible: ${continuity}. Camera: ${shot.camera}. ${project.plan.creativeDirection}. ${correctionPrompt ? `Mandatory corrections: ${correctionPrompt}.` : ''} First frame for a real moving video. No text, no subtitles, no logos.`,
       imagePath
     );
-  } else {
+  } else if (!imageExists) {
     await createPlaceholderImage(shot.title, shot.visualPrompt, imagePath, project.input);
   }
 
@@ -412,27 +392,29 @@ async function renderShot(project: FilmProject, scene: FilmScene, shot: FilmShot
   try {
     if (process.env.PRODUCTION_MODE === 'real') {
       const rawVideo = path.join(projectAssetDir(project.id, 'video'), `${key}-raw.mp4`);
-      const result = await generateRealVideo(
-        project,
-        scene,
-        shot,
-        [imagePath, ...characterReferences],
-        assetAbsolutePath(project.id, lead.referenceAsset),
-        voicePath,
-        rawVideo,
-        correctionPrompt
-      );
-      shot.lastProvider = result.provider;
-      project.productionLog.push(
-        `${new Date().toISOString()} Escena ${scene.order}, plano ${shot.order}: video generado por ${result.provider}`
-      );
-      await saveProject(project);
+      if (!(shot.lastGenerationState === 'succeeded' && await fileExists(rawVideo))) {
+        const result = await generateRealVideo(
+          project,
+          scene,
+          shot,
+          [imagePath, ...characterReferences],
+          assetAbsolutePath(project.id, lead.referenceAsset),
+          voicePath,
+          rawVideo,
+          correctionPrompt
+        );
+        shot.lastProvider = result.provider;
+      } else {
+        project.productionLog.push(
+          `${new Date().toISOString()} Escena ${scene.order}, plano ${shot.order}: resultado pagado recuperado desde disco`
+        );
+      }
       await normalizeGeneratedVideo(rawVideo, voicePath, shot.durationSeconds, partialPath, project.input.aspectRatio);
     } else {
       await renderAnimatedImage(imagePath, voicePath, shot.durationSeconds, partialPath, project.input.aspectRatio);
     }
     await publishSceneVideo(partialPath, normalizedPath, shot.durationSeconds, {
-      requireAudibleAudio: Boolean(shot.spokenText.trim()),
+      requireAudibleAudio: process.env.PRODUCTION_MODE === 'real' && Boolean(shot.spokenText.trim()),
       requireMotion: process.env.PRODUCTION_MODE === 'real'
     });
   } finally {
@@ -458,25 +440,25 @@ async function generateRealVideo(
     {
       name: 'Gemini Omni',
       family: 'google',
-      enabled: Boolean(process.env.GEMINI_API_KEY) && (provider === 'auto' || provider === 'omni'),
+      enabled: hasUsableCredential('GEMINI_API_KEY') && (provider === 'auto' || provider === 'omni'),
       run: () => generateGeminiOmniVideo(referencePaths, prompt, project.input, outputPath)
     },
     {
       name: 'Veo',
       family: 'google',
-      enabled: Boolean(process.env.GEMINI_API_KEY) && (provider === 'auto' || provider === 'veo'),
+      enabled: hasUsableCredential('GEMINI_API_KEY') && (provider === 'auto' || provider === 'veo'),
       run: () => generateVeoVideo(referencePaths[0], prompt, project.input, outputPath, shot.durationSeconds)
     },
     {
       name: 'Fal.ai video general',
       family: 'fal',
-      enabled: Boolean(process.env.FAL_KEY) && (provider === 'auto' || provider === 'fal'),
+      enabled: hasUsableCredential('FAL_KEY') && (provider === 'auto' || provider === 'fal'),
       run: () => generateFalVideo(referencePaths[0], prompt, outputPath, shot.durationSeconds)
     },
     {
       name: 'Fal.ai avatar individual',
       family: 'fal',
-      enabled: Boolean(process.env.FAL_KEY) &&
+      enabled: hasUsableCredential('FAL_KEY') &&
         (provider === 'auto' || provider === 'fal') &&
         falAvatarEligible &&
         process.env.ALLOW_FAL_AVATAR_FALLBACK !== 'false',
@@ -484,21 +466,47 @@ async function generateRealVideo(
     }
   ];
   const errors: string[] = [];
+  const allowFallback = process.env.ALLOW_PAID_PROVIDER_FALLBACK === 'true';
   for (const attempt of attempts) {
     if (!attempt.enabled) continue;
     if (attempt.family === 'google' && Date.now() < googleBillingBlockedUntil) {
       errors.push(`${attempt.name}: omitido temporalmente porque la cuenta de Google no tiene créditos prepagados`);
       continue;
     }
+    let submitted = false;
     try {
+      const reservation = reserveShotGeneration(project, scene, shot);
+      shot.lastProvider = attempt.name;
+      shot.lastGenerationState = 'reserved';
+      project.productionLog.push(
+        `${new Date().toISOString()} Gasto reservado para escena ${scene.order}, plano ${shot.order}: ` +
+        `generación ${reservation.generationNumber}, US$${reservation.reservedUsd.toFixed(2)}, ` +
+        `acumulado US$${reservation.movieReservedUsd.toFixed(2)}, proveedor ${attempt.name}`
+      );
+      await saveProject(project);
+      submitted = true;
       await attempt.run();
+      shot.lastGenerationState = 'succeeded';
+      project.productionLog.push(
+        `${new Date().toISOString()} Escena ${scene.order}, plano ${shot.order}: video recibido de ${attempt.name}`
+      );
+      await saveProject(project);
       return { outputPath, provider: attempt.name };
     } catch (error) {
       const message = messageOf(error);
       errors.push(`${attempt.name}: ${message}`);
+      if (submitted) {
+        shot.lastGenerationState = 'failed-unknown';
+        project.productionLog.push(
+          `${new Date().toISOString()} Escena ${scene.order}, plano ${shot.order}: ${attempt.name} falló; no se reintentará automáticamente: ${message}`
+        );
+        await saveProject(project);
+      }
       if (attempt.family === 'google' && isGooglePrepayDepleted(message)) {
         googleBillingBlockedUntil = Date.now() + GOOGLE_BILLING_COOLDOWN_MS;
       }
+      const kind = classifyProductionError(error);
+      if (kind !== 'technical' || !allowFallback) throw error;
     }
   }
   const configured = attempts.some((attempt) => attempt.enabled);
@@ -519,7 +527,7 @@ export function shouldUseFalAvatar(scene: FilmScene, shot: FilmShot) {
 }
 
 async function prepareMusic(project: FilmProject) {
-  if (!project.plan || process.env.PRODUCTION_MODE !== 'real' || !process.env.FAL_KEY) return undefined;
+  if (!project.plan || process.env.PRODUCTION_MODE !== 'real' || !hasUsableCredential('FAL_KEY')) return undefined;
   const output = path.join(projectAssetDir(project.id, 'audio'), 'soundtrack.mp3');
   try {
     await generateFalMusic(project.plan.musicPrompt, Math.min(180, project.input.durationMinutes * 60), output);
@@ -618,7 +626,15 @@ function aggregateQuality(shots: FilmShot[]) {
 
 const pad = (value: number) => String(value).padStart(3, '0');
 const padShot = (value: number) => String(value).padStart(2, '0');
-const messageOf = (error: unknown) => (error instanceof Error ? error.message : 'Error desconocido');
+const messageOf = safeErrorMessage;
+async function fileExists(filePath: string) {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
 function requirePlan(project: FilmProject): FilmPlan {
   if (!project.plan) throw new Error('El proyecto no tiene plan de producción.');
   return project.plan;

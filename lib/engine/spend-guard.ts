@@ -1,4 +1,5 @@
 import type { FilmProject, FilmScene, FilmShot } from '@/lib/domain/schemas';
+import { ProductionSafetyError } from '@/lib/engine/production-safety';
 
 export type GenerationReservation = {
   generationNumber: number;
@@ -26,10 +27,10 @@ export function reserveShotGeneration(
 }
 
 export function assertShotGenerationAllowed(project: FilmProject, scene: FilmScene, shot: FilmShot) {
-  const maximumGenerations = integerEnv('SHOT_MAX_TOTAL_GENERATIONS', 2, 1, 10);
+  const maximumGenerations = integerEnv('SHOT_MAX_TOTAL_GENERATIONS', 1, 1, 10);
   const generationCount = shot.generationCount || 0;
   if (generationCount >= maximumGenerations) {
-    throw new Error(
+    throw new ProductionSafetyError(
       `Bloqueo de gasto: la escena ${scene.order}, plano ${shot.order} ya uso ${generationCount} ` +
       `de ${maximumGenerations} generaciones permitidas. Revisa el material o aumenta SHOT_MAX_TOTAL_GENERATIONS conscientemente.`
     );
@@ -39,7 +40,7 @@ export function assertShotGenerationAllowed(project: FilmProject, scene: FilmSce
   const shotLimit = numberEnv('MAX_SHOT_SPEND_USD', 5, 0.1, 1_000);
   const shotSpend = shot.estimatedSpendUsd || 0;
   if (shotSpend + nextCost > shotLimit + 0.001) {
-    throw new Error(
+    throw new ProductionSafetyError(
       `Bloqueo de gasto: el siguiente intento llevaria la escena ${scene.order}, plano ${shot.order} ` +
       `a US$${round(shotSpend + nextCost).toFixed(2)}; el limite por plano es US$${shotLimit.toFixed(2)}.`
     );
@@ -49,9 +50,21 @@ export function assertShotGenerationAllowed(project: FilmProject, scene: FilmSce
   const movieLimit = Math.min(configuredMovieLimit, project.input.budgetUsd);
   const movieSpend = totalReservedSpend(project);
   if (movieSpend + nextCost > movieLimit + 0.001) {
-    throw new Error(
+    throw new ProductionSafetyError(
       `Bloqueo de gasto: el siguiente intento llevaria la pelicula a US$${round(movieSpend + nextCost).toFixed(2)}; ` +
       `el limite activo es US$${movieLimit.toFixed(2)}.`
+    );
+  }
+}
+
+export function assertEstimatedBudgetAllowed(project: FilmProject) {
+  if (process.env.PRODUCTION_MODE !== 'real' || !project.budget) return;
+  const configuredMovieLimit = numberEnv('MAX_MOVIE_SPEND_USD', project.input.budgetUsd, 1, 100_000);
+  const movieLimit = Math.min(configuredMovieLimit, project.input.budgetUsd);
+  if (!project.budget.withinBudget || project.budget.estimatedUsd > movieLimit + 0.001) {
+    throw new ProductionSafetyError(
+      `Bloqueo de presupuesto: el plan estima US$${project.budget.estimatedUsd.toFixed(2)} y el limite activo es US$${movieLimit.toFixed(2)}. ` +
+      'Reduce tomas o costos antes de autorizar producción real.'
     );
   }
 }

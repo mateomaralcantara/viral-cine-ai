@@ -10,6 +10,9 @@ import type { FilmProject, FilmScene, ProjectInput } from '@/lib/domain/schemas'
 
 type SystemStatus = {
   mode: 'demo' | 'real';
+  externalCallsEnabled: boolean;
+  paidGenerationEnabled: boolean;
+  safetyReason: string;
   ffmpeg: boolean;
   script: boolean;
   images: boolean;
@@ -30,7 +33,7 @@ const initialInput: ProjectInput = {
   visualStyle: 'Cinematográfico realista, elegante, contrastado y emocional',
   language: 'es',
   aspectRatio: '16:9',
-  budgetUsd: 80,
+  budgetUsd: 12,
   burnSubtitles: true,
   generateMusic: true
 };
@@ -94,7 +97,7 @@ export default function StudioApp() {
     });
   }
 
-  async function produce(decision: 'retry' | 'approve' = 'retry') {
+  async function produce(decision: 'start' | 'retry' | 'approve' = 'start') {
     if (!project) return;
     await action('produce', async () => {
       const data = await api(`/api/projects/${project.id}/produce`, { method: 'POST', body: JSON.stringify({ decision }) });
@@ -165,7 +168,7 @@ function Topbar({ system, onNew }: { system: SystemStatus | null; onNew: () => v
           <StatusDot ok={Boolean(system?.ffmpeg)} label="FFmpeg" />
           <StatusDot ok={Boolean(system?.script)} label="IA creativa" />
           <StatusDot ok={Boolean(system?.veo || system?.fal)} label="Video IA" />
-          <span className={`rounded-full px-3 py-1.5 text-xs font-bold ${system?.mode === 'real' ? 'bg-emerald-500/12 text-emerald-300' : 'bg-amber-500/12 text-amber-200'}`}>{system?.mode === 'real' ? 'MODO REAL' : 'MODO DEMO'}</span>
+          <span className={`rounded-full px-3 py-1.5 text-xs font-bold ${system?.paidGenerationEnabled ? 'bg-red-500/12 text-red-200' : 'bg-emerald-500/12 text-emerald-300'}`}>{system?.paidGenerationEnabled ? 'GASTO HABILITADO' : 'OFFLINE SEGURO'}</span>
         </div>
         <button className="button-primary" onClick={onNew}><Plus className="h-4 w-4" /> Nueva película</button>
       </div>
@@ -218,7 +221,7 @@ function CreateProject({ onSubmit, busy }: { onSubmit: (input: ProjectInput) => 
           <h2 className="text-lg font-black">Parámetros de producción</h2>
           <div className="mt-5 space-y-5">
             <Field label={`Duración: ${input.durationMinutes} minutos`}><input className="w-full accent-violet-500" type="range" min="5" max="120" step="1" value={input.durationMinutes} onChange={(event) => set('durationMinutes', Number(event.target.value))} /><div className="mt-2 flex justify-between text-[11px] text-slate-600"><span>5 min</span><span>120 min</span></div></Field>
-            <Field label={`Presupuesto máximo: US$${input.budgetUsd}`}><input className="w-full accent-violet-500" type="range" min="50" max="150" step="5" value={input.budgetUsd} onChange={(event) => set('budgetUsd', Number(event.target.value))} /></Field>
+            <Field label={`Presupuesto máximo: US$${input.budgetUsd}`}><input className="w-full accent-violet-500" type="range" min="5" max="150" step="1" value={input.budgetUsd} onChange={(event) => set('budgetUsd', Number(event.target.value))} /></Field>
             <div className="grid grid-cols-2 gap-3"><Choice active={input.aspectRatio === '16:9'} onClick={() => set('aspectRatio', '16:9')} title="16:9" subtitle="YouTube / cine" /><Choice active={input.aspectRatio === '9:16'} onClick={() => set('aspectRatio', '9:16')} title="9:16" subtitle="Reels / TikTok" /></div>
             <Toggle checked={input.generateMusic} onChange={(value) => set('generateMusic', value)} label="Generar banda sonora" icon={<Music2 className="h-4 w-4" />} />
             <Toggle checked={input.burnSubtitles} onChange={(value) => set('burnSubtitles', value)} label="Subtítulos integrados" icon={<ListVideo className="h-4 w-4" />} />
@@ -234,7 +237,7 @@ function CreateProject({ onSubmit, busy }: { onSubmit: (input: ProjectInput) => 
 
 function ProjectStudio(props: {
   project: FilmProject; setProject: React.Dispatch<React.SetStateAction<FilmProject | null>>; system: SystemStatus | null;
-  busy: string; onPlan: () => void; onSave: () => void; onProduce: (decision?: 'retry' | 'approve') => void;
+  busy: string; onPlan: () => void; onSave: () => void; onProduce: (decision?: 'start' | 'retry' | 'approve') => void;
   onDelete: () => void; onRefresh: () => Promise<void>;
 }) {
   const { project, setProject, system, busy, onPlan, onSave, onProduce, onDelete, onRefresh } = props;
@@ -242,6 +245,10 @@ function ProjectStudio(props: {
   const locked = ['planning', 'queued', 'producing', 'composing'].includes(project.status);
   const duration = project.plan?.scenes.reduce((sum, scene) => sum + scene.durationSeconds, 0) || project.input.durationMinutes * 60;
   const totalShots = project.plan?.scenes.reduce((sum, scene) => sum + scene.shots.length, 0) || 0;
+  const hasPaidHistory = project.plan?.scenes.some((scene) => scene.shots.some((shot) => (shot.generationCount || 0) > 0)) || false;
+  const safeToProduce = Boolean(system?.ffmpeg) && (
+    Boolean(system?.paidGenerationEnabled) || (system?.mode === 'demo' && !hasPaidHistory)
+  );
 
   function updateScene(index: number, changes: Partial<FilmScene>) {
     setProject((current) => {
@@ -264,14 +271,15 @@ function ProjectStudio(props: {
             <div className="flex flex-wrap gap-2">
               <button className="button-secondary" onClick={onRefresh}><RefreshCw className="h-4 w-4" /> Actualizar</button>
               <button className="button-danger" onClick={onDelete} disabled={Boolean(busy) || locked} title={locked ? 'No se puede eliminar mientras está en producción' : 'Mover proyecto a la papelera'}>{busy === 'delete' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Eliminar</button>
-              {!project.plan && <button className="button-primary" onClick={onPlan} disabled={Boolean(busy) || locked}>{busy === 'plan' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <WandSparkles className="h-4 w-4" />} Crear guion completo</button>}
+              {!project.plan && <button className="button-primary" onClick={onPlan} disabled={Boolean(busy) || locked || (system?.mode === 'real' && !system.paidGenerationEnabled)}>{busy === 'plan' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <WandSparkles className="h-4 w-4" />} Crear guion completo</button>}
               {project.plan && !locked && <button className="button-secondary" onClick={onSave} disabled={Boolean(busy)}>{busy === 'save' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Guardar cambios</button>}
-              {project.plan && !locked && project.status === 'quality-review' && <button className="button-secondary" onClick={() => onProduce('approve')} disabled={Boolean(busy) || !system?.ffmpeg}><Check className="h-4 w-4" /> Usar esta toma y continuar sin cobrar</button>}
-              {project.plan && !locked && project.status !== 'ready' && project.status !== 'quality-review' && <button className="button-primary" onClick={() => onProduce('retry')} disabled={Boolean(busy) || !system?.ffmpeg}>{busy === 'produce' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} Iniciar producción</button>}
+              {project.plan && !locked && project.status === 'quality-review' && <button className="button-secondary" onClick={() => onProduce('approve')} disabled={Boolean(busy) || !safeToProduce}><Check className="h-4 w-4" /> Usar esta toma y continuar sin cobrar</button>}
+              {project.plan && !locked && project.status !== 'ready' && project.status !== 'quality-review' && <button className="button-primary" onClick={() => onProduce('start')} disabled={Boolean(busy) || !safeToProduce} title={!safeToProduce ? system?.safetyReason : undefined}>{busy === 'produce' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} Iniciar producción</button>}
             </div>
           </div>
           <div className="mt-6 h-2 overflow-hidden rounded-full bg-black/30"><div className="h-full rounded-full bg-gradient-to-r from-violet-500 via-blue-500 to-cyan-400 transition-all duration-700" style={{ width: `${project.progress.percent}%` }} /></div><div className="mt-2 flex items-center justify-between gap-3 text-xs text-slate-500"><span>{project.progress.message}</span><span>{project.progress.percent}%</span></div>
         </div>
+        {!safeToProduce && <div className="border-t border-emerald-400/20 bg-emerald-500/[.07] px-5 py-3 text-sm text-emerald-200"><ShieldCheck className="mr-2 inline h-4 w-4" />Producción bloqueada: {hasPaidHistory && system?.mode === 'demo' ? 'este proyecto contiene material pagado y no se sobrescribirá en modo demo.' : system?.safetyReason || 'la configuración segura no autoriza llamadas pagadas.'}</div>}
         <div className="grid grid-cols-2 divide-x divide-y divide-white/10 sm:grid-cols-4 sm:divide-y-0"><MiniMetric icon={<Clock3 />} value={`${Math.round(duration / 60)} min`} label="Duración" /><MiniMetric icon={<ListVideo />} value={project.plan ? `${project.plan.scenes.length} / ${totalShots}` : '—'} label="Escenas / tomas" /><MiniMetric icon={<Users />} value={`${project.plan?.characters.length || '—'}`} label="Personajes" /><MiniMetric icon={<Coins />} value={project.budget ? `US$${project.budget.estimatedUsd}` : `US$${project.input.budgetUsd}`} label="Estimado" /></div>
       </section>
 
@@ -303,7 +311,7 @@ function BudgetCard({ project }: { project: FilmProject }) {
 
 function SystemCard({ system }: { system: SystemStatus | null }) {
   const rows = [['Montaje FFmpeg', system?.ffmpeg], ['Guion, imagen y voz', system?.script], ['Control de calidad IA', system?.script], ['Gemini Omni / Veo', system?.omni || system?.veo], ['Video, avatar y música Fal', system?.fal]] as const;
-  return <div className="panel rounded-3xl p-5"><div className="flex items-center gap-2"><Settings2 className="h-4 w-4 text-blue-300" /><h3 className="font-black">Motores disponibles</h3></div><div className="mt-4 space-y-3">{rows.map(([label, ok]) => <div key={label} className="flex items-center justify-between text-sm"><span className="text-slate-400">{label}</span>{ok ? <Check className="h-4 w-4 text-emerald-400" /> : <span className="text-xs text-slate-600">No configurado</span>}</div>)}</div></div>;
+  return <div className="panel rounded-3xl p-5"><div className="flex items-center gap-2"><Settings2 className="h-4 w-4 text-blue-300" /><h3 className="font-black">Motores disponibles</h3></div><div className={`mt-4 rounded-xl p-3 text-xs leading-5 ${system?.paidGenerationEnabled ? 'bg-red-500/10 text-red-200' : 'bg-emerald-500/10 text-emerald-200'}`}>{system?.safetyReason || 'Verificando cortacircuito…'}</div><div className="mt-4 space-y-3">{rows.map(([label, ok]) => <div key={label} className="flex items-center justify-between text-sm"><span className="text-slate-400">{label}</span>{ok ? <Check className="h-4 w-4 text-emerald-400" /> : <span className="text-xs text-slate-600">No configurado</span>}</div>)}</div></div>;
 }
 
 function ScriptEditor({ project, locked, updateScene }: { project: FilmProject; locked: boolean; updateScene: (index: number, changes: Partial<FilmScene>) => void }) {
@@ -354,7 +362,7 @@ function Toggle({ checked, onChange, label, icon }: { checked: boolean; onChange
 function ModeBadge({ mode }: { mode: FilmScene['mode'] }) { const view = mode === 'avatar' ? ['Avatar en video', 'bg-pink-500/10 text-pink-300'] : mode === 'animated-image' ? ['Migrará a video', 'bg-amber-500/10 text-amber-300'] : ['Video IA', 'bg-blue-500/10 text-blue-300']; return <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${view[1]}`}>{view[0]}</span>; }
 function Empty({ label }: { label: string }) { return <div className="panel rounded-3xl p-10 text-center text-slate-500">{label}</div>; }
 
-function statusLabel(status: FilmProject['status']) { return ({ draft: 'Borrador', planning: 'Escribiendo', planned: 'Planificada', queued: 'En cola', producing: 'Produciendo', 'quality-review': 'Revisión de calidad', composing: 'Montando', ready: 'Terminada', failed: 'Con error', cancelled: 'Cancelada' } as const)[status]; }
+function statusLabel(status: FilmProject['status']) { return ({ draft: 'Borrador', planning: 'Escribiendo', planned: 'Planificada', queued: 'En cola', producing: 'Produciendo', 'quality-review': 'Revisión de calidad', 'paused-billing': 'Pausada por saldo', 'paused-safety': 'Pausada por seguridad', composing: 'Montando', ready: 'Terminada', failed: 'Con error', cancelled: 'Cancelada' } as const)[status]; }
 function assetUrl(projectId: string, asset: string) { return `/api/projects/${projectId}/assets/${asset.split('/').map(encodeURIComponent).join('/')}`; }
 async function api(url: string, init?: RequestInit) { const response = await fetch(url, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) }, cache: 'no-store' }); const data = await response.json(); if (!response.ok || !data.ok) throw new Error(data.error || 'La operación no pudo completarse'); return data; }
 function messageOf(reason: unknown) { return reason instanceof Error ? reason.message : 'Error desconocido'; }

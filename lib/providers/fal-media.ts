@@ -2,14 +2,15 @@ import { basename, extname } from 'node:path';
 import { readFile, writeFile } from 'node:fs/promises';
 import { fal } from '@fal-ai/client';
 import { describeFalFailure, normalizeFalVideoPrompt } from '@/lib/providers/fal-compat';
+import { assertPaidGenerationAllowed } from '@/lib/engine/production-safety';
 
-function configure() {
-  if (!process.env.FAL_KEY) throw new Error('Falta FAL_KEY');
+function configure(operation: string) {
+  assertPaidGenerationAllowed(operation, 'FAL_KEY');
   fal.config({ credentials: process.env.FAL_KEY });
 }
 
 async function upload(localPath: string) {
-  configure();
+  configure('subir un recurso a Fal.ai');
   const data = await readFile(localPath);
   const file = new File([data], basename(localPath), { type: mimeFor(localPath) });
   return withFalContext('subir el recurso', () => fal.storage.upload(file));
@@ -23,7 +24,7 @@ async function saveRemote(url: string, outputPath: string) {
 }
 
 export async function generateFalVideo(imagePath: string, prompt: string, outputPath: string, durationSeconds = 8) {
-  configure();
+  configure('generar video con Fal.ai');
   const imageUrl = await upload(imagePath);
   const model = process.env.FAL_VIDEO_MODEL || 'fal-ai/vidu/q3/image-to-video';
   const safePrompt = normalizeFalVideoPrompt(prompt);
@@ -36,7 +37,7 @@ export async function generateFalVideo(imagePath: string, prompt: string, output
 }
 
 export async function generateFalAvatar(imagePath: string, audioPath: string, prompt: string, outputPath: string) {
-  configure();
+  configure('generar avatar con Fal.ai');
   const [imageUrl, audioUrl] = await Promise.all([upload(imagePath), upload(audioPath)]);
   const model = process.env.FAL_AVATAR_MODEL || 'fal-ai/longcat-single-avatar/image-audio-to-video';
   const result = await withFalContext('generar el avatar', () => fal.subscribe(model, {
@@ -47,7 +48,7 @@ export async function generateFalAvatar(imagePath: string, audioPath: string, pr
 }
 
 export async function generateFalMusic(prompt: string, durationSeconds: number, outputPath: string) {
-  configure();
+  configure('generar música con Fal.ai');
   const model = process.env.FAL_MUSIC_MODEL || 'cassetteai/music-generator';
   const result = await withFalContext('generar la música', () => fal.subscribe(model, {
     input: { prompt, duration: Math.min(180, Math.max(30, durationSeconds)), instrumental: true },

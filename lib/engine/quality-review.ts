@@ -9,6 +9,7 @@ import type { FilmProject, FilmScene, FilmShot } from '@/lib/domain/schemas';
 import type { SceneAssets } from '@/lib/engine/scene-checkpoints';
 import { createSceneContactSheet } from '@/lib/media/ffmpeg';
 import { assetAbsolutePath, assetRelativePath, projectAssetDir } from '@/lib/storage/project-store';
+import { assertPaidGenerationAllowed, paidGenerationEnabled } from '@/lib/engine/production-safety';
 
 const QualityScoresSchema = z.object({
   narrativeAlignment: z.number(),
@@ -59,10 +60,11 @@ type ModelQualityReview = z.infer<typeof ModelQualityReviewSchema>;
 export function strictSceneQualityEnabled() {
   return process.env.PRODUCTION_MODE === 'real' &&
     process.env.SCENE_QUALITY_MODE !== 'off' &&
-    Boolean(process.env.OPENAI_API_KEY);
+    paidGenerationEnabled();
 }
 
 export function sceneQualityMaxAttempts() {
+  if (process.env.AUTO_REGENERATE !== 'true') return 1;
   return integerEnv('SCENE_QUALITY_MAX_ATTEMPTS', 1, 1, 3);
 }
 
@@ -89,7 +91,7 @@ export async function reviewSceneQuality(
   shot?: FilmShot
 ) {
   if (!project.plan) throw new Error('No existe un plan para revisar la escena.');
-  if (!process.env.OPENAI_API_KEY) throw new Error('Falta OPENAI_API_KEY para la revisión de calidad.');
+  assertPaidGenerationAllowed('auditar calidad con OpenAI', 'OPENAI_API_KEY');
 
   const unit = shot || scene;
   const key = targetKey(scene.order, shot?.order);
