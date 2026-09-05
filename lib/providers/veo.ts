@@ -2,9 +2,10 @@ import { readFile } from 'node:fs/promises';
 import { extname } from 'node:path';
 import { GoogleGenAI } from '@google/genai';
 import type { ProjectInput } from '@/lib/domain/schemas';
+import { assertPaidGenerationAllowed } from '@/lib/engine/production-safety';
 
 export async function generateVeoVideo(imagePath: string, prompt: string, input: ProjectInput, outputPath: string, durationSeconds = 8) {
-  if (!process.env.GEMINI_API_KEY) throw new Error('Falta GEMINI_API_KEY');
+  assertPaidGenerationAllowed('generar video con Veo', 'GEMINI_API_KEY');
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   const bytes = await readFile(imagePath);
   let operation = await ai.models.generateVideos({

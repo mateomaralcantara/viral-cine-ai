@@ -63,7 +63,7 @@ test('aprobar manualmente guarda checkpoint y no aumenta generaciones', async (c
     const approvedScene = queued.plan?.scenes[0];
     const approvedShot = approvedScene?.shots[0];
     if (!approvedScene || !approvedShot) throw new Error('La toma aprobada desaparecio.');
-    assert.equal(queued.status, 'queued');
+    assert.equal(queued.status, 'paused-safety');
     assert.equal(approvedShot.generationCount, 1);
     assert.equal(approvedShot.qualityOverrideApproved, true);
     assert.ok((await stat(shotCheckpointPath(project.id, 1, 1))).size > 100);

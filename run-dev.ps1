@@ -20,8 +20,6 @@ function Import-DotEnv {
       }
     }
 
-    # .env.local es la configuracion autoritativa del proyecto. Esto evita
-    # que una clave antigua guardada en Windows prevalezca sobre la nueva.
     [Environment]::SetEnvironmentVariable($name, $value, 'Process')
   }
 }
@@ -40,7 +38,7 @@ if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
 
 if (-not (Test-Path ".env.local")) {
   Copy-Item ".env.example" ".env.local"
-  Write-Host "[OK] Se creó .env.local en modo demo." -ForegroundColor Green
+  Write-Host "[OK] Se creó .env.local en modo demo seguro." -ForegroundColor Green
 }
 
 Import-DotEnv (Join-Path $PSScriptRoot '.env.local')
@@ -49,6 +47,18 @@ Write-Host "[OK] .env.local cargado para el panel y el trabajador." -ForegroundC
 if (-not (Test-Path "node_modules")) {
   Write-Host "[ViralCine] Instalando dependencias..." -ForegroundColor Cyan
   npm install
+}
+
+npm run check:env
+if ($LASTEXITCODE -ne 0) {
+  throw "La configuración no pasó el control de seguridad. El panel y el worker no se iniciaron."
+}
+
+if ($env:PRODUCTION_MODE -eq 'real') {
+  Write-Host "[ATENCIÓN] Modo real autorizado: las acciones del panel pueden generar cargos." -ForegroundColor Red
+}
+else {
+  Write-Host "[SEGURO] Modo offline: proveedores externos bloqueados." -ForegroundColor Green
 }
 
 Write-Host "[ViralCine] Abre http://localhost:3000" -ForegroundColor Green

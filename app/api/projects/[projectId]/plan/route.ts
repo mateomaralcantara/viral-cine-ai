@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { estimateBudget } from '@/lib/engine/budget';
 import { generateFilmPlan } from '@/lib/engine/planner';
-import { getProject, saveProject } from '@/lib/storage/project-store';
+import { saveProject, updateProject } from '@/lib/storage/project-store';
+import { classifyProductionError, safeErrorMessage } from '@/lib/engine/production-safety';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -12,12 +13,14 @@ export async function POST(_request: Request, context: Context) {
   const { projectId } = await context.params;
   let project;
   try {
-    project = await getProject(projectId);
-    project.status = 'planning';
-    project.error = undefined;
-    project.progress = { phase: 'planning', percent: 5, message: 'La dirección creativa está escribiendo la película', updatedAt: new Date().toISOString() };
-    project.productionLog.push(`${new Date().toISOString()} Planificación iniciada`);
-    project = await saveProject(project);
+    project = await updateProject(projectId, (current) => {
+      if (current.status === 'planning') throw new Error('La planificación ya está en curso.');
+      current.status = 'planning';
+      current.error = undefined;
+      current.progress = { phase: 'planning', percent: 5, message: 'La dirección creativa está escribiendo la película', updatedAt: new Date().toISOString() };
+      current.productionLog.push(`${new Date().toISOString()} Planificación iniciada`);
+      return current;
+    });
 
     const plan = await generateFilmPlan(project.input);
     project.plan = plan;
@@ -29,11 +32,12 @@ export async function POST(_request: Request, context: Context) {
     return NextResponse.json({ ok: true, project });
   } catch (error) {
     if (project) {
-      project.status = 'failed';
-      project.error = error instanceof Error ? error.message : 'No se pudo crear el plan';
-      project.progress = { phase: 'failed', percent: 5, message: project.error, updatedAt: new Date().toISOString() };
+      const kind = classifyProductionError(error);
+      project.status = kind === 'billing' ? 'paused-billing' : kind === 'safety' ? 'paused-safety' : 'failed';
+      project.error = safeErrorMessage(error);
+      project.progress = { phase: project.status, percent: 5, message: project.error, updatedAt: new Date().toISOString() };
       await saveProject(project);
     }
-    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : 'Error desconocido' }, { status: 400 });
+    return NextResponse.json({ ok: false, error: safeErrorMessage(error) }, { status: 400 });
   }
 }

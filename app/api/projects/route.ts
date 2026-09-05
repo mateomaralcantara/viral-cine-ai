@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { ProjectInputSchema } from '@/lib/domain/schemas';
 import { createProject, listProjects } from '@/lib/storage/project-store';
+import { safeErrorMessage } from '@/lib/engine/production-safety';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -23,5 +24,5 @@ export async function POST(request: Request) {
 }
 
 function failure(error: unknown, status: number) {
-  return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : 'Error desconocido' }, { status });
+  return NextResponse.json({ ok: false, error: safeErrorMessage(error) }, { status });
 }

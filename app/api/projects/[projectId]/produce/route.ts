@@ -4,6 +4,7 @@ import { assertShotGenerationAllowed } from '@/lib/engine/spend-guard';
 import { saveShotCheckpoint, type SceneAssets } from '@/lib/engine/scene-checkpoints';
 import type { FilmShot } from '@/lib/domain/schemas';
 import { updateProject } from '@/lib/storage/project-store';
+import { assertProductionCanQueue, ProductionSafetyError, safeErrorMessage } from '@/lib/engine/production-safety';
 
 export const runtime = 'nodejs';
 
@@ -13,7 +14,7 @@ export async function POST(request: Request, context: Context) {
   try {
     const { projectId } = await context.params;
     const payload = await optionalJson(request);
-    const decision = payload.decision === 'approve' ? 'approve' : 'retry';
+    const decision = payload.decision === 'approve' ? 'approve' : payload.decision === 'retry' ? 'retry' : 'start';
     const project = await updateProject(projectId, async (current) => {
       if (!current.plan) throw new Error('Primero debes generar y revisar el guion.');
       if (['producing', 'composing', 'queued'].includes(current.status)) return current;
@@ -38,13 +39,30 @@ export async function POST(request: Request, context: Context) {
             current.productionLog.push(`${new Date().toISOString()} Escena ${reviewScene.order} aprobada manualmente por el usuario`);
           }
           reviewScene.error = undefined;
-        } else {
+        } else if (decision === 'retry') {
           if (reviewShot) assertShotGenerationAllowed(current, reviewScene, reviewShot);
           await resetSceneQuality(current.id, reviewScene, reviewShot);
           current.productionLog.push(
             `${new Date().toISOString()} Reintento manual autorizado para escena ${reviewScene.order}${reviewShot ? `, toma ${reviewShot.order}` : ''}`
           );
+        } else {
+          throw new Error('La toma requiere que elijas aprobar el material existente o autorizar un reintento manual.');
         }
+      }
+      try {
+        assertProductionCanQueue(current);
+      } catch (error) {
+        if (decision === 'approve' && error instanceof ProductionSafetyError) {
+          const message = safeErrorMessage(error);
+          return {
+            ...current,
+            status: 'paused-safety',
+            error: message,
+            progress: { ...current.progress, phase: 'paused-safety', message, updatedAt: new Date().toISOString() },
+            productionLog: [...current.productionLog, `${new Date().toISOString()} Toma aprobada; continuación pausada por seguridad`]
+          };
+        }
+        throw error;
       }
       return {
         ...current,
@@ -56,7 +74,7 @@ export async function POST(request: Request, context: Context) {
     });
     return NextResponse.json({ ok: true, project });
   } catch (error) {
-    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : 'Error desconocido' }, { status: 400 });
+    return NextResponse.json({ ok: false, error: safeErrorMessage(error) }, { status: 400 });
   }
 }
 

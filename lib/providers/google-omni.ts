@@ -2,6 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { GoogleGenAI } from '@google/genai';
 import type { ProjectInput } from '@/lib/domain/schemas';
+import { assertPaidGenerationAllowed } from '@/lib/engine/production-safety';
 
 export async function generateGeminiOmniVideo(
   referencePaths: string[],
@@ -9,7 +10,7 @@ export async function generateGeminiOmniVideo(
   input: ProjectInput,
   outputPath: string
 ) {
-  if (!process.env.GEMINI_API_KEY) throw new Error('Falta GEMINI_API_KEY');
+  assertPaidGenerationAllowed('generar video con Gemini Omni', 'GEMINI_API_KEY');
   if (!referencePaths.length) throw new Error('Gemini Omni necesita al menos una referencia visual.');
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   const media = await Promise.all(referencePaths.slice(0, 6).map(async (filePath) => ({

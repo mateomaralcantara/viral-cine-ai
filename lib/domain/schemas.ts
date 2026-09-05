@@ -8,6 +8,8 @@ export const ProjectStatusSchema = z.enum([
   'queued',
   'producing',
   'quality-review',
+  'paused-billing',
+  'paused-safety',
   'composing',
   'ready',
   'failed',
@@ -44,6 +46,7 @@ export const FilmShotSchema = z.object({
   generationCount: z.number().int().nonnegative().optional(),
   estimatedSpendUsd: z.number().nonnegative().optional(),
   lastProvider: z.string().optional(),
+  lastGenerationState: z.enum(['reserved', 'succeeded', 'failed-unknown']).optional(),
   lastGenerationAt: z.string().optional(),
   error: z.string().optional()
 });
@@ -57,7 +60,7 @@ export const ProjectInputSchema = z.object({
   visualStyle: z.string().trim().min(2).max(240),
   language: z.enum(['es', 'en']).default('es'),
   aspectRatio: AspectRatioSchema.default('16:9'),
-  budgetUsd: z.number().min(50).max(150),
+  budgetUsd: z.number().min(5).max(150),
   burnSubtitles: z.boolean().default(true),
   generateMusic: z.boolean().default(true)
 });

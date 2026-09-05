@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { setTimeout as delay } from 'node:timers/promises';
 import path from 'node:path';
 import { FilmProjectSchema, type FilmProject, type ProjectInput } from '@/lib/domain/schemas';
 
 const PROJECT_FILE = 'project.json';
 const ACTIVE_PROJECT_STATUSES = new Set<FilmProject['status']>(['planning', 'queued', 'producing', 'composing']);
+const projectUpdateQueues = new Map<string, Promise<void>>();
 
 export class ProjectDeletionBlockedError extends Error {
   constructor(public readonly projectStatus: FilmProject['status']) {
@@ -111,9 +113,14 @@ export async function saveProject(project: FilmProject): Promise<FilmProject> {
   const next = FilmProjectSchema.parse({ ...project, updatedAt: new Date().toISOString() });
   await ensureProjectFolders(next.id);
   const target = path.join(projectRoot(next.id), PROJECT_FILE);
-  const temporary = `${target}.tmp`;
+  const temporary = `${target}.tmp-${randomUUID()}`;
   await writeFile(temporary, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
-  await rename(temporary, target);
+  try {
+    await renameWithWindowsRetry(temporary, target);
+  } catch (error) {
+    await rm(temporary, { force: true });
+    throw error;
+  }
   return next;
 }
 
@@ -121,8 +128,19 @@ export async function updateProject(
   projectId: string,
   updater: (project: FilmProject) => FilmProject | Promise<FilmProject>
 ) {
-  const current = await getProject(projectId);
-  return saveProject(await updater(current));
+  const previous = projectUpdateQueues.get(projectId) || Promise.resolve();
+  let release: () => void = () => {};
+  const turn = new Promise<void>((resolve) => { release = resolve; });
+  const queued = previous.catch(() => undefined).then(() => turn);
+  projectUpdateQueues.set(projectId, queued);
+  await previous.catch(() => undefined);
+  try {
+    const current = await getProject(projectId);
+    return await saveProject(await updater(current));
+  } finally {
+    release();
+    if (projectUpdateQueues.get(projectId) === queued) projectUpdateQueues.delete(projectId);
+  }
 }
 
 export async function appendLog(projectId: string, message: string) {
@@ -134,4 +152,17 @@ export async function appendLog(projectId: string, message: string) {
 
 function assertProjectId(projectId: string) {
   if (!/^[0-9a-f-]{36}$/i.test(projectId)) throw new Error('Identificador de proyecto inválido');
+}
+
+async function renameWithWindowsRetry(source: string, target: string) {
+  for (let attempt = 1; attempt <= 6; attempt += 1) {
+    try {
+      await rename(source, target);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (!['EPERM', 'EACCES', 'EBUSY'].includes(code || '') || attempt === 6) throw error;
+      await delay(attempt * 40);
+    }
+  }
 }
