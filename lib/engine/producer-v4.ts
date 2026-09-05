@@ -27,6 +27,7 @@ import {
   publishSceneVideo,
   removePartialSceneFiles,
   renderedAssets,
+  reusableSceneAssets,
   reusableShotAssets,
   saveSceneCheckpoint,
   saveShotCheckpoint,
@@ -90,6 +91,30 @@ export async function produceProjectV4(projectId: string) {
 
     for (let sceneIndex = 0; sceneIndex < sceneCount; sceneIndex += 1) {
       let scene = requirePlan(project).scenes[sceneIndex];
+
+      const forceSceneRegeneration = scene.shots.some((shot) => shot.qualityForceRegenerate);
+      if (!pilot && !forceSceneRegeneration) {
+        const reusableScene = await reusableSceneAssets(project, scene);
+        if (reusableScene) {
+          Object.assign(scene, reusableScene, {
+            status: 'ready' as const,
+            productionStrategy: 'real-cinema-v2' as const,
+            error: undefined
+          });
+          clips.push(assetAbsolutePath(project.id, reusableScene.videoAsset));
+          project.productionLog.push(`${new Date().toISOString()} Escena ${scene.order}: checkpoint de escena reutilizado sin recomponer ni regenerar`);
+          project.progress = progress(
+            'real-cinema',
+            scenePercent(sceneIndex + 1, 0, 1, sceneCount),
+            `Escena ${scene.order} reutilizada desde checkpoint validado`,
+            scene.order,
+            sceneCount
+          );
+          project = await saveProject(project);
+          continue;
+        }
+      }
+
       scene.status = 'rendering';
       scene.error = undefined;
       project = await saveProject(project);
