@@ -98,9 +98,10 @@ test('registro secundario crea id estable, preserva media y luego enlaza el turn
 
   const result = applySupportVoiceRegistry(project);
   assert.equal(result.created, 1);
-  assert.equal(project.supportVoices.length, 1);
-  assert.equal(project.supportVoices[0].id, supportVoiceId('Soldado'));
-  assert.equal(project.supportVoices[0].voiceId, undefined);
+  const supportVoices = project.supportVoices || [];
+  assert.equal(supportVoices.length, 1);
+  assert.equal(supportVoices[0].id, supportVoiceId('Soldado'));
+  assert.equal(supportVoices[0].voiceId, undefined);
 
   const afterMedia = JSON.stringify(project.plan!.scenes[0].shots.map((shot) => ({
     id: shot.id, voiceAsset: shot.voiceAsset, videoAsset: shot.videoAsset
@@ -112,4 +113,15 @@ test('registro secundario crea id estable, preserva media y luego enlaza el turn
   assert.ok(supportTurn);
   assert.equal(supportTurn.speakerId, supportVoiceId('Soldado'));
   assert.deepEqual(previewSupportVoiceRegistry(project).missingLabels, []);
+});
+
+test('planificador excluye una toma legacy ambigua cuando ya tiene hablante resuelto', () => {
+  const project = fixture();
+  const target = project.plan!.scenes[0].shots[1];
+  target.speakerId = 'narrator';
+  target.dialogueLines = [{ id: 'resolved', speakerId: 'narrator', text: target.spokenText, startSeconds: 0 }];
+
+  const report = buildLegacyMixedTurnPlan(project);
+  assert.equal(report.rows.some((row) => row.shotId === 'shot-support'), false);
+  assert.equal(report.totals.mixedShots, 1);
 });
