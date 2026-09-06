@@ -7,6 +7,7 @@ import {
   clearSpeakerAssignment,
   setCharacterVoice
 } from '@/lib/engine/casting-v4';
+import { buildVoiceCastingState, setVoiceProfile } from '@/lib/engine/voice-casting-v4';
 import { safeErrorMessage } from '@/lib/engine/production-safety';
 import { getProject, updateProject } from '@/lib/storage/project-store';
 
@@ -14,6 +15,17 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 type Context = { params: Promise<{ projectId: string }> };
+
+const VoiceSettingsSchema = {
+  provider: z.enum(['elevenlabs', 'openai', 'offline']),
+  voiceId: z.string().max(200).optional(),
+  model: z.string().max(200).optional(),
+  instructions: z.string().max(1000).optional(),
+  stability: z.number().min(0).max(1).optional(),
+  similarity: z.number().min(0).max(1).optional(),
+  style: z.number().min(0).max(1).optional(),
+  speed: z.number().min(0.7).max(1.2).optional()
+} as const;
 
 const ActionSchema = z.discriminatedUnion('action', [
   z.object({
@@ -38,6 +50,11 @@ const ActionSchema = z.discriminatedUnion('action', [
     similarity: z.number().min(0).max(1).optional(),
     style: z.number().min(0).max(1).optional(),
     speed: z.number().min(0.7).max(1.2).optional()
+  }),
+  z.object({
+    action: z.literal('set-voice-profile'),
+    profileId: z.string().min(1),
+    ...VoiceSettingsSchema
   })
 ]);
 
@@ -45,7 +62,11 @@ export async function GET(_request: Request, context: Context) {
   try {
     const { projectId } = await context.params;
     const project = await getProject(projectId);
-    return NextResponse.json({ ok: true, casting: buildCastingState(project) });
+    return NextResponse.json({
+      ok: true,
+      casting: buildCastingState(project),
+      voiceCasting: buildVoiceCastingState(project)
+    });
   } catch (error) {
     return failure(error, 404);
   }
@@ -85,6 +106,18 @@ export async function PATCH(request: Request, context: Context) {
             speed: payload.speed
           });
           break;
+        case 'set-voice-profile':
+          setVoiceProfile(current, payload.profileId, {
+            provider: payload.provider,
+            voiceId: payload.voiceId,
+            model: payload.model,
+            instructions: payload.instructions,
+            stability: payload.stability,
+            similarity: payload.similarity,
+            style: payload.style,
+            speed: payload.speed
+          });
+          break;
       }
       return current;
     });
@@ -93,7 +126,8 @@ export async function PATCH(request: Request, context: Context) {
       ok: true,
       applied,
       project,
-      casting: buildCastingState(project)
+      casting: buildCastingState(project),
+      voiceCasting: buildVoiceCastingState(project)
     });
   } catch (error) {
     return failure(error, 400);
