@@ -9,6 +9,7 @@ import { runFakeProviderStage } from '@/lib/providers/fake-cinema';
 import { createSilenceAudio, createSyntheticSpeechAudio } from '@/lib/media/ffmpeg';
 import { hasUsableCredential, safeErrorMessage } from '@/lib/engine/production-safety';
 import { appendSpend, estimateOperationCost, voiceCostUnits } from '@/lib/engine/spend-ledger';
+import { hasMultipleDialogueSpeakers, resolveSingleSpeakerId } from '@/lib/engine/speaker-resolution';
 
 export type PreparedVoice = {
   voicePath: string;
@@ -29,13 +30,16 @@ export async function prepareAudioFirstVoice(
     return {
       voicePath,
       alignmentPath: await exists(alignmentPath) ? alignmentPath : undefined,
-      speakerId: resolveSpeakerId(shot),
+      speakerId: resolveSingleSpeakerId(shot),
       provider: 'checkpoint'
     };
   }
 
   const text = shot.spokenText.trim();
-  const speakerId = resolveSpeakerId(shot);
+  if (text && hasMultipleDialogueSpeakers(shot)) {
+    throw new Error('Audio-first requiere un único hablante por segmento; divide la toma multihablante antes de generar voz.');
+  }
+  const speakerId = resolveSingleSpeakerId(shot);
   if (!text) {
     await createSilenceAudio(shot.durationSeconds, voicePath);
     return { voicePath, speakerId, provider: 'silence' };
@@ -103,6 +107,7 @@ export async function prepareAudioFirstVoice(
       await appendSpend(project.id, {
         operation: 'voice',
         provider: 'elevenlabs',
+        model: character?.voiceModel || process.env.ELEVENLABS_TTS_MODEL || 'eleven_multilingual_v2',
         state: 'failed-unknown',
         estimatedUsd,
         sceneId: scene.id,
@@ -147,6 +152,7 @@ export async function prepareAudioFirstVoice(
       await appendSpend(project.id, {
         operation: 'voice',
         provider: 'openai',
+        model: process.env.OPENAI_TTS_MODEL,
         state: 'failed-unknown',
         estimatedUsd,
         sceneId: scene.id,
@@ -170,7 +176,10 @@ export async function applyAudioFirstLipSync(
   voicePath: string,
   outputPath: string
 ) {
-  const speakerId = resolveSpeakerId(shot);
+  if (shot.spokenText.trim() && hasMultipleDialogueSpeakers(shot)) {
+    throw new Error('Lip-sync requiere un único hablante por segmento; divide la toma multihablante antes de sincronizar labios.');
+  }
+  const speakerId = resolveSingleSpeakerId(shot);
   if (!shot.spokenText.trim() || !speakerId || speakerId === 'narrator') {
     await copyFile(baseVideoPath, outputPath);
     return { outputPath, provider: 'none' };
@@ -239,10 +248,6 @@ export async function applyAudioFirstLipSync(
     });
     throw error;
   }
-}
-
-function resolveSpeakerId(shot: FilmShot) {
-  return shot.speakerId || shot.dialogueLines?.[0]?.speakerId;
 }
 
 async function exists(filePath: string) {
