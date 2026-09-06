@@ -1,4 +1,4 @@
-import type { Character, FilmProject, FilmScene, FilmShot } from '@/lib/domain/schemas';
+import type { Character, FilmProject, FilmScene, FilmShot, SupportVoice } from '@/lib/domain/schemas';
 import { classifyLegacyProjectShots } from '@/lib/engine/legacy-shot-classifier-v4';
 import { parseLegacyDialogue } from '@/lib/engine/legacy-hydration-v4';
 
@@ -54,11 +54,12 @@ export function buildLegacyMixedTurnPlan(project: FilmProject): MixedTurnPlanRep
       .filter((row) => row.classification === 'ambiguous' && row.spokenText.trim())
       .map((row) => row.shotId)
   );
+  const supportVoices = project.supportVoices || [];
 
   const rows = (project.plan?.scenes || []).flatMap((scene) =>
     scene.shots
       .filter((shot) => ambiguousShotIds.has(shot.id))
-      .map((shot) => planMixedShot(project.plan?.characters || [], scene, shot))
+      .map((shot) => planMixedShot(project.plan?.characters || [], supportVoices, scene, shot))
   );
   const supportVoiceLabels = [...new Set(rows.flatMap((row) => row.supportVoiceLabels))].sort();
 
@@ -78,8 +79,13 @@ export function buildLegacyMixedTurnPlan(project: FilmProject): MixedTurnPlanRep
   };
 }
 
-function planMixedShot(characters: Character[], scene: FilmScene, shot: FilmShot): MixedShotTurnPlan {
-  const rawTurns = splitIntoRawTurns(characters, scene, shot.spokenText);
+function planMixedShot(
+  characters: Character[],
+  supportVoices: SupportVoice[],
+  scene: FilmScene,
+  shot: FilmShot
+): MixedShotTurnPlan {
+  const rawTurns = splitIntoRawTurns(characters, supportVoices, scene, shot.spokenText);
   const turns = addEstimatedTiming(rawTurns, shot.durationSeconds);
   const originalMedia = [
     shot.imageAsset ? `image=${shot.imageAsset}` : '',
@@ -106,7 +112,12 @@ function planMixedShot(characters: Character[], scene: FilmScene, shot: FilmShot
   };
 }
 
-function splitIntoRawTurns(characters: Character[], scene: FilmScene, spokenText: string): RawTurn[] {
+function splitIntoRawTurns(
+  characters: Character[],
+  supportVoices: SupportVoice[],
+  scene: FilmScene,
+  spokenText: string
+): RawTurn[] {
   const labelMatches = [...spokenText.matchAll(/([A-Za-zÁÉÍÓÚÜÑáéíóúüñ][A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]{0,50})\s*:/g)];
   const turns: RawTurn[] = [];
 
@@ -121,7 +132,7 @@ function splitIntoRawTurns(characters: Character[], scene: FilmScene, spokenText
     const textEnd = labelMatches[index + 1]?.index ?? spokenText.length;
     const text = spokenText.slice(textStart, textEnd).trim();
     if (!text) continue;
-    turns.push(resolveLabeledTurn(characters, label, text));
+    turns.push(resolveLabeledTurn(characters, supportVoices, label, text));
   }
 
   if (!turns.length && spokenText.trim()) {
@@ -130,7 +141,12 @@ function splitIntoRawTurns(characters: Character[], scene: FilmScene, spokenText
   return turns;
 }
 
-function resolveLabeledTurn(characters: Character[], label: string, text: string): RawTurn {
+function resolveLabeledTurn(
+  characters: Character[],
+  supportVoices: SupportVoice[],
+  label: string,
+  text: string
+): RawTurn {
   if (normalize(label) === 'narrador') {
     return {
       kind: 'narrator', speakerId: 'narrator', speakerName: 'Narrador', text,
@@ -144,8 +160,9 @@ function resolveLabeledTurn(characters: Character[], label: string, text: string
       confidence: 1, source: 'label'
     };
   }
+  const supportVoice = supportVoices.find((item) => normalize(item.label) === normalize(label));
   return {
-    kind: 'support', speakerName: canonicalLabel(label), text,
+    kind: 'support', speakerId: supportVoice?.id, speakerName: supportVoice?.label || canonicalLabel(label), text,
     confidence: 1, source: 'label'
   };
 }
