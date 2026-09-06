@@ -56,6 +56,28 @@ test('un proyecto con historial pagado no se sobrescribe en demo', () => {
   });
 });
 
+test('producción real bloquea cualquier texto hablado sin speakerId', () => {
+  const plan = createDemoPlan(input);
+  const target = plan.scenes[0].shots[0];
+  target.spokenText = 'Esta línea debe tener un hablante inequívoco.';
+  target.speakerId = undefined;
+  target.dialogueLines = [];
+  withEnv({
+    PRODUCTION_MODE: 'real',
+    ALLOW_EXTERNAL_API_CALLS: 'true',
+    ALLOW_PAID_GENERATION: 'true',
+    OPENAI_API_KEY: 'openai-test-credential-12345',
+    GEMINI_API_KEY: 'gemini-test-credential-12345',
+    ELEVENLABS_API_KEY: 'eleven-test-credential-12345',
+    ELEVENLABS_NARRATOR_VOICE_ID: 'narrator-test-voice-12345'
+  }, () => {
+    assert.throws(
+      () => assertProductionCanQueue({ plan }),
+      (error: unknown) => error instanceof ProductionSafetyError && /hablantes incompleto|speakerId/i.test(error.message)
+    );
+  });
+});
+
 test('los errores de saldo se pausan y los mensajes ocultan credenciales', () => {
   assert.equal(classifyProductionError(new Error('429 insufficient_quota credit_balance_exhausted')), 'billing');
   const message = safeErrorMessage(new Error('authorization: Bearer-secret-token-123456789 set-cookie=abc123'));
