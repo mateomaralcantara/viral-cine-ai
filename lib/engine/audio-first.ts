@@ -1,15 +1,16 @@
 import { access, copyFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { Character, FilmProject, FilmScene, FilmShot } from '@/lib/domain/schemas';
+import type { FilmProject, FilmScene, FilmShot } from '@/lib/domain/schemas';
 import { projectAssetDir } from '@/lib/storage/project-store';
 import { generateSpeech } from '@/lib/providers/openai-media';
-import { generateElevenLabsSpeech, assertCharacterVoiceReady } from '@/lib/providers/elevenlabs';
+import { generateElevenLabsSpeech, assertVoiceProfileReady } from '@/lib/providers/elevenlabs';
 import { generateFalLipSync } from '@/lib/providers/fal-media';
 import { runFakeProviderStage } from '@/lib/providers/fake-cinema';
 import { createSilenceAudio, createSyntheticSpeechAudio } from '@/lib/media/ffmpeg';
 import { hasUsableCredential, safeErrorMessage } from '@/lib/engine/production-safety';
 import { appendSpend, estimateOperationCost, voiceCostUnits } from '@/lib/engine/spend-ledger';
 import { hasMultipleDialogueSpeakers, resolveSingleSpeakerId } from '@/lib/engine/speaker-resolution';
+import { findVoiceProfile } from '@/lib/engine/support-voice-registry-v4';
 
 export type PreparedVoice = {
   voicePath: string;
@@ -54,24 +55,22 @@ export async function prepareAudioFirstVoice(
     return { voicePath, alignmentPath, speakerId, provider: 'offline' };
   }
 
-  const character = speakerId && speakerId !== 'narrator'
-    ? project.plan?.characters.find((item) => item.id === speakerId)
-    : undefined;
-  const voiceProvider = character?.voiceProvider || 'elevenlabs';
+  const voiceProfile = findVoiceProfile(project, speakerId);
+  const voiceProvider = voiceProfile?.voiceProvider || 'elevenlabs';
   const idempotencyKey = `voice:${shot.id}:${speakerId || 'none'}:${text.length}`;
   const estimatedUsd = estimateOperationCost('voice', voiceCostUnits(text));
 
   if (speakerId === 'narrator' || voiceProvider === 'elevenlabs') {
-    if (speakerId !== 'narrator') assertCharacterVoiceReady(character);
+    if (speakerId !== 'narrator') assertVoiceProfileReady(voiceProfile);
     await appendSpend(project.id, {
       operation: 'voice',
       provider: 'elevenlabs',
-      model: character?.voiceModel || process.env.ELEVENLABS_TTS_MODEL || 'eleven_multilingual_v2',
+      model: voiceProfile?.voiceModel || process.env.ELEVENLABS_TTS_MODEL || 'eleven_multilingual_v2',
       state: 'reserved',
       estimatedUsd,
       sceneId: scene.id,
       shotId: shot.id,
-      characterId: character?.id,
+      characterId: voiceProfile?.id,
       idempotencyKey
     });
     await appendSpend(project.id, {
@@ -81,23 +80,23 @@ export async function prepareAudioFirstVoice(
       estimatedUsd,
       sceneId: scene.id,
       shotId: shot.id,
-      characterId: character?.id,
+      characterId: voiceProfile?.id,
       idempotencyKey
     });
     try {
-      const result = await generateElevenLabsSpeech(character, text, voicePath, alignmentPath, {
+      const result = await generateElevenLabsSpeech(voiceProfile, text, voicePath, alignmentPath, {
         narrator: speakerId === 'narrator',
         emotion: shot.dialogueLines?.[0]?.emotion
       });
       await appendSpend(project.id, {
         operation: 'voice',
         provider: 'elevenlabs',
-        model: character?.voiceModel || process.env.ELEVENLABS_TTS_MODEL || 'eleven_multilingual_v2',
+        model: voiceProfile?.voiceModel || process.env.ELEVENLABS_TTS_MODEL || 'eleven_multilingual_v2',
         state: 'succeeded',
         estimatedUsd,
         sceneId: scene.id,
         shotId: shot.id,
-        characterId: character?.id,
+        characterId: voiceProfile?.id,
         idempotencyKey,
         providerRequestId: result.requestId,
         outputAsset: voicePath
@@ -107,12 +106,12 @@ export async function prepareAudioFirstVoice(
       await appendSpend(project.id, {
         operation: 'voice',
         provider: 'elevenlabs',
-        model: character?.voiceModel || process.env.ELEVENLABS_TTS_MODEL || 'eleven_multilingual_v2',
+        model: voiceProfile?.voiceModel || process.env.ELEVENLABS_TTS_MODEL || 'eleven_multilingual_v2',
         state: 'failed-unknown',
         estimatedUsd,
         sceneId: scene.id,
         shotId: shot.id,
-        characterId: character?.id,
+        characterId: voiceProfile?.id,
         idempotencyKey,
         error: safeErrorMessage(error)
       });
@@ -120,7 +119,7 @@ export async function prepareAudioFirstVoice(
     }
   }
 
-  if (voiceProvider === 'openai' && character && hasUsableCredential('OPENAI_API_KEY')) {
+  if (voiceProvider === 'openai' && voiceProfile && hasUsableCredential('OPENAI_API_KEY')) {
     await appendSpend(project.id, {
       operation: 'voice',
       provider: 'openai',
@@ -129,11 +128,11 @@ export async function prepareAudioFirstVoice(
       estimatedUsd,
       sceneId: scene.id,
       shotId: shot.id,
-      characterId: character.id,
+      characterId: voiceProfile.id,
       idempotencyKey
     });
     try {
-      await generateSpeech(text, character.voiceInstructions, voicePath);
+      await generateSpeech(text, voiceProfile.voiceInstructions, voicePath);
       await writeFile(alignmentPath, `${JSON.stringify({ provider: 'openai', speakerId, text, alignment: null }, null, 2)}\n`, 'utf8');
       await appendSpend(project.id, {
         operation: 'voice',
@@ -143,7 +142,7 @@ export async function prepareAudioFirstVoice(
         estimatedUsd,
         sceneId: scene.id,
         shotId: shot.id,
-        characterId: character.id,
+        characterId: voiceProfile.id,
         idempotencyKey,
         outputAsset: voicePath
       });
@@ -157,7 +156,7 @@ export async function prepareAudioFirstVoice(
         estimatedUsd,
         sceneId: scene.id,
         shotId: shot.id,
-        characterId: character.id,
+        characterId: voiceProfile.id,
         idempotencyKey,
         error: safeErrorMessage(error)
       });
