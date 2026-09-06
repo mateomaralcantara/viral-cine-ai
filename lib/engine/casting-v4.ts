@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Character, FilmProject, FilmScene, FilmShot } from '@/lib/domain/schemas';
+import { resolveSingleSpeakerId } from '@/lib/engine/speaker-resolution';
 
 const AMBIGUOUS_MIGRATION_ISSUE = 'Migración 4.0: hablante ambiguo. Asigna speakerId manualmente antes de producir este segmento.';
 
@@ -348,7 +349,7 @@ function normalizeText(value: string) {
 }
 
 function shotSpeakerId(shot: FilmShot) {
-  return shot.speakerId || shot.dialogueLines?.[0]?.speakerId;
+  return resolveSingleSpeakerId(shot);
 }
 
 function unique<T>(values: T[]) {
