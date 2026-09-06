@@ -1,0 +1,177 @@
+import type { FilmProject, FilmScene, FilmShot } from '@/lib/domain/schemas';
+import { buildSegmentedShotPlan } from '@/lib/engine/segmented-renderer-v4';
+import { locateVoiceProfile } from '@/lib/engine/voice-casting-v4';
+import { estimateOperationCost, voiceCostUnits } from '@/lib/engine/spend-ledger';
+import { hasUsableCredential, isUsableCredentialValue } from '@/lib/engine/production-safety';
+
+export type SegmentedRealTurnPreflight = {
+  index: number;
+  speakerId: string;
+  label: string;
+  kind: 'narrator' | 'character' | 'support' | 'unknown';
+  provider: 'elevenlabs' | 'openai' | 'offline' | 'unknown';
+  text: string;
+  durationSeconds: number;
+  requiresLipSync: boolean;
+  voiceIdReady: boolean;
+  credentialName?: 'ELEVENLABS_API_KEY' | 'OPENAI_API_KEY';
+  credentialVisible: boolean;
+  voiceEstimatedUsd: number;
+  lipSyncEstimatedUsd: number;
+  blockers: string[];
+};
+
+export type SegmentedRealPreflight = {
+  projectId: string;
+  title: string;
+  sceneOrder: number;
+  shotOrder: number;
+  shotId: string;
+  sourceVideoAsset: string;
+  shotDurationSeconds: number;
+  turns: SegmentedRealTurnPreflight[];
+  totals: {
+    turns: number;
+    voiceTurns: number;
+    lipSyncTurns: number;
+    lipSyncSeconds: number;
+    voiceEstimatedUsd: number;
+    lipSyncEstimatedUsd: number;
+    totalEstimatedUsd: number;
+    profilesRequired: number;
+    profilesReady: number;
+    blockers: number;
+  };
+  requiredProfiles: Array<{
+    speakerId: string;
+    label: string;
+    kind: 'narrator' | 'character' | 'support' | 'unknown';
+    provider: 'elevenlabs' | 'openai' | 'offline' | 'unknown';
+    voiceIdReady: boolean;
+  }>;
+  blockers: string[];
+};
+
+export function buildSegmentedRealPreflight(
+  project: FilmProject,
+  scene: FilmScene,
+  shot: FilmShot
+): SegmentedRealPreflight {
+  const plan = buildSegmentedShotPlan(project, scene, shot);
+  const rows: SegmentedRealTurnPreflight[] = plan.turns.map((turn) => {
+    const located = locateVoiceProfile(project, turn.speakerId);
+    const profile = located?.profile;
+    const provider = profile?.voiceProvider || 'elevenlabs';
+    const label = located?.label || (turn.speakerId === 'narrator' ? 'Narrador' : turn.speakerId);
+    const kind = located?.kind || (turn.speakerId === 'narrator' ? 'narrator' : 'unknown');
+    const blockers: string[] = [];
+    let credentialName: SegmentedRealTurnPreflight['credentialName'];
+    let voiceIdReady = false;
+
+    if (!located) {
+      blockers.push(`${label}: no existe un perfil vocal persistente.`);
+    }
+
+    if (provider === 'elevenlabs') {
+      credentialName = 'ELEVENLABS_API_KEY';
+      voiceIdReady = isUsableCredentialValue(profile?.voiceId);
+      if (!voiceIdReady) blockers.push(`${label}: falta voiceId persistente de ElevenLabs.`);
+    } else if (provider === 'openai') {
+      credentialName = 'OPENAI_API_KEY';
+      voiceIdReady = true;
+    } else if (provider === 'offline') {
+      blockers.push(`${label}: proveedor offline no es válido para el piloto real.`);
+    } else {
+      blockers.push(`${label}: proveedor vocal desconocido.`);
+    }
+
+    const credentialVisible = credentialName ? hasUsableCredential(credentialName) : false;
+    const voiceEstimatedUsd = estimateOperationCost('voice', voiceCostUnits(turn.text));
+    const lipSyncEstimatedUsd = turn.requiresLipSync
+      ? estimateOperationCost('lip-sync', turn.durationSeconds)
+      : 0;
+
+    if (turn.requiresLipSync && process.env.ENABLE_LIPSYNC === 'false') {
+      blockers.push(`${label}: ENABLE_LIPSYNC=false.`);
+    }
+
+    return {
+      index: turn.index,
+      speakerId: turn.speakerId,
+      label,
+      kind,
+      provider: provider as SegmentedRealTurnPreflight['provider'],
+      text: turn.text,
+      durationSeconds: turn.durationSeconds,
+      requiresLipSync: turn.requiresLipSync,
+      voiceIdReady,
+      credentialName,
+      credentialVisible,
+      voiceEstimatedUsd,
+      lipSyncEstimatedUsd,
+      blockers
+    };
+  });
+
+  const profileMap = new Map<string, SegmentedRealPreflight['requiredProfiles'][number]>();
+  for (const row of rows) {
+    if (!profileMap.has(row.speakerId)) {
+      profileMap.set(row.speakerId, {
+        speakerId: row.speakerId,
+        label: row.label,
+        kind: row.kind,
+        provider: row.provider,
+        voiceIdReady: row.voiceIdReady
+      });
+    }
+  }
+
+  const blockers = unique(rows.flatMap((row) => row.blockers));
+  const lipSyncSeconds = rows
+    .filter((row) => row.requiresLipSync)
+    .reduce((sum, row) => sum + row.durationSeconds, 0);
+  const voiceEstimatedUsd = sumMoney(rows.map((row) => row.voiceEstimatedUsd));
+  const lipSyncEstimatedUsd = sumMoney(rows.map((row) => row.lipSyncEstimatedUsd));
+  const requiredProfiles = [...profileMap.values()];
+
+  if (rows.some((row) => row.requiresLipSync) && !hasUsableCredential('FAL_KEY')) {
+    blockers.push('Lip-sync: FAL_KEY no está visible en el entorno del CLI.');
+  }
+
+  return {
+    projectId: project.id,
+    title: project.input.title,
+    sceneOrder: scene.order,
+    shotOrder: shot.order,
+    shotId: shot.id,
+    sourceVideoAsset: plan.sourceVideoAsset,
+    shotDurationSeconds: plan.shotDurationSeconds,
+    turns: rows,
+    totals: {
+      turns: rows.length,
+      voiceTurns: rows.length,
+      lipSyncTurns: rows.filter((row) => row.requiresLipSync).length,
+      lipSyncSeconds: round(lipSyncSeconds),
+      voiceEstimatedUsd,
+      lipSyncEstimatedUsd,
+      totalEstimatedUsd: sumMoney([voiceEstimatedUsd, lipSyncEstimatedUsd]),
+      profilesRequired: requiredProfiles.length,
+      profilesReady: requiredProfiles.filter((profile) => profile.voiceIdReady).length,
+      blockers: blockers.length
+    },
+    requiredProfiles,
+    blockers
+  };
+}
+
+function sumMoney(values: number[]) {
+  return Math.round(values.reduce((sum, value) => sum + value, 0) * 10000) / 10000;
+}
+
+function round(value: number) {
+  return Math.round(value * 1000) / 1000;
+}
+
+function unique(values: string[]) {
+  return [...new Set(values)];
+}
