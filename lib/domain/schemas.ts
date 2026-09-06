@@ -172,7 +172,7 @@ export const BudgetSchema = z.object({
     video: z.number(),
     lipSync: z.number().default(0),
     avatars: z.number(),
-    music: z.number().default(0),
+    music: z.number(),
     quality: z.number().default(0)
   }),
   notes: z.array(z.string())
