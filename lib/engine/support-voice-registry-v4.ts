@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { FilmProject, SupportVoice } from '@/lib/domain/schemas';
 import { buildLegacyMixedTurnPlan } from '@/lib/engine/legacy-mixed-turns-v4';
+import { narratorProfile } from '@/lib/engine/voice-casting-v4';
 
 export type SupportVoiceRegistryPreview = {
   projectId: string;
@@ -62,7 +63,8 @@ export function supportVoiceId(label: string) {
 }
 
 export function findVoiceProfile(project: FilmProject, speakerId: string | undefined) {
-  if (!speakerId || speakerId === 'narrator') return undefined;
+  if (!speakerId) return undefined;
+  if (speakerId === 'narrator') return narratorProfile(project);
   return project.plan?.characters.find((item) => item.id === speakerId)
     || project.supportVoices?.find((item) => item.id === speakerId);
 }
