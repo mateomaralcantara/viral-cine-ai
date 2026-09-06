@@ -60,8 +60,14 @@ export async function prepareAudioFirstVoice(
   const idempotencyKey = `voice:${shot.id}:${speakerId || 'none'}:${text.length}`;
   const estimatedUsd = estimateOperationCost('voice', voiceCostUnits(text));
 
-  if (speakerId === 'narrator' || voiceProvider === 'elevenlabs') {
-    if (speakerId !== 'narrator') assertVoiceProfileReady(voiceProfile);
+  if (voiceProvider === 'elevenlabs') {
+    if (speakerId === 'narrator') {
+      if (!voiceProfile?.voiceId && !process.env.ELEVENLABS_NARRATOR_VOICE_ID) {
+        throw new Error('Casting vocal incompleto: Narrador no tiene voiceId persistente ni fallback ELEVENLABS_NARRATOR_VOICE_ID.');
+      }
+    } else {
+      assertVoiceProfileReady(voiceProfile);
+    }
     await appendSpend(project.id, {
       operation: 'voice',
       provider: 'elevenlabs',
