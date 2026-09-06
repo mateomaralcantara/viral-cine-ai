@@ -79,7 +79,7 @@ export function buildCastingState(project: FilmProject): CastingState {
     for (const shot of scene.shots) {
       if (!shot.spokenText.trim()) continue;
       spokenShots += 1;
-      if (shot.speakerId) {
+      if (shotSpeakerId(shot)) {
         resolvedShots += 1;
         continue;
       }
@@ -87,19 +87,23 @@ export function buildCastingState(project: FilmProject): CastingState {
     }
   }
 
-  const characters = project.plan.characters.map((character) => ({
-    id: character.id,
-    name: character.name,
-    role: character.role,
-    voiceProvider: character.voiceProvider || 'elevenlabs',
-    voiceId: character.voiceId,
-    voiceReady: Boolean(character.voiceId?.trim()) || character.voiceProvider === 'offline',
-    voiceInstructions: character.voiceInstructions,
-    voiceStability: character.voiceStability,
-    voiceSimilarity: character.voiceSimilarity,
-    voiceStyle: character.voiceStyle,
-    voiceSpeed: character.voiceSpeed
-  }));
+  const characters = project.plan.characters.map((character) => {
+    const voiceProvider = character.voiceProvider || 'elevenlabs';
+    const voiceReady = voiceProvider === 'openai' || (voiceProvider === 'elevenlabs' && Boolean(character.voiceId?.trim()));
+    return {
+      id: character.id,
+      name: character.name,
+      role: character.role,
+      voiceProvider,
+      voiceId: character.voiceId,
+      voiceReady,
+      voiceInstructions: character.voiceInstructions,
+      voiceStability: character.voiceStability,
+      voiceSimilarity: character.voiceSimilarity,
+      voiceStyle: character.voiceStyle,
+      voiceSpeed: character.voiceSpeed
+    };
+  });
   const voicesAssigned = characters.filter((character) => character.voiceReady).length;
 
   return {
@@ -260,6 +264,9 @@ function result(
   reason: string
 ): SpeakerSuggestion {
   const character = suggestedSpeakerId && project.plan?.characters.find((item) => item.id === suggestedSpeakerId);
+  const expandedCandidates = character && !candidates.some((candidate) => candidate.id === character.id)
+    ? [...candidates, { id: character.id, name: character.name }]
+    : candidates;
   return {
     sceneId: scene.id,
     sceneOrder: scene.order,
@@ -268,7 +275,7 @@ function result(
     shotOrder: shot.order,
     shotTitle: shot.title,
     spokenText: shot.spokenText,
-    candidates,
+    candidates: expandedCandidates,
     suggestedSpeakerId,
     suggestedSpeakerName: character?.name,
     confidence,
@@ -325,6 +332,10 @@ function normalizeText(value: string) {
     .replace(/[^a-z0-9ñ]+/gi, ' ')
     .trim()
     .replace(/\s+/g, ' ');
+}
+
+function shotSpeakerId(shot: FilmShot) {
+  return shot.speakerId || shot.dialogueLines?.[0]?.speakerId;
 }
 
 function unique<T>(values: T[]) {
