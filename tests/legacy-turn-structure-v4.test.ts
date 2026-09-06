@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { FilmProject } from '../lib/domain/schemas';
+import { buildCastingState } from '../lib/engine/casting-v4';
 import { applyLegacyTurnStructure, previewLegacyTurnStructure } from '../lib/engine/legacy-turn-structure-v4';
 
 function fixture(): FilmProject {
@@ -130,4 +131,13 @@ test('estructuración es idempotente y no duplica turnos', () => {
   assert.equal(second.applied, 0);
   assert.equal(project.plan!.scenes[0].shots[0].dialogueLines.length, 3);
   assert.equal(previewLegacyTurnStructure(project).alreadyStructured, 1);
+});
+
+test('una toma multihablante estructurada sigue sin contarse como monohablante resuelta', () => {
+  const project = fixture();
+  applyLegacyTurnStructure(project);
+  const casting = buildCastingState(project);
+  assert.equal(casting.totals.spokenShots, 1);
+  assert.equal(casting.totals.resolvedShots, 0);
+  assert.equal(casting.totals.unresolvedShots, 1);
 });
