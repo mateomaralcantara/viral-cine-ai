@@ -1,4 +1,4 @@
-import type { FilmProject } from '@/lib/domain/schemas';
+import type { FilmProject, SupportVoice, Character } from '@/lib/domain/schemas';
 import { hasMultipleDialogueSpeakers, resolveSingleSpeakerId } from '@/lib/engine/speaker-resolution';
 
 const TRUE_VALUES = new Set(['1', 'true', 'yes', 'on']);
@@ -67,7 +67,7 @@ export function assertPaidGenerationAllowed(operation: string, credentialName?: 
   }
 }
 
-export function assertProductionCanQueue(project?: Pick<FilmProject, 'plan'>) {
+export function assertProductionCanQueue(project?: Pick<FilmProject, 'plan' | 'supportVoices'>) {
   if (productionMode() !== 'real') {
     const hasPaidHistory = project?.plan?.scenes.some((scene) =>
       scene.shots.some((shot) => (shot.generationCount || 0) > 0)
@@ -114,7 +114,7 @@ export function assertProductionCanQueue(project?: Pick<FilmProject, 'plan'>) {
     );
   }
 
-  const speakingCharacterIds = new Set(
+  const speakingIds = new Set(
     plan.scenes.flatMap((scene) => scene.shots)
       .map((shot) => resolveSingleSpeakerId(shot))
       .filter((speakerId): speakerId is string => Boolean(speakerId && speakerId !== 'narrator'))
@@ -132,23 +132,25 @@ export function assertProductionCanQueue(project?: Pick<FilmProject, 'plan'>) {
   }
 
   const missing: string[] = [];
-  for (const characterId of speakingCharacterIds) {
-    const character = plan.characters.find((item) => item.id === characterId);
-    if (!character) {
-      missing.push(`personaje desconocido (${characterId})`);
+  for (const speakerId of speakingIds) {
+    const profile = plan.characters.find((item) => item.id === speakerId)
+      || project?.supportVoices?.find((item) => item.id === speakerId);
+    if (!profile) {
+      missing.push(`perfil vocal desconocido (${speakerId})`);
       continue;
     }
-    const provider = character.voiceProvider || 'elevenlabs';
+    const provider = profile.voiceProvider || 'elevenlabs';
+    const name = voiceProfileName(profile);
     if (provider === 'elevenlabs') {
       if (!hasUsableCredential('ELEVENLABS_API_KEY')) {
-        missing.push(`${character.name}: falta ELEVENLABS_API_KEY`);
-      } else if (!isUsableCredentialValue(character.voiceId)) {
-        missing.push(`${character.name}: falta voiceId`);
+        missing.push(`${name}: falta ELEVENLABS_API_KEY`);
+      } else if (!isUsableCredentialValue(profile.voiceId)) {
+        missing.push(`${name}: falta voiceId`);
       }
     } else if (provider === 'openai') {
-      if (!hasUsableCredential('OPENAI_API_KEY')) missing.push(`${character.name}: falta OPENAI_API_KEY`);
+      if (!hasUsableCredential('OPENAI_API_KEY')) missing.push(`${name}: falta OPENAI_API_KEY`);
     } else {
-      missing.push(`${character.name}: proveedor offline no permitido en producción real`);
+      missing.push(`${name}: proveedor offline no permitido en producción real`);
     }
   }
   if (missing.length) {
@@ -171,4 +173,8 @@ export function safeErrorMessage(error: unknown) {
     .replace(/(?:sk|key|token|gho|ghp|AIza)[-_A-Za-z0-9.]{8,}/g, '[CREDENCIAL_OCULTA]')
     .replace(/(?:authorization|cookie|set-cookie)\s*[:=]\s*[^\s,;]+/gi, '$1=[OCULTO]')
     .slice(0, 1200);
+}
+
+function voiceProfileName(profile: Character | SupportVoice) {
+  return 'name' in profile ? profile.name : profile.label;
 }
