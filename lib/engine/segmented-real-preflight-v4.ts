@@ -1,6 +1,7 @@
 import type { FilmProject, FilmScene, FilmShot } from '@/lib/domain/schemas';
 import { buildSegmentedShotPlan } from '@/lib/engine/segmented-renderer-v4';
 import { locateVoiceProfile } from '@/lib/engine/voice-casting-v4';
+import { requiresLipSyncForSpeaker } from '@/lib/engine/lip-sync-policy-v4';
 import { estimateOperationCost, voiceCostUnits } from '@/lib/engine/spend-ledger';
 import { hasUsableCredential, isUsableCredentialValue } from '@/lib/engine/production-safety';
 
@@ -86,12 +87,13 @@ export function buildSegmentedRealPreflight(
     const credentialVisible = credentialName ? hasUsableCredential(credentialName) : false;
     if (credentialName && !credentialVisible) blockers.push(`${label}: falta ${credentialName}.`);
 
+    const requiresLipSync = requiresLipSyncForSpeaker(project, turn.speakerId);
     const voiceEstimatedUsd = estimateOperationCost('voice', voiceCostUnits(turn.text));
-    const lipSyncEstimatedUsd = turn.requiresLipSync
+    const lipSyncEstimatedUsd = requiresLipSync
       ? estimateOperationCost('lip-sync', turn.durationSeconds)
       : 0;
 
-    if (turn.requiresLipSync && process.env.ENABLE_LIPSYNC === 'false') {
+    if (requiresLipSync && process.env.ENABLE_LIPSYNC === 'false') {
       blockers.push(`${label}: ENABLE_LIPSYNC=false.`);
     }
 
@@ -103,7 +105,7 @@ export function buildSegmentedRealPreflight(
       provider: provider as SegmentedRealTurnPreflight['provider'],
       text: turn.text,
       durationSeconds: turn.durationSeconds,
-      requiresLipSync: turn.requiresLipSync,
+      requiresLipSync,
       voiceIdReady,
       credentialName,
       credentialVisible,
