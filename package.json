@@ -17,6 +17,7 @@
     "check:env": "node scripts/check-env.mjs",
     "migrate:4": "node --import tsx scripts/migrate-v4.ts",
     "voices:4": "node --import tsx scripts/voices-v4.ts",
+    "voices:discover": "node --import tsx scripts/voices-discover-v4.ts",
     "casting:4": "node --import tsx scripts/casting-v4.ts",
     "hydrate:preview": "node --import tsx scripts/hydrate-preview-v4.ts",
     "classify:shots": "node --import tsx scripts/classify-legacy-shots-v4.ts",
