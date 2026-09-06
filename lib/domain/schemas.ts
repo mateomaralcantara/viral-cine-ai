@@ -20,6 +20,17 @@ export const SceneStatusSchema = z.enum(['pending', 'rendering', 'review-require
 export const ShotModeSchema = z.enum(['video', 'avatar-video']);
 export const VoiceProviderSchema = z.enum(['elevenlabs', 'openai', 'offline']);
 
+const VoiceSettingsShape = {
+  voiceInstructions: z.string().default(''),
+  voiceProvider: VoiceProviderSchema.default('elevenlabs'),
+  voiceId: z.string().optional(),
+  voiceModel: z.string().optional(),
+  voiceStability: z.number().min(0).max(1).optional(),
+  voiceSimilarity: z.number().min(0).max(1).optional(),
+  voiceStyle: z.number().min(0).max(1).optional(),
+  voiceSpeed: z.number().min(0.7).max(1.2).optional()
+};
+
 export const DialogueLineSchema = z.object({
   id: z.string(),
   speakerId: z.string(),
@@ -95,14 +106,7 @@ export const CharacterSchema = z.object({
   appearance: z.string(),
   wardrobe: z.string(),
   personality: z.string(),
-  voiceInstructions: z.string(),
-  voiceProvider: VoiceProviderSchema.default('elevenlabs'),
-  voiceId: z.string().optional(),
-  voiceModel: z.string().optional(),
-  voiceStability: z.number().min(0).max(1).optional(),
-  voiceSimilarity: z.number().min(0).max(1).optional(),
-  voiceStyle: z.number().min(0).max(1).optional(),
-  voiceSpeed: z.number().min(0.7).max(1.2).optional(),
+  ...VoiceSettingsShape,
   imagePrompt: z.string(),
   referenceAsset: z.string().optional()
 });
@@ -110,15 +114,14 @@ export const CharacterSchema = z.object({
 export const SupportVoiceSchema = z.object({
   id: z.string(),
   label: z.string().trim().min(1).max(80),
-  voiceInstructions: z.string().default(''),
-  voiceProvider: VoiceProviderSchema.default('elevenlabs'),
-  voiceId: z.string().optional(),
-  voiceModel: z.string().optional(),
-  voiceStability: z.number().min(0).max(1).optional(),
-  voiceSimilarity: z.number().min(0).max(1).optional(),
-  voiceStyle: z.number().min(0).max(1).optional(),
-  voiceSpeed: z.number().min(0.7).max(1.2).optional(),
+  ...VoiceSettingsShape,
   source: z.enum(['legacy-support', 'manual']).default('legacy-support')
+});
+
+export const NarratorVoiceSchema = z.object({
+  id: z.literal('narrator').default('narrator'),
+  label: z.literal('Narrador').default('Narrador'),
+  ...VoiceSettingsShape
 });
 
 export const SceneSchema = z.object({
@@ -202,7 +205,8 @@ export const FilmProjectSchema = z.object({
   status: ProjectStatusSchema,
   input: ProjectInputSchema,
   plan: FilmPlanSchema.optional(),
-  supportVoices: z.array(SupportVoiceSchema).max(24).optional(),
+  narratorVoice: NarratorVoiceSchema.optional(),
+  supportVoices: z.array(SupportVoiceSchema).max(24).optional().default([]),
   budget: BudgetSchema.optional(),
   pilot: PilotSchema.optional(),
   progress: ProgressSchema,
@@ -216,6 +220,7 @@ export const FilmProjectSchema = z.object({
 export type ProjectInput = z.infer<typeof ProjectInputSchema>;
 export type Character = z.infer<typeof CharacterSchema>;
 export type SupportVoice = z.infer<typeof SupportVoiceSchema>;
+export type NarratorVoice = z.infer<typeof NarratorVoiceSchema>;
 export type DialogueLine = z.infer<typeof DialogueLineSchema>;
 export type SceneDialogueTurn = z.infer<typeof SceneDialogueTurnSchema>;
 export type FilmScene = z.infer<typeof SceneSchema>;
