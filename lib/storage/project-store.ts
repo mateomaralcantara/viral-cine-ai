@@ -58,6 +58,7 @@ export async function createProject(input: ProjectInput): Promise<FilmProject> {
     updatedAt: now,
     status: 'draft',
     input,
+    supportVoices: [],
     progress: { phase: 'draft', percent: 0, message: 'Proyecto creado', updatedAt: now },
     productionLog: [`${now} Proyecto creado`]
   };
