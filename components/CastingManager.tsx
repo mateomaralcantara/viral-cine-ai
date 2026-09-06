@@ -48,13 +48,51 @@ type CastingState = {
   };
 };
 
+type VoiceProfile = {
+  id: string;
+  label: string;
+  kind: 'narrator' | 'character' | 'support';
+  role?: string;
+  voiceProvider: 'elevenlabs' | 'openai' | 'offline';
+  voiceId?: string;
+  voiceReady: boolean;
+  voiceInstructions: string;
+  voiceModel?: string;
+  voiceStability?: number;
+  voiceSimilarity?: number;
+  voiceStyle?: number;
+  voiceSpeed?: number;
+};
+
+type VoiceCastingState = {
+  projectId: string;
+  title: string;
+  profiles: VoiceProfile[];
+  totals: {
+    profiles: number;
+    ready: number;
+    missing: number;
+    narratorReady: boolean;
+    characterReady: number;
+    characterTotal: number;
+    supportReady: number;
+    supportTotal: number;
+  };
+};
+
 type ProjectListResponse = { projects: FilmProject[] };
-type CastingResponse = { casting: CastingState; project?: FilmProject; applied?: number };
+type CastingResponse = {
+  casting: CastingState;
+  voiceCasting: VoiceCastingState;
+  project?: FilmProject;
+  applied?: number;
+};
 
 export default function CastingManager() {
   const [projects, setProjects] = useState<FilmProject[]>([]);
   const [projectId, setProjectId] = useState('');
   const [casting, setCasting] = useState<CastingState | null>(null);
+  const [voiceCasting, setVoiceCasting] = useState<VoiceCastingState | null>(null);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -68,10 +106,12 @@ export default function CastingManager() {
   const loadCasting = useCallback(async (id: string) => {
     if (!id) {
       setCasting(null);
+      setVoiceCasting(null);
       return;
     }
     const data = await api<CastingResponse>(`/api/projects/${id}/casting`);
     setCasting(data.casting);
+    setVoiceCasting(data.voiceCasting);
   }, []);
 
   useEffect(() => {
@@ -93,6 +133,7 @@ export default function CastingManager() {
         body: JSON.stringify(body)
       });
       setCasting(data.casting);
+      setVoiceCasting(data.voiceCasting);
       setNotice(success(data));
     } catch (reason) {
       setError(messageOf(reason));
@@ -110,17 +151,22 @@ export default function CastingManager() {
     await mutate('apply-safe', { action: 'apply-safe', minimumConfidence: 0.92 }, (data) => `${data.applied || 0} asignaciones seguras aplicadas. La media existente quedó intacta.`);
   }
 
-  async function saveVoice(characterId: string, voice: VoiceDraft) {
-    await mutate(`voice:${characterId}`, {
-      action: 'set-voice',
-      characterId,
-      provider: voice.provider,
-      voiceId: voice.voiceId.trim() || undefined,
-      stability: optionalNumber(voice.stability),
-      similarity: optionalNumber(voice.similarity),
-      style: optionalNumber(voice.style),
-      speed: optionalNumber(voice.speed)
-    }, () => 'Casting vocal guardado. No se llamó a ningún proveedor ni se generó audio.');
+  async function saveVoice(profileId: string, voice: VoiceDraft) {
+    try {
+      const body = {
+        action: 'set-voice-profile',
+        profileId,
+        provider: voice.provider,
+        voiceId: voice.voiceId.trim() || undefined,
+        stability: optionalNumber(voice.stability),
+        similarity: optionalNumber(voice.similarity),
+        style: optionalNumber(voice.style),
+        speed: optionalNumber(voice.speed)
+      };
+      await mutate(`voice:${profileId}`, body, () => 'Perfil vocal guardado. No se llamó a ElevenLabs/OpenAI ni se generó audio.');
+    } catch (reason) {
+      setError(messageOf(reason));
+    }
   }
 
   const selectedProject = projects.find((project) => project.id === projectId);
@@ -129,11 +175,11 @@ export default function CastingManager() {
     const speakerPart = casting.totals.spokenShots
       ? casting.totals.resolvedShots / casting.totals.spokenShots
       : 1;
-    const voicePart = casting.characters.length
-      ? casting.totals.voicesAssigned / casting.characters.length
-      : 1;
+    const voicePart = voiceCasting?.totals.profiles
+      ? voiceCasting.totals.ready / voiceCasting.totals.profiles
+      : 0;
     return Math.round(((speakerPart + voicePart) / 2) * 100);
-  }, [casting]);
+  }, [casting, voiceCasting]);
 
   return (
     <main className="min-h-screen bg-[#070914] text-slate-100">
@@ -166,7 +212,7 @@ export default function CastingManager() {
             <Metric label="Ambiguas" value={casting.totals.unresolvedShots} />
             <Metric label="Auto-seguras" value={casting.totals.highConfidence} />
             <Metric label="Con media existente" value={casting.totals.existingMediaUnresolved} />
-            <Metric label="Voces faltantes" value={casting.totals.voicesMissing} />
+            <Metric label="Voces faltantes" value={voiceCasting?.totals.missing ?? casting.totals.voicesMissing} />
           </section>
 
           <section className="rounded-3xl border border-white/10 bg-white/[.035] p-5 md:p-6">
@@ -181,11 +227,13 @@ export default function CastingManager() {
             </div>
           </section>
 
-          <section className="rounded-3xl border border-white/10 bg-white/[.035] p-5 md:p-6">
-            <div className="flex items-center gap-2"><Mic2 className="h-5 w-5 text-violet-300" /><h2 className="text-xl font-black">Voice Casting Manager</h2></div>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">Guarda proveedor, voiceId y parámetros persistentes por personaje. Esta pantalla solo escribe configuración local; no prueba, compra ni sintetiza voces.</p>
-            <div className="mt-5 grid gap-4 xl:grid-cols-2">{casting.characters.map((character) => <VoiceCard key={`${character.id}:${character.voiceId || ''}:${character.voiceProvider}`} character={character} busy={busy === `voice:${character.id}`} onSave={saveVoice} />)}</div>
-          </section>
+          {voiceCasting && <section className="rounded-3xl border border-white/10 bg-white/[.035] p-5 md:p-6">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div><div className="flex items-center gap-2"><Mic2 className="h-5 w-5 text-violet-300" /><h2 className="text-xl font-black">Voice Casting Manager</h2></div><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">Un único registro persistente para Narrador, reparto principal y voces secundarias. Guardar aquí solo cambia metadata local: no prueba, compra ni sintetiza voces.</p></div>
+              <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-xs text-slate-400"><span className="font-black text-slate-100">{voiceCasting.totals.ready}/{voiceCasting.totals.profiles}</span> perfiles listos · secundarios {voiceCasting.totals.supportReady}/{voiceCasting.totals.supportTotal}</div>
+            </div>
+            <div className="mt-5 grid gap-4 xl:grid-cols-2">{voiceCasting.profiles.map((profile) => <VoiceCard key={`${profile.id}:${profile.voiceId || ''}:${profile.voiceProvider}`} profile={profile} busy={busy === `voice:${profile.id}`} onSave={saveVoice} />)}</div>
+          </section>}
         </>}
 
         {!projects.length && <section className="rounded-3xl border border-white/10 bg-white/[.035] p-10 text-center"><Film className="mx-auto h-8 w-8 text-slate-600" /><div className="mt-3 font-black">No hay proyectos disponibles.</div></section>}
@@ -218,22 +266,33 @@ type VoiceDraft = {
   speed: string;
 };
 
-function VoiceCard({ character, busy, onSave }: { character: CastingState['characters'][number]; busy: boolean; onSave: (id: string, voice: VoiceDraft) => Promise<void> }) {
+function VoiceCard({ profile, busy, onSave }: { profile: VoiceProfile; busy: boolean; onSave: (id: string, voice: VoiceDraft) => Promise<void> }) {
   const [draft, setDraft] = useState<VoiceDraft>({
-    provider: character.voiceProvider,
-    voiceId: character.voiceId || '',
-    stability: valueString(character.voiceStability),
-    similarity: valueString(character.voiceSimilarity),
-    style: valueString(character.voiceStyle),
-    speed: valueString(character.voiceSpeed)
+    provider: profile.voiceProvider,
+    voiceId: profile.voiceId || '',
+    stability: valueString(profile.voiceStability),
+    similarity: valueString(profile.voiceSimilarity),
+    style: valueString(profile.voiceStyle),
+    speed: valueString(profile.voiceSpeed)
   });
+  useEffect(() => {
+    setDraft({
+      provider: profile.voiceProvider,
+      voiceId: profile.voiceId || '',
+      stability: valueString(profile.voiceStability),
+      similarity: valueString(profile.voiceSimilarity),
+      style: valueString(profile.voiceStyle),
+      speed: valueString(profile.voiceSpeed)
+    });
+  }, [profile]);
   const set = <K extends keyof VoiceDraft>(key: K, value: VoiceDraft[K]) => setDraft((current) => ({ ...current, [key]: value }));
+  const kindLabel = profile.kind === 'narrator' ? 'Narrador' : profile.kind === 'support' ? 'Voz secundaria' : profile.role || 'Personaje';
   return <article className="rounded-2xl border border-white/10 bg-black/20 p-4">
-    <div className="flex items-start justify-between gap-3"><div><div className="font-black">{character.name}</div><div className="text-xs text-violet-300">{character.role}</div></div><span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${character.voiceReady ? 'bg-emerald-500/10 text-emerald-300' : 'bg-amber-500/10 text-amber-200'}`}>{character.voiceReady ? 'VOZ LISTA' : 'FALTA VOZ'}</span></div>
-    <div className="mt-3 text-xs leading-5 text-slate-500">{character.voiceInstructions}</div>
-    <div className="mt-4 grid gap-3 sm:grid-cols-2"><label className="text-xs text-slate-500">Proveedor<select className="mt-1 w-full rounded-xl border border-white/10 bg-[#0e1220] px-3 py-2.5 text-sm text-slate-100" value={draft.provider} onChange={(event) => set('provider', event.target.value as VoiceDraft['provider'])}><option value="elevenlabs">ElevenLabs</option><option value="openai">OpenAI</option><option value="offline">Offline</option></select></label><label className="text-xs text-slate-500">Voice ID<input className="mt-1 w-full rounded-xl border border-white/10 bg-[#0e1220] px-3 py-2.5 text-sm text-slate-100" value={draft.voiceId} onChange={(event) => set('voiceId', event.target.value)} placeholder="ID persistente de la voz" /></label></div>
+    <div className="flex items-start justify-between gap-3"><div><div className="font-black">{profile.label}</div><div className="text-xs text-violet-300">{kindLabel}</div></div><span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${profile.voiceReady ? 'bg-emerald-500/10 text-emerald-300' : 'bg-amber-500/10 text-amber-200'}`}>{profile.voiceReady ? 'VOZ LISTA' : 'FALTA VOZ'}</span></div>
+    <div className="mt-3 text-xs leading-5 text-slate-500">{profile.voiceInstructions}</div>
+    <div className="mt-4 grid gap-3 sm:grid-cols-2"><label className="text-xs text-slate-500">Proveedor<select className="mt-1 w-full rounded-xl border border-white/10 bg-[#0e1220] px-3 py-2.5 text-sm text-slate-100" value={draft.provider} onChange={(event) => set('provider', event.target.value as VoiceDraft['provider'])}><option value="elevenlabs">ElevenLabs</option><option value="openai">OpenAI</option><option value="offline">Offline</option></select></label><label className="text-xs text-slate-500">Voice ID<input className="mt-1 w-full rounded-xl border border-white/10 bg-[#0e1220] px-3 py-2.5 text-sm text-slate-100" value={draft.voiceId} onChange={(event) => set('voiceId', event.target.value)} placeholder={draft.provider === 'elevenlabs' ? 'ID persistente de ElevenLabs' : 'Opcional'} /></label></div>
     <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4"><SmallNumber label="Stability" value={draft.stability} onChange={(value) => set('stability', value)} placeholder="0–1" /><SmallNumber label="Similarity" value={draft.similarity} onChange={(value) => set('similarity', value)} placeholder="0–1" /><SmallNumber label="Style" value={draft.style} onChange={(value) => set('style', value)} placeholder="0–1" /><SmallNumber label="Speed" value={draft.speed} onChange={(value) => set('speed', value)} placeholder="0.7–1.2" /></div>
-    <button disabled={busy} onClick={() => onSave(character.id, draft)} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-black disabled:opacity-40">{busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Guardar voz</button>
+    <button disabled={busy} onClick={() => onSave(profile.id, draft)} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-black disabled:opacity-40">{busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Guardar voz</button>
   </article>;
 }
 
