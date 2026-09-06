@@ -96,3 +96,25 @@ test('clasificador rechaza narración mezclada con un personaje aunque el diálo
   assert.equal(report.totals.ambiguous, 1);
   assert.match(report.rows[0].reason, /mezcla narración/i);
 });
+
+test('clasificador rechaza continuación de otro hablante antes de una única etiqueta', () => {
+  const project = fixture();
+  const scene = project.plan!.scenes[0];
+  scene.narration = 'La colina quedó en silencio mientras todos observaban.';
+  scene.dialogue = 'Eliab: Nosotros respondemos por nuestros actos. Él no ha hecho ningún mal. Recuérdame cuando llegues a tu reino.\nJesús: Hoy estarás conmigo en el paraíso.';
+  project.plan!.characters.push({
+    id: 'eliab', name: 'Eliab', role: 'Condenado', age: 35, appearance: 'Test', wardrobe: 'Test',
+    personality: 'Test', voiceInstructions: 'Test', voiceProvider: 'elevenlabs', imagePrompt: 'Test'
+  });
+  scene.shots = [{
+    id: 'shot-dangling-turn', order: 1, title: 'Continuación', durationSeconds: 8, visualPrompt: 'Test', camera: 'sin cortes',
+    spokenText: 'por nuestros actos. Él no ha hecho ningún mal. Recuérdame cuando llegues a tu reino. JESÚS: Hoy estarás conmigo en el paraíso.',
+    dialogueLines: [], mode: 'video', characterIds: ['eliab', 'jesus'], status: 'ready', videoAsset: 'video/existing.mp4'
+  }];
+  const report = classifyLegacyProjectShots(project);
+  assert.equal(report.totals.character, 0);
+  assert.equal(report.totals.ambiguous, 1);
+  assert.match(report.rows[0].reason, /texto previo sin etiqueta/i);
+  assert.equal(scene.shots[0].speakerId, undefined);
+  assert.equal(scene.shots[0].videoAsset, 'video/existing.mp4');
+});
