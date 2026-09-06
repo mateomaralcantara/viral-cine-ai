@@ -88,13 +88,26 @@ export function assertProductionCanQueue(project?: Pick<FilmProject, 'plan'>) {
 
   const plan = project?.plan;
   if (!plan) return;
+
+  const unresolvedSpoken = plan.scenes.flatMap((scene) =>
+    scene.shots
+      .filter((shot) => Boolean(shot.spokenText.trim()) && !shotSpeakerId(shot))
+      .map((shot) => `escena ${scene.order}/segmento ${shot.order}`)
+  );
+  if (unresolvedSpoken.length) {
+    throw new ProductionSafetyError(
+      `Casting de hablantes incompleto: ${unresolvedSpoken.length} segmento(s) con texto hablado no tienen speakerId. ` +
+      `${unresolvedSpoken.slice(0, 8).join(' | ')}. Resuelve el Speaker Lab antes de habilitar gasto.`
+    );
+  }
+
   const speakingCharacterIds = new Set(
     plan.scenes.flatMap((scene) => scene.shots)
-      .map((shot) => shot.speakerId)
+      .map((shot) => shotSpeakerId(shot))
       .filter((speakerId): speakerId is string => Boolean(speakerId && speakerId !== 'narrator'))
   );
   const hasNarration = plan.scenes.some((scene) =>
-    scene.shots.some((shot) => shot.speakerId === 'narrator' && Boolean(shot.spokenText.trim()))
+    scene.shots.some((shot) => shotSpeakerId(shot) === 'narrator' && Boolean(shot.spokenText.trim()))
   );
   if (hasNarration) {
     if (!hasUsableCredential('ELEVENLABS_API_KEY')) {
@@ -145,4 +158,8 @@ export function safeErrorMessage(error: unknown) {
     .replace(/(?:sk|key|token|gho|ghp|AIza)[-_A-Za-z0-9.]{8,}/g, '[CREDENCIAL_OCULTA]')
     .replace(/(?:authorization|cookie|set-cookie)\s*[:=]\s*[^\s,;]+/gi, '$1=[OCULTO]')
     .slice(0, 1200);
+}
+
+function shotSpeakerId(shot: { speakerId?: string; dialogueLines?: Array<{ speakerId: string }> }) {
+  return shot.speakerId || shot.dialogueLines?.[0]?.speakerId;
 }
