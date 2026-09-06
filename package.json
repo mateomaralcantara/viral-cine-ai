@@ -22,6 +22,7 @@
     "classify:shots": "node --import tsx scripts/classify-legacy-shots-v4.ts",
     "resolve:narrator": "node --import tsx scripts/resolve-safe-narrator-v4.ts",
     "turns:preview": "node --import tsx scripts/preview-mixed-turns-v4.ts",
+    "turns:structure": "node --import tsx scripts/structure-mixed-turns-v4.ts",
     "support:voices": "node --import tsx scripts/support-voices-v4.ts",
     "verify:4": "npm run typecheck && npm test"
   },
