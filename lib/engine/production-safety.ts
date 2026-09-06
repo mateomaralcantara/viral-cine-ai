@@ -1,4 +1,4 @@
-import type { FilmProject, SupportVoice, Character } from '@/lib/domain/schemas';
+import type { FilmProject, SupportVoice, Character, NarratorVoice } from '@/lib/domain/schemas';
 import { hasMultipleDialogueSpeakers, resolveSingleSpeakerId } from '@/lib/engine/speaker-resolution';
 
 const TRUE_VALUES = new Set(['1', 'true', 'yes', 'on']);
@@ -8,6 +8,7 @@ export type ProductionPauseKind = 'billing' | 'safety' | 'technical';
 
 type ProductionProjectContext = {
   plan?: FilmProject['plan'];
+  narratorVoice?: FilmProject['narratorVoice'];
   supportVoices?: FilmProject['supportVoices'];
 };
 
@@ -127,16 +128,24 @@ export function assertProductionCanQueue(project?: ProductionProjectContext) {
   const hasNarration = plan.scenes.some((scene) =>
     scene.shots.some((shot) => resolveSingleSpeakerId(shot) === 'narrator' && Boolean(shot.spokenText.trim()))
   );
+
+  const missing: string[] = [];
   if (hasNarration) {
-    if (!hasUsableCredential('ELEVENLABS_API_KEY')) {
-      throw new ProductionSafetyError('Bloqueo de seguridad: existe narración pero falta ELEVENLABS_API_KEY.');
-    }
-    if (!isUsableCredentialValue(process.env.ELEVENLABS_NARRATOR_VOICE_ID)) {
-      throw new ProductionSafetyError('Bloqueo de seguridad: existe narración pero falta ELEVENLABS_NARRATOR_VOICE_ID.');
+    const narrator = project?.narratorVoice;
+    const provider = narrator?.voiceProvider || 'elevenlabs';
+    if (provider === 'elevenlabs') {
+      if (!hasUsableCredential('ELEVENLABS_API_KEY')) {
+        missing.push('Narrador: falta ELEVENLABS_API_KEY');
+      } else if (!isUsableCredentialValue(narrator?.voiceId) && !isUsableCredentialValue(process.env.ELEVENLABS_NARRATOR_VOICE_ID)) {
+        missing.push('Narrador: falta voiceId persistente o ELEVENLABS_NARRATOR_VOICE_ID');
+      }
+    } else if (provider === 'openai') {
+      if (!hasUsableCredential('OPENAI_API_KEY')) missing.push('Narrador: falta OPENAI_API_KEY');
+    } else {
+      missing.push('Narrador: proveedor offline no permitido en producción real');
     }
   }
 
-  const missing: string[] = [];
   for (const speakerId of speakingIds) {
     const profile = plan.characters.find((item) => item.id === speakerId)
       || project?.supportVoices?.find((item) => item.id === speakerId);
@@ -180,6 +189,6 @@ export function safeErrorMessage(error: unknown) {
     .slice(0, 1200);
 }
 
-function voiceProfileName(profile: Character | SupportVoice) {
+function voiceProfileName(profile: Character | SupportVoice | NarratorVoice) {
   return 'name' in profile ? profile.name : profile.label;
 }
