@@ -1,9 +1,9 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { Character, SupportVoice } from '@/lib/domain/schemas';
+import type { Character, NarratorVoice, SupportVoice } from '@/lib/domain/schemas';
 import { assertPaidGenerationAllowed } from '@/lib/engine/production-safety';
 
-export type VoiceProfile = Character | SupportVoice;
+export type VoiceProfile = Character | SupportVoice | NarratorVoice;
 
 export type VoiceGenerationResult = {
   audioPath: string;
@@ -38,11 +38,11 @@ export async function generateElevenLabsSpeech(
   if (!apiKey) throw new Error('Falta ELEVENLABS_API_KEY.');
 
   const narrator = options?.narrator === true;
-  const voiceId = narrator ? process.env.ELEVENLABS_NARRATOR_VOICE_ID : profile?.voiceId;
+  const voiceId = profile?.voiceId || (narrator ? process.env.ELEVENLABS_NARRATOR_VOICE_ID : undefined);
   if (!voiceId) {
     throw new Error(
       narrator
-        ? 'Falta ELEVENLABS_NARRATOR_VOICE_ID para la narración.'
+        ? 'El Narrador no tiene voiceId persistente y tampoco existe ELEVENLABS_NARRATOR_VOICE_ID.'
         : `El perfil vocal ${voiceProfileName(profile)} no tiene voiceId de ElevenLabs asignado.`
     );
   }
