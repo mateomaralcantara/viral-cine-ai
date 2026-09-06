@@ -6,6 +6,11 @@ const DISABLED_CREDENTIAL = /^(?:disabled(?:_offline)?|off|none|null|undefined|y
 
 export type ProductionPauseKind = 'billing' | 'safety' | 'technical';
 
+type ProductionProjectContext = {
+  plan?: FilmProject['plan'];
+  supportVoices?: FilmProject['supportVoices'];
+};
+
 export class ProductionSafetyError extends Error {
   readonly code = 'PRODUCTION_SAFETY_BLOCKED';
 
@@ -67,7 +72,7 @@ export function assertPaidGenerationAllowed(operation: string, credentialName?: 
   }
 }
 
-export function assertProductionCanQueue(project?: Pick<FilmProject, 'plan' | 'supportVoices'>) {
+export function assertProductionCanQueue(project?: ProductionProjectContext) {
   if (productionMode() !== 'real') {
     const hasPaidHistory = project?.plan?.scenes.some((scene) =>
       scene.shots.some((shot) => (shot.generationCount || 0) > 0)
