@@ -3,10 +3,7 @@ import type { Character, FilmProject, FilmScene, FilmShot } from '@/lib/domain/s
 
 const AMBIGUOUS_MIGRATION_ISSUE = 'Migración 4.0: hablante ambiguo. Asigna speakerId manualmente antes de producir este segmento.';
 
-export type SpeakerCandidate = {
-  id: string;
-  name: string;
-};
+export type SpeakerCandidate = { id: string; name: string };
 
 export type SpeakerSuggestion = {
   sceneId: string;
@@ -53,23 +50,7 @@ export type CastingState = {
 };
 
 export function buildCastingState(project: FilmProject): CastingState {
-  if (!project.plan) {
-    return {
-      projectId: project.id,
-      title: project.input.title,
-      characters: [],
-      unresolved: [],
-      totals: {
-        spokenShots: 0,
-        resolvedShots: 0,
-        unresolvedShots: 0,
-        highConfidence: 0,
-        existingMediaUnresolved: 0,
-        voicesAssigned: 0,
-        voicesMissing: 0
-      }
-    };
-  }
+  if (!project.plan) return emptyCastingState(project);
 
   let spokenShots = 0;
   let resolvedShots = 0;
@@ -79,16 +60,13 @@ export function buildCastingState(project: FilmProject): CastingState {
     for (const shot of scene.shots) {
       if (!shot.spokenText.trim()) continue;
       spokenShots += 1;
-      if (shotSpeakerId(shot)) {
-        resolvedShots += 1;
-        continue;
-      }
-      unresolved.push(suggestSpeaker(project, scene, shot));
+      if (shotSpeakerId(shot)) resolvedShots += 1;
+      else unresolved.push(suggestSpeaker(project, scene, shot));
     }
   }
 
-  const characters = project.plan.characters.map((character) => {
-    const voiceProvider = character.voiceProvider || 'elevenlabs';
+  const characters: CastingState['characters'] = project.plan.characters.map((character) => {
+    const voiceProvider: 'elevenlabs' | 'openai' | 'offline' = character.voiceProvider || 'elevenlabs';
     const voiceReady = voiceProvider === 'openai' || (voiceProvider === 'elevenlabs' && Boolean(character.voiceId?.trim()));
     return {
       id: character.id,
@@ -115,7 +93,7 @@ export function buildCastingState(project: FilmProject): CastingState {
       spokenShots,
       resolvedShots,
       unresolvedShots: unresolved.length,
-      highConfidence: unresolved.filter((item) => item.suggestedSpeakerId && item.confidence >= 0.92).length,
+      highConfidence: unresolved.filter((item) => Boolean(item.suggestedSpeakerId) && item.confidence >= 0.92).length,
       existingMediaUnresolved: unresolved.filter((item) => item.existingMedia).length,
       voicesAssigned,
       voicesMissing: Math.max(0, characters.length - voicesAssigned)
@@ -125,46 +103,62 @@ export function buildCastingState(project: FilmProject): CastingState {
 
 export function suggestSpeaker(project: FilmProject, scene: FilmScene, shot: FilmShot): SpeakerSuggestion {
   if (!project.plan) throw new Error('El proyecto no tiene plan.');
-  const byId = new Map(project.plan.characters.map((character) => [character.id, character]));
-  const candidateIds = unique([
-    ...(shot.characterIds || []),
-    ...(scene.characterIds || [])
-  ]).filter((id) => byId.has(id));
-  const candidates = candidateIds.map((id) => ({ id, name: byId.get(id)!.name }));
+
+  const byId = new Map<string, Character>();
+  for (const character of project.plan.characters) byId.set(character.id, character);
+
+  const candidateIds = unique([...(shot.characterIds || []), ...(scene.characterIds || [])]).filter((id) => byId.has(id));
+  const candidates: SpeakerCandidate[] = candidateIds.map((id) => ({ id, name: byId.get(id)!.name }));
   const spoken = normalizeText(shot.spokenText);
 
   const existingLine = shot.dialogueLines.find((line) => normalizeText(line.text) === spoken && byId.has(line.speakerId));
-  if (existingLine) return result(project, scene, shot, candidates, existingLine.speakerId, 0.995, 'Coincidencia exacta con dialogueLines existente.');
+  if (existingLine) {
+    return makeSuggestion(project, scene, shot, candidates, existingLine.speakerId, 0.995, 'Coincidencia exacta con dialogueLines existente.');
+  }
 
   const turnMatches = scene.dialogueTurns
     .filter((turn) => byId.has(turn.speakerId))
     .map((turn) => ({ turn, score: textSimilarity(shot.spokenText, turn.text) }))
-    .sort((a, b) => b.score - a.score);
-  if (turnMatches[0]?.score >= 0.82) {
-    const confidence = turnMatches[0].score >= 0.98 ? 0.99 : turnMatches[0].score >= 0.9 ? 0.97 : 0.94;
-    return result(project, scene, shot, candidates, turnMatches[0].turn.speakerId, confidence, 'El texto coincide con un dialogueTurn estructurado de la escena.');
+    .sort((left, right) => right.score - left.score);
+  const topTurn = turnMatches[0];
+  const secondTurn = turnMatches[1];
+  if (topTurn && topTurn.score >= 0.82 && (!secondTurn || topTurn.score - secondTurn.score >= 0.08)) {
+    const confidence = topTurn.score >= 0.98 ? 0.99 : topTurn.score >= 0.9 ? 0.97 : 0.94;
+    return makeSuggestion(project, scene, shot, candidates, topTurn.turn.speakerId, confidence, 'El texto coincide con un dialogueTurn estructurado de la escena.');
   }
 
   const labelled = labelledDialogueMatches(project.plan.characters, scene.dialogue, shot.spokenText)
-    .sort((a, b) => b.score - a.score);
-  if (labelled[0]?.score >= 0.78) {
-    const confidence = labelled[0].score >= 0.95 ? 0.98 : 0.94;
-    return result(project, scene, shot, candidates, labelled[0].character.id, confidence, 'El diálogo legado contiene una línea etiquetada con el nombre del personaje.');
+    .sort((left, right) => right.score - left.score);
+  const topLabel = labelled[0];
+  const secondLabel = labelled[1];
+  if (topLabel && topLabel.score >= 0.78 && (!secondLabel || topLabel.score - secondLabel.score >= 0.08)) {
+    const confidence = topLabel.score >= 0.95 ? 0.98 : 0.94;
+    return makeSuggestion(project, scene, shot, candidates, topLabel.character.id, confidence, 'El diálogo legado contiene una línea etiquetada con el nombre del personaje.');
   }
 
   const prefixCharacter = project.plan.characters.find((character) => {
     const prefix = normalizeText(character.name);
     return spoken.startsWith(`${prefix} `) || spoken === prefix;
   });
-  if (prefixCharacter) return result(project, scene, shot, candidates, prefixCharacter.id, 0.95, 'El texto hablado comienza con el nombre del personaje.');
-
-  if (candidates.length === 1) {
-    return result(project, scene, shot, candidates, candidates[0].id, 0.94, 'Solo existe un personaje elegible en el reparto de la toma/escena.');
+  if (prefixCharacter) {
+    return makeSuggestion(project, scene, shot, candidates, prefixCharacter.id, 0.95, 'El texto hablado comienza con el nombre del personaje.');
   }
 
-  return result(project, scene, shot, candidates, undefined, 0, candidates.length
-    ? 'Hay varios personajes elegibles y no existe evidencia suficiente para decidir automáticamente.'
-    : 'La toma no contiene candidatos de reparto válidos; requiere selección manual.');
+  if (candidates.length === 1) {
+    return makeSuggestion(project, scene, shot, candidates, candidates[0].id, 0.94, 'Solo existe un personaje elegible en el reparto de la toma/escena.');
+  }
+
+  return makeSuggestion(
+    project,
+    scene,
+    shot,
+    candidates,
+    undefined,
+    0,
+    candidates.length
+      ? 'Hay varios personajes elegibles y no existe evidencia suficiente para decidir automáticamente.'
+      : 'La toma no contiene candidatos de reparto válidos; requiere selección manual.'
+  );
 }
 
 export function applySpeakerAssignment(
@@ -184,12 +178,7 @@ export function applySpeakerAssignment(
 
   shot.speakerId = character.id;
   if (!shot.dialogueLines.length) {
-    shot.dialogueLines = [{
-      id: randomUUID(),
-      speakerId: character.id,
-      text: shot.spokenText.trim(),
-      startSeconds: 0
-    }];
+    shot.dialogueLines = [{ id: randomUUID(), speakerId: character.id, text: shot.spokenText.trim(), startSeconds: 0 }];
   } else if (shot.dialogueLines.length === 1 && normalizeText(shot.dialogueLines[0].text) === normalizeText(shot.spokenText)) {
     shot.dialogueLines[0].speakerId = character.id;
   }
@@ -242,6 +231,7 @@ export function setCharacterVoice(
   if (!project.plan) throw new Error('El proyecto no tiene plan.');
   const character = project.plan.characters.find((item) => item.id === characterId);
   if (!character) throw new Error(`No existe el personaje '${characterId}'.`);
+
   character.voiceProvider = input.provider;
   character.voiceId = cleanOptional(input.voiceId);
   character.voiceStability = boundedOptional(input.stability, 0, 1, 'stability');
@@ -254,7 +244,25 @@ export function setCharacterVoice(
   return character;
 }
 
-function result(
+function emptyCastingState(project: FilmProject): CastingState {
+  return {
+    projectId: project.id,
+    title: project.input.title,
+    characters: [],
+    unresolved: [],
+    totals: {
+      spokenShots: 0,
+      resolvedShots: 0,
+      unresolvedShots: 0,
+      highConfidence: 0,
+      existingMediaUnresolved: 0,
+      voicesAssigned: 0,
+      voicesMissing: 0
+    }
+  };
+}
+
+function makeSuggestion(
   project: FilmProject,
   scene: FilmScene,
   shot: FilmShot,
@@ -263,7 +271,7 @@ function result(
   confidence: number,
   reason: string
 ): SpeakerSuggestion {
-  const character = suggestedSpeakerId && project.plan?.characters.find((item) => item.id === suggestedSpeakerId);
+  const character = suggestedSpeakerId ? project.plan?.characters.find((item) => item.id === suggestedSpeakerId) : undefined;
   const expandedCandidates = character && !candidates.some((candidate) => candidate.id === character.id)
     ? [...candidates, { id: character.id, name: character.name }]
     : candidates;
@@ -312,11 +320,16 @@ function textSimilarity(left: string, right: string) {
   const b = normalizeText(right);
   if (!a || !b) return 0;
   if (a === b) return 1;
+
   if (a.includes(b) || b.includes(a)) {
-    const shorter = Math.min(a.length, b.length);
-    const longer = Math.max(a.length, b.length);
-    return Math.max(0.82, shorter / Math.max(1, longer));
+    const shorterText = a.length <= b.length ? a : b;
+    const longerText = a.length > b.length ? a : b;
+    const ratio = shorterText.length / Math.max(1, longerText.length);
+    const tokenCount = shorterText.split(' ').filter(Boolean).length;
+    if (ratio >= 0.8) return ratio;
+    if (tokenCount >= 4 && ratio >= 0.55) return Math.max(0.84, ratio);
   }
+
   const aTokens = new Set(a.split(' ').filter(Boolean));
   const bTokens = new Set(b.split(' ').filter(Boolean));
   const intersection = [...aTokens].filter((token) => bTokens.has(token)).length;
@@ -344,11 +357,11 @@ function unique<T>(values: T[]) {
 
 function cleanOptional(value?: string) {
   const cleaned = value?.trim();
-  return cleaned ? cleaned : undefined;
+  return cleaned || undefined;
 }
 
 function boundedOptional(value: number | undefined, minimum: number, maximum: number, label: string) {
-  if (value === undefined || value === null || Number.isNaN(value)) return undefined;
+  if (value === undefined || Number.isNaN(value)) return undefined;
   if (value < minimum || value > maximum) throw new Error(`${label} debe estar entre ${minimum} y ${maximum}.`);
   return value;
 }
