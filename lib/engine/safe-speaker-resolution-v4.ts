@@ -1,5 +1,6 @@
 import type { FilmProject, FilmShot } from '@/lib/domain/schemas';
 import { classifyLegacyProjectShots } from '@/lib/engine/legacy-shot-classifier-v4';
+import { buildLegacyMixedTurnPlan } from '@/lib/engine/legacy-mixed-turns-v4';
 
 const AMBIGUOUS_MIGRATION_ISSUE = 'Migración 4.0: hablante ambiguo. Asigna speakerId manualmente antes de producir este segmento.';
 
@@ -14,20 +15,37 @@ export type NarratorResolutionPreview = {
 
 export function previewSafeNarratorResolution(project: FilmProject, minimumConfidence = 0.99): NarratorResolutionPreview {
   const report = classifyLegacyProjectShots(project);
-  const eligible = report.rows.filter((row) =>
-    row.classification === 'narrator' &&
-    row.suggestedSpeakerId === 'narrator' &&
-    row.confidence >= minimumConfidence &&
-    !row.currentSpeakerId
+  const eligibleIds = new Set(
+    report.rows
+      .filter((row) =>
+        row.classification === 'narrator' &&
+        row.suggestedSpeakerId === 'narrator' &&
+        row.confidence >= minimumConfidence &&
+        !row.currentSpeakerId
+      )
+      .map((row) => row.shotId)
   );
+
+  // Algunos proyectos 3.x duplicaron una frase de narración dentro del campo legacy de diálogo.
+  // El clasificador conservador la marca ambigua; si el descompositor demuestra que toda la toma
+  // contiene exactamente un único turno de narrador, puede recuperarse sin adivinar ni dividir media.
+  const mixedPlan = buildLegacyMixedTurnPlan(project);
+  for (const row of mixedPlan.rows) {
+    if (row.turns.length !== 1) continue;
+    const only = row.turns[0];
+    if (only.kind !== 'narrator' || only.speakerId !== 'narrator' || only.confidence < minimumConfidence) continue;
+    const current = report.rows.find((candidate) => candidate.shotId === row.shotId)?.currentSpeakerId;
+    if (!current) eligibleIds.add(row.shotId);
+  }
+
   return {
     projectId: project.id,
     title: project.input.title,
-    eligibleShotIds: eligible.map((row) => row.shotId),
-    eligibleCount: eligible.length,
+    eligibleShotIds: [...eligibleIds],
+    eligibleCount: eligibleIds.size,
     alreadyResolved: report.rows.filter((row) => row.currentSpeakerId === 'narrator').length,
     remainingNonNarratorSpoken: report.rows.filter((row) =>
-      row.spokenText.trim() && row.classification !== 'narrator' && !row.currentSpeakerId
+      row.spokenText.trim() && !row.currentSpeakerId && !eligibleIds.has(row.shotId)
     ).length
   };
 }
