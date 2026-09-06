@@ -23,7 +23,8 @@ type ElevenVoiceListPayload = {
 };
 
 export async function discoverElevenLabsVoices(apiKey = process.env.ELEVENLABS_API_KEY): Promise<DiscoveredElevenVoice[]> {
-  if (!isUsableCredentialValue(apiKey)) {
+  const key = apiKey?.trim();
+  if (!key || !isUsableCredentialValue(key)) {
     throw new Error('ELEVENLABS_API_KEY no está configurada con un valor utilizable.');
   }
 
@@ -37,7 +38,7 @@ export async function discoverElevenLabsVoices(apiKey = process.env.ELEVENLABS_A
 
     const response = await fetch(url, {
       method: 'GET',
-      headers: { 'xi-api-key': apiKey }
+      headers: { 'xi-api-key': key }
     });
     if (!response.ok) {
       const detail = (await response.text()).slice(0, 800);
