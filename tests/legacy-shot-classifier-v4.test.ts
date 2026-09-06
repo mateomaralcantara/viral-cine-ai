@@ -59,3 +59,40 @@ test('clasificador legacy distingue narración, personaje y caso manual sin toca
   assert.equal(project.plan!.scenes[0].shots[0].videoAsset, originalVideo);
   assert.equal(project.plan!.scenes[0].shots[0].speakerId, undefined);
 });
+
+test('clasificador nunca autoasigna una toma que mezcla varios hablantes', () => {
+  const project = fixture();
+  const scene = project.plan!.scenes[0];
+  scene.dialogue = 'Jesús: Padre, perdónalos.\nMaría: Hijo...';
+  project.plan!.characters.push({
+    id: 'maria', name: 'María', role: 'Madre', age: 50, appearance: 'Test', wardrobe: 'Test',
+    personality: 'Test', voiceInstructions: 'Test', voiceProvider: 'elevenlabs', imagePrompt: 'Test'
+  });
+  scene.shots = [{
+    id: 'shot-mixed', order: 1, title: 'Mixta', durationSeconds: 8, visualPrompt: 'Test', camera: 'sin cortes',
+    spokenText: 'JESÚS: Padre, perdónalos. MARÍA: Hijo...', dialogueLines: [], mode: 'video',
+    characterIds: ['jesus', 'maria'], status: 'ready', videoAsset: 'video/existing.mp4'
+  }];
+  const report = classifyLegacyProjectShots(project);
+  assert.equal(report.totals.character, 0);
+  assert.equal(report.totals.ambiguous, 1);
+  assert.deepEqual(report.rows[0].speakerLabels.sort(), ['Jesús', 'María'].sort());
+  assert.match(report.rows[0].reason, /varios hablantes/i);
+  assert.equal(scene.shots[0].speakerId, undefined);
+  assert.equal(scene.shots[0].videoAsset, 'video/existing.mp4');
+});
+
+test('clasificador rechaza narración mezclada con un personaje aunque el diálogo coincida al 100%', () => {
+  const project = fixture();
+  const scene = project.plan!.scenes[0];
+  scene.narration = 'El viento recorrió la colina antes de que Jesús hablara.';
+  scene.shots = [{
+    id: 'shot-mixed-narration', order: 1, title: 'Mixta', durationSeconds: 8, visualPrompt: 'Test', camera: 'sin cortes',
+    spokenText: 'El viento recorrió la colina. JESÚS: Padre, en tus manos entrego mi espíritu.',
+    dialogueLines: [], mode: 'video', characterIds: ['jesus'], status: 'ready'
+  }];
+  const report = classifyLegacyProjectShots(project);
+  assert.equal(report.totals.character, 0);
+  assert.equal(report.totals.ambiguous, 1);
+  assert.match(report.rows[0].reason, /mezcla narración/i);
+});
