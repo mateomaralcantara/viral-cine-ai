@@ -202,7 +202,7 @@ export const FilmProjectSchema = z.object({
   status: ProjectStatusSchema,
   input: ProjectInputSchema,
   plan: FilmPlanSchema.optional(),
-  supportVoices: z.array(SupportVoiceSchema).max(24).default([]),
+  supportVoices: z.array(SupportVoiceSchema).max(24).optional(),
   budget: BudgetSchema.optional(),
   pilot: PilotSchema.optional(),
   progress: ProgressSchema,
