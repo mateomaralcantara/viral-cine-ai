@@ -1,7 +1,9 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { Character } from '@/lib/domain/schemas';
+import type { Character, SupportVoice } from '@/lib/domain/schemas';
 import { assertPaidGenerationAllowed } from '@/lib/engine/production-safety';
+
+export type VoiceProfile = Character | SupportVoice;
 
 export type VoiceGenerationResult = {
   audioPath: string;
@@ -25,7 +27,7 @@ type ElevenTimingResponse = {
 };
 
 export async function generateElevenLabsSpeech(
-  character: Character | undefined,
+  profile: VoiceProfile | undefined,
   text: string,
   audioPath: string,
   alignmentPath: string,
@@ -36,16 +38,16 @@ export async function generateElevenLabsSpeech(
   if (!apiKey) throw new Error('Falta ELEVENLABS_API_KEY.');
 
   const narrator = options?.narrator === true;
-  const voiceId = narrator ? process.env.ELEVENLABS_NARRATOR_VOICE_ID : character?.voiceId;
+  const voiceId = narrator ? process.env.ELEVENLABS_NARRATOR_VOICE_ID : profile?.voiceId;
   if (!voiceId) {
     throw new Error(
       narrator
         ? 'Falta ELEVENLABS_NARRATOR_VOICE_ID para la narración.'
-        : `El personaje ${character?.name || 'desconocido'} no tiene voiceId de ElevenLabs asignado.`
+        : `El perfil vocal ${voiceProfileName(profile)} no tiene voiceId de ElevenLabs asignado.`
     );
   }
 
-  const modelId = character?.voiceModel || process.env.ELEVENLABS_TTS_MODEL || 'eleven_multilingual_v2';
+  const modelId = profile?.voiceModel || process.env.ELEVENLABS_TTS_MODEL || 'eleven_multilingual_v2';
   const decoratedText = options?.emotion ? `[${options.emotion}] ${text}` : text;
   const endpoint = `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}/with-timestamps?output_format=mp3_44100_128`;
   const response = await fetch(endpoint, {
@@ -58,10 +60,10 @@ export async function generateElevenLabsSpeech(
       text: decoratedText,
       model_id: modelId,
       voice_settings: {
-        stability: character?.voiceStability ?? numberEnv('ELEVENLABS_STABILITY', 0.5),
-        similarity_boost: character?.voiceSimilarity ?? numberEnv('ELEVENLABS_SIMILARITY_BOOST', 0.8),
-        style: character?.voiceStyle ?? numberEnv('ELEVENLABS_STYLE', 0.25),
-        speed: character?.voiceSpeed ?? numberEnv('ELEVENLABS_SPEED', 1),
+        stability: profile?.voiceStability ?? numberEnv('ELEVENLABS_STABILITY', 0.5),
+        similarity_boost: profile?.voiceSimilarity ?? numberEnv('ELEVENLABS_SIMILARITY_BOOST', 0.8),
+        style: profile?.voiceStyle ?? numberEnv('ELEVENLABS_STYLE', 0.25),
+        speed: profile?.voiceSpeed ?? numberEnv('ELEVENLABS_SPEED', 1),
         use_speaker_boost: true
       }
     })
@@ -96,12 +98,19 @@ export async function generateElevenLabsSpeech(
   };
 }
 
-export function assertCharacterVoiceReady(character: Character | undefined) {
-  if (!character) throw new Error('No existe el personaje asociado al parlamento.');
-  if (character.voiceProvider !== 'elevenlabs') return;
-  if (!character.voiceId) {
-    throw new Error(`Casting vocal incompleto: ${character.name} no tiene voiceId. Asigna una voz persistente antes de producir.`);
+export function assertVoiceProfileReady(profile: VoiceProfile | undefined) {
+  if (!profile) throw new Error('No existe el perfil vocal asociado al parlamento.');
+  if (profile.voiceProvider !== 'elevenlabs') return;
+  if (!profile.voiceId) {
+    throw new Error(`Casting vocal incompleto: ${voiceProfileName(profile)} no tiene voiceId. Asigna una voz persistente antes de producir.`);
   }
+}
+
+export const assertCharacterVoiceReady = assertVoiceProfileReady;
+
+function voiceProfileName(profile: VoiceProfile | undefined) {
+  if (!profile) return 'desconocido';
+  return 'name' in profile ? profile.name : profile.label;
 }
 
 function numberEnv(name: string, fallback: number) {
