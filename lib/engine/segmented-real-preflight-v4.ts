@@ -68,9 +68,7 @@ export function buildSegmentedRealPreflight(
     let credentialName: SegmentedRealTurnPreflight['credentialName'];
     let voiceIdReady = false;
 
-    if (!located) {
-      blockers.push(`${label}: no existe un perfil vocal persistente.`);
-    }
+    if (!located) blockers.push(`${label}: no existe un perfil vocal persistente.`);
 
     if (provider === 'elevenlabs') {
       credentialName = 'ELEVENLABS_API_KEY';
@@ -86,6 +84,8 @@ export function buildSegmentedRealPreflight(
     }
 
     const credentialVisible = credentialName ? hasUsableCredential(credentialName) : false;
+    if (credentialName && !credentialVisible) blockers.push(`${label}: falta ${credentialName}.`);
+
     const voiceEstimatedUsd = estimateOperationCost('voice', voiceCostUnits(turn.text));
     const lipSyncEstimatedUsd = turn.requiresLipSync
       ? estimateOperationCost('lip-sync', turn.durationSeconds)
@@ -126,17 +126,18 @@ export function buildSegmentedRealPreflight(
     }
   }
 
-  const blockers = unique(rows.flatMap((row) => row.blockers));
+  const blockers = rows.flatMap((row) => row.blockers);
+  if (rows.some((row) => row.requiresLipSync) && !hasUsableCredential('FAL_KEY')) {
+    blockers.push('Lip-sync: falta FAL_KEY.');
+  }
+
+  const uniqueBlockers = unique(blockers);
   const lipSyncSeconds = rows
     .filter((row) => row.requiresLipSync)
     .reduce((sum, row) => sum + row.durationSeconds, 0);
   const voiceEstimatedUsd = sumMoney(rows.map((row) => row.voiceEstimatedUsd));
   const lipSyncEstimatedUsd = sumMoney(rows.map((row) => row.lipSyncEstimatedUsd));
   const requiredProfiles = [...profileMap.values()];
-
-  if (rows.some((row) => row.requiresLipSync) && !hasUsableCredential('FAL_KEY')) {
-    blockers.push('Lip-sync: FAL_KEY no está visible en el entorno del CLI.');
-  }
 
   return {
     projectId: project.id,
@@ -157,10 +158,10 @@ export function buildSegmentedRealPreflight(
       totalEstimatedUsd: sumMoney([voiceEstimatedUsd, lipSyncEstimatedUsd]),
       profilesRequired: requiredProfiles.length,
       profilesReady: requiredProfiles.filter((profile) => profile.voiceIdReady).length,
-      blockers: blockers.length
+      blockers: uniqueBlockers.length
     },
     requiredProfiles,
-    blockers
+    blockers: uniqueBlockers
   };
 }
 
