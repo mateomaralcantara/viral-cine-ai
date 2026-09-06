@@ -18,6 +18,7 @@
     "migrate:4": "node --import tsx scripts/migrate-v4.ts",
     "voices:4": "node --import tsx scripts/voices-v4.ts",
     "casting:4": "node --import tsx scripts/casting-v4.ts",
+    "hydrate:preview": "node --import tsx scripts/hydrate-preview-v4.ts",
     "verify:4": "npm run typecheck && npm test"
   },
   "dependencies": {
