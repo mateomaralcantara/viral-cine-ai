@@ -2,6 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { FilmProject } from '../lib/domain/schemas';
 import { buildLegacyMixedTurnPlan } from '../lib/engine/legacy-mixed-turns-v4';
+import {
+  applySupportVoiceRegistry,
+  previewSupportVoiceRegistry,
+  supportVoiceId
+} from '../lib/engine/support-voice-registry-v4';
 
 function fixture(): FilmProject {
   return {
@@ -47,6 +52,7 @@ function fixture(): FilmProject {
         ]
       }]
     },
+    supportVoices: [],
     progress: { phase: 'ready', percent: 100, message: 'Test', updatedAt: '2026-09-06T00:00:00.000Z' },
     productionLog: []
   } as FilmProject;
@@ -80,4 +86,30 @@ test('planificador separa narrador de una voz secundaria sin inventar characterI
   assert.equal(row.turns[1].speakerId, undefined);
   assert.deepEqual(report.totals.supportVoiceLabels, ['Soldado']);
   assert.equal(row.originalMedia.includes('video=video/existing-2.mp4'), true);
+});
+
+test('registro secundario crea id estable, preserva media y luego enlaza el turno', () => {
+  const project = fixture();
+  const beforeMedia = JSON.stringify(project.plan!.scenes[0].shots.map((shot) => ({
+    id: shot.id, voiceAsset: shot.voiceAsset, videoAsset: shot.videoAsset
+  })));
+  const preview = previewSupportVoiceRegistry(project);
+  assert.deepEqual(preview.missingLabels, ['Soldado']);
+
+  const result = applySupportVoiceRegistry(project);
+  assert.equal(result.created, 1);
+  assert.equal(project.supportVoices.length, 1);
+  assert.equal(project.supportVoices[0].id, supportVoiceId('Soldado'));
+  assert.equal(project.supportVoices[0].voiceId, undefined);
+
+  const afterMedia = JSON.stringify(project.plan!.scenes[0].shots.map((shot) => ({
+    id: shot.id, voiceAsset: shot.voiceAsset, videoAsset: shot.videoAsset
+  })));
+  assert.equal(beforeMedia, afterMedia);
+
+  const afterPlan = buildLegacyMixedTurnPlan(project);
+  const supportTurn = afterPlan.rows.find((row) => row.shotId === 'shot-support')?.turns.find((turn) => turn.kind === 'support');
+  assert.ok(supportTurn);
+  assert.equal(supportTurn.speakerId, supportVoiceId('Soldado'));
+  assert.deepEqual(previewSupportVoiceRegistry(project).missingLabels, []);
 });
