@@ -52,7 +52,27 @@ jobs:
           git push origin HEAD:feat/viralcine-4-real-cinema
 
       - name: Typecheck
-        run: npm run typecheck
+        id: typecheck
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          npm run typecheck 2>&1 | tee typecheck.log
+
+      - name: Publish TypeScript diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: typecheck-diagnostics-${{ github.sha }}
+          path: typecheck.log
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Enforce Typecheck
+        if: steps.typecheck.outcome == 'failure'
+        run: |
+          echo "Typecheck failed. Diagnostics were uploaded as an artifact."
+          cat typecheck.log
+          exit 1
 
       - name: Tests
         run: npm test
