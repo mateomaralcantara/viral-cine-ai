@@ -1,5 +1,6 @@
 import type { FilmProject, FilmScene, FilmShot } from '@/lib/domain/schemas';
 import { parseLegacyDialogue } from '@/lib/engine/legacy-hydration-v4';
+import { resolveSingleSpeakerId } from '@/lib/engine/speaker-resolution';
 
 export type LegacyShotClassification = {
   sceneId: string;
@@ -105,7 +106,6 @@ function classifyShot(
   const second = dialogueMatches[1];
   const bestDialogueScore = best?.score || 0;
 
-  // Seguridad 4.0: un solo segmento de lip-sync nunca puede representar varios hablantes.
   if (speakerLabels.length >= 2) {
     return row(scene, shot, {
       classification: 'ambiguous', confidence: 0,
@@ -114,9 +114,6 @@ function classifyShot(
     });
   }
 
-  // Un texto no etiquetado antes de la primera etiqueta puede ser la continuación del hablante
-  // de la toma anterior. Aunque después haya un único personaje explícito, el segmento completo
-  // no puede considerarse de un solo hablante sin adivinar.
   if (speakerLabels.length === 1) {
     const prefix = textBeforeFirstSpeakerLabel(spoken, speakerLabels[0]);
     if (wordCount(prefix) >= 3 && narrationScore < 0.15) {
@@ -128,8 +125,6 @@ function classifyShot(
     }
   }
 
-  // Si existe una etiqueta de personaje y también una porción material de narración,
-  // el clip es mixto narrador+personaje y tampoco admite un speakerId único.
   if (speakerLabels.length === 1 && narrationScore >= 0.15) {
     return row(scene, shot, {
       classification: 'ambiguous', confidence: 0,
@@ -198,7 +193,7 @@ function row(
     shotId: shot.id,
     shotOrder: shot.order,
     spokenText: shot.spokenText,
-    currentSpeakerId: shot.speakerId || shot.dialogueLines?.[0]?.speakerId,
+    currentSpeakerId: resolveSingleSpeakerId(shot),
     ...result
   };
 }
