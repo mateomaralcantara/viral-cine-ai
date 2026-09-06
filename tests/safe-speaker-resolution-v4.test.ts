@@ -37,6 +37,7 @@ function fixture(): FilmProject {
         ]
       }]
     },
+    supportVoices: [],
     progress: { phase: 'ready', percent: 100, message: 'Test', updatedAt: '2026-09-05T00:00:00.000Z' }, productionLog: []
   } as FilmProject;
 }
@@ -66,4 +67,26 @@ test('aplicar narrador conserva todos los assets y deja la toma mixta sin tocar'
   assert.equal(project.plan!.scenes[0].shots[1].speakerId, undefined);
   assert.equal(before, after);
   assert.match(project.productionLog.at(-1) || '', /No se modificó ni regeneró media/);
+});
+
+test('recupera narración única aunque una frase corta legacy también aparezca como diálogo', () => {
+  const project = fixture();
+  const scene = project.plan!.scenes[0];
+  scene.narration = 'hijo. Sin embargo, mientras Jesús cruzaba el umbral del patio, la mirada de María no se apartó';
+  scene.dialogue = 'Jesús: hijo.';
+  scene.shots = [{
+    id: 'legacy-duplicate', order: 1, title: 'Narración duplicada', durationSeconds: 7, visualPrompt: 'Test', camera: 'sin cortes',
+    spokenText: scene.narration, dialogueLines: [], mode: 'video', characterIds: ['jesus'], status: 'ready',
+    voiceAsset: 'audio/existing.mp3', videoAsset: 'video/existing.mp4', imageAsset: 'images/existing.png'
+  }];
+  const before = JSON.stringify(scene.shots[0]);
+  const preview = previewSafeNarratorResolution(project);
+  assert.deepEqual(preview.eligibleShotIds, ['legacy-duplicate']);
+  assert.equal(preview.remainingNonNarratorSpoken, 0);
+  const result = applySafeNarratorResolution(project);
+  assert.equal(result.applied, 1);
+  assert.equal(scene.shots[0].speakerId, 'narrator');
+  assert.equal(scene.shots[0].videoAsset, 'video/existing.mp4');
+  assert.equal(scene.shots[0].voiceAsset, 'audio/existing.mp3');
+  assert.notEqual(JSON.stringify(scene.shots[0]), before);
 });
