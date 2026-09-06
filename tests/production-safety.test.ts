@@ -78,6 +78,39 @@ test('producción real bloquea cualquier texto hablado sin speakerId', () => {
   });
 });
 
+test('producción real exige voiceId también para una voz secundaria persistente', () => {
+  const plan = createDemoPlan(input);
+  for (const scene of plan.scenes) {
+    for (const shot of scene.shots) {
+      shot.spokenText = '';
+      shot.speakerId = undefined;
+      shot.dialogueLines = [];
+    }
+  }
+  const target = plan.scenes[0].shots[0];
+  target.spokenText = 'Ahora caminas con él.';
+  target.speakerId = 'support-soldado';
+  target.dialogueLines = [{ id: 'support-line', speakerId: 'support-soldado', text: target.spokenText, startSeconds: 0 }];
+  const supportVoices = [{
+    id: 'support-soldado', label: 'Soldado', voiceInstructions: 'Voz militar.', voiceProvider: 'elevenlabs' as const,
+    source: 'legacy-support' as const
+  }];
+  withEnv({
+    PRODUCTION_MODE: 'real',
+    ALLOW_EXTERNAL_API_CALLS: 'true',
+    ALLOW_PAID_GENERATION: 'true',
+    OPENAI_API_KEY: 'openai-test-credential-12345',
+    GEMINI_API_KEY: 'gemini-test-credential-12345',
+    ELEVENLABS_API_KEY: 'eleven-test-credential-12345',
+    ELEVENLABS_NARRATOR_VOICE_ID: 'narrator-test-voice-12345'
+  }, () => {
+    assert.throws(
+      () => assertProductionCanQueue({ plan, supportVoices }),
+      (error: unknown) => error instanceof ProductionSafetyError && /Soldado: falta voiceId/i.test(error.message)
+    );
+  });
+});
+
 test('los errores de saldo se pausan y los mensajes ocultan credenciales', () => {
   assert.equal(classifyProductionError(new Error('429 insufficient_quota credit_balance_exhausted')), 'billing');
   const message = safeErrorMessage(new Error('authorization: Bearer-secret-token-123456789 set-cookie=abc123'));
