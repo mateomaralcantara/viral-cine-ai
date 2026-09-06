@@ -1,50 +1,68 @@
-import { getProject, updateProject } from '../lib/storage/project-store';
+import { copyFile, mkdir } from 'node:fs/promises';
+import path from 'node:path';
+import { buildVoiceCastingState, setVoiceProfile } from '../lib/engine/voice-casting-v4';
+import { dataRoot, getProject, projectRoot, updateProject } from '../lib/storage/project-store';
 
-const [, , command, projectId, characterSelector, voiceId, providerArg] = process.argv;
+const [, , command, projectId, profileSelector, voiceIdArg, providerArg] = process.argv;
 
 if (!command || !projectId) usage();
 
 if (command === 'list') {
   const project = await getProject(projectId);
-  if (!project.plan) throw new Error('El proyecto no tiene personajes todavía. Genera primero el plan.');
-  console.log(`\nVoces de: ${project.input.title}`);
-  for (const character of project.plan.characters) {
+  const state = buildVoiceCastingState(project);
+  console.log(`\nVoice Casting 4.0 — ${project.input.title}`);
+  console.log(`Perfiles: ${state.totals.ready}/${state.totals.profiles} listos`);
+  for (const profile of state.profiles) {
     console.log([
-      `- ${character.name}`,
-      `id=${character.id}`,
-      `provider=${character.voiceProvider || 'elevenlabs'}`,
-      `voiceId=${character.voiceId || 'SIN ASIGNAR'}`
+      `- ${profile.label}`,
+      `tipo=${profile.kind}`,
+      `id=${profile.id}`,
+      `provider=${profile.voiceProvider}`,
+      `voiceId=${profile.voiceId ? maskVoiceId(profile.voiceId) : 'SIN ASIGNAR'}`,
+      `estado=${profile.voiceReady ? 'LISTA' : 'PENDIENTE'}`
     ].join(' | '));
   }
+  console.log('\nSolo lectura: no llama proveedores ni genera gasto.');
   process.exit(0);
 }
 
 if (command === 'assign') {
-  if (!characterSelector || !voiceId) usage();
+  if (!profileSelector || !voiceIdArg) usage();
   const provider = normalizeProvider(providerArg || 'elevenlabs');
+  const current = await getProject(projectId);
+  if (['planning', 'queued', 'producing', 'composing'].includes(current.status)) {
+    throw new Error(`No se puede modificar casting mientras el proyecto está en estado ${current.status}.`);
+  }
+  const state = buildVoiceCastingState(current);
+  const normalized = profileSelector.toLocaleLowerCase();
+  const matches = state.profiles.filter((profile) =>
+    profile.id === profileSelector || profile.label.toLocaleLowerCase() === normalized
+  );
+  if (matches.length !== 1) {
+    throw new Error(matches.length === 0
+      ? `No existe perfil '${profileSelector}'. Usa: npm run voices:4 -- list ${projectId}`
+      : `El selector '${profileSelector}' es ambiguo. Usa el id exacto.`);
+  }
+  const target = matches[0];
+  const voiceId = voiceIdArg === '-' ? undefined : voiceIdArg;
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const backupDir = path.join(dataRoot(), 'backups', `voice-casting-${stamp}`, projectId);
+  await mkdir(backupDir, { recursive: true });
+  const backupPath = path.join(backupDir, 'project.json');
+  await copyFile(path.join(projectRoot(projectId), 'project.json'), backupPath);
+
   const updated = await updateProject(projectId, (project) => {
-    if (!project.plan) throw new Error('El proyecto no tiene personajes todavía.');
-    const normalized = characterSelector.toLocaleLowerCase();
-    const matches = project.plan.characters.filter((character) =>
-      character.id === characterSelector || character.name.toLocaleLowerCase() === normalized
-    );
-    if (matches.length !== 1) {
-      throw new Error(matches.length === 0
-        ? `No existe personaje '${characterSelector}'. Usa: npm run voices:4 -- list ${projectId}`
-        : `El selector '${characterSelector}' es ambiguo. Usa el id exacto del personaje.`);
+    if (['planning', 'queued', 'producing', 'composing'].includes(project.status)) {
+      throw new Error(`No se puede modificar casting mientras el proyecto está en estado ${project.status}.`);
     }
-    const character = matches[0];
-    character.voiceProvider = provider;
-    character.voiceId = voiceId;
-    project.productionLog.push(
-      `${new Date().toISOString()} Casting vocal 4.0 actualizado para ${character.name}: proveedor ${provider}, voiceId configurada.`
-    );
+    setVoiceProfile(project, target.id, { provider, voiceId });
     return project;
   });
-  const character = updated.plan?.characters.find((item) =>
-    item.id === characterSelector || item.name.toLocaleLowerCase() === characterSelector.toLocaleLowerCase()
-  );
-  console.log(`OK: ${character?.name || characterSelector} -> ${provider} / ${maskVoiceId(voiceId)}`);
+  const saved = buildVoiceCastingState(updated).profiles.find((profile) => profile.id === target.id);
+  console.log(`OK: ${saved?.label || target.label} -> ${provider} / ${voiceId ? maskVoiceId(voiceId) : 'SIN VOICE ID'}`);
+  console.log(`Backup project.json: ${backupPath}`);
+  console.log('Media: PRESERVADA. APIs externas: NO utilizadas. Gasto: US$0.');
   process.exit(0);
 }
 
@@ -64,6 +82,6 @@ function maskVoiceId(value: string) {
 function usage(): never {
   console.log('Uso:');
   console.log('  npm run voices:4 -- list <projectId>');
-  console.log('  npm run voices:4 -- assign <projectId> "Nombre o characterId" <voiceId> [elevenlabs|openai|offline]');
+  console.log('  npm run voices:4 -- assign <projectId> "Narrador|Nombre|profileId" <voiceId|-> [elevenlabs|openai|offline]');
   process.exit(1);
 }
