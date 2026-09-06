@@ -16,6 +16,7 @@ export type LegacyShotClassification = {
   reason: string;
   narrationScore: number;
   bestDialogueScore: number;
+  speakerLabels: string[];
   existingMedia: string[];
 };
 
@@ -57,15 +58,18 @@ export function classifyLegacyProjectShots(project: FilmProject): LegacyShotClas
 function classifyScene(project: FilmProject, scene: FilmScene) {
   const characters = project.plan?.characters || [];
   const parsed = parseLegacyDialogue(characters, scene.dialogue);
-  return scene.shots.map((shot) => classifyShot(scene, shot, parsed.turns));
+  const sceneLabels = extractDialogueLabels(scene.dialogue);
+  return scene.shots.map((shot) => classifyShot(scene, shot, parsed.turns, sceneLabels));
 }
 
 function classifyShot(
   scene: FilmScene,
   shot: FilmShot,
-  turns: ReturnType<typeof parseLegacyDialogue>['turns']
+  turns: ReturnType<typeof parseLegacyDialogue>['turns'],
+  sceneLabels: string[]
 ): LegacyShotClassification {
   const spoken = shot.spokenText.trim();
+  const speakerLabels = labelsPresentInShot(spoken, sceneLabels);
   const existingMedia = [
     shot.voiceAsset ? `voice=${shot.voiceAsset}` : '',
     shot.videoAsset ? `video=${shot.videoAsset}` : '',
@@ -77,7 +81,7 @@ function classifyShot(
   if (!spoken) {
     return row(scene, shot, {
       classification: 'silence', confidence: 1, reason: 'La toma no contiene spokenText.',
-      narrationScore: 0, bestDialogueScore: 0, existingMedia
+      narrationScore: 0, bestDialogueScore: 0, speakerLabels, existingMedia
     });
   }
 
@@ -101,11 +105,30 @@ function classifyShot(
   const second = dialogueMatches[1];
   const bestDialogueScore = best?.score || 0;
 
+  // Seguridad 4.0: un solo segmento de lip-sync nunca puede representar varios hablantes.
+  if (speakerLabels.length >= 2) {
+    return row(scene, shot, {
+      classification: 'ambiguous', confidence: 0,
+      reason: `La toma contiene varios hablantes etiquetados (${speakerLabels.join(', ')}); debe dividirse antes de asignar speakerId.`,
+      narrationScore, bestDialogueScore, speakerLabels, existingMedia
+    });
+  }
+
+  // Si existe una etiqueta de personaje y también una porción material de narración,
+  // el clip es mixto narrador+personaje y tampoco admite un speakerId único.
+  if (speakerLabels.length === 1 && narrationScore >= 0.15) {
+    return row(scene, shot, {
+      classification: 'ambiguous', confidence: 0,
+      reason: `La toma mezcla narración con diálogo etiquetado de ${speakerLabels[0]}; debe dividirse antes de lip-sync.`,
+      narrationScore, bestDialogueScore, speakerLabels, existingMedia
+    });
+  }
+
   if (narrationExact && !(best?.exact)) {
     return row(scene, shot, {
       classification: 'narrator', suggestedSpeakerId: 'narrator', suggestedSpeakerName: 'Narrador',
       confidence: 0.995, reason: 'spokenText aparece como frase continua dentro de la narración de la escena.',
-      narrationScore, bestDialogueScore, existingMedia
+      narrationScore, bestDialogueScore, speakerLabels, existingMedia
     });
   }
 
@@ -113,14 +136,14 @@ function classifyShot(
     return row(scene, shot, {
       classification: 'character', suggestedSpeakerId: best.turn.speakerId, suggestedSpeakerName: best.turn.speakerName,
       confidence: 0.995, reason: `spokenText coincide directamente con el parlamento legacy de ${best.turn.speakerName}.`,
-      narrationScore, bestDialogueScore, existingMedia
+      narrationScore, bestDialogueScore, speakerLabels, existingMedia
     });
   }
 
   if (narrationExact && best?.exact) {
     return row(scene, shot, {
       classification: 'ambiguous', confidence: 0, reason: 'El mismo texto aparece tanto en narración como en diálogo; requiere revisión manual.',
-      narrationScore, bestDialogueScore, existingMedia
+      narrationScore, bestDialogueScore, speakerLabels, existingMedia
     });
   }
 
@@ -129,30 +152,30 @@ function classifyShot(
     return row(scene, shot, {
       classification: 'narrator', suggestedSpeakerId: 'narrator', suggestedSpeakerName: 'Narrador',
       confidence: Math.min(0.97, narrationScore), reason: 'Coincidencia secuencial fuerte con la narración y margen suficiente sobre cualquier parlamento.',
-      narrationScore, bestDialogueScore, existingMedia
+      narrationScore, bestDialogueScore, speakerLabels, existingMedia
     });
   }
 
   const dialogueMargin = bestDialogueScore - Math.max(narrationScore, second?.score || 0);
-  if (words >= 5 && best && bestDialogueScore >= 0.92 && dialogueMargin >= 0.12) {
+  if (words >= 5 && best && bestDialogueScore >= 0.92 && dialogueMargin >= 0.12 && speakerLabels.length <= 1) {
     return row(scene, shot, {
       classification: 'character', suggestedSpeakerId: best.turn.speakerId, suggestedSpeakerName: best.turn.speakerName,
       confidence: Math.min(0.97, bestDialogueScore), reason: `Coincidencia secuencial fuerte y única con el parlamento legacy de ${best.turn.speakerName}.`,
-      narrationScore, bestDialogueScore, existingMedia
+      narrationScore, bestDialogueScore, speakerLabels, existingMedia
     });
   }
 
   return row(scene, shot, {
     classification: 'ambiguous', confidence: 0,
     reason: 'No existe evidencia textual suficiente para distinguir narrador de personaje sin adivinar.',
-    narrationScore, bestDialogueScore, existingMedia
+    narrationScore, bestDialogueScore, speakerLabels, existingMedia
   });
 }
 
 function row(
   scene: FilmScene,
   shot: FilmShot,
-  result: Pick<LegacyShotClassification, 'classification' | 'suggestedSpeakerId' | 'suggestedSpeakerName' | 'confidence' | 'reason' | 'narrationScore' | 'bestDialogueScore' | 'existingMedia'>
+  result: Pick<LegacyShotClassification, 'classification' | 'suggestedSpeakerId' | 'suggestedSpeakerName' | 'confidence' | 'reason' | 'narrationScore' | 'bestDialogueScore' | 'speakerLabels' | 'existingMedia'>
 ): LegacyShotClassification {
   return {
     sceneId: scene.id,
@@ -169,6 +192,25 @@ function row(
 function hasDialogueTie(matches: Array<{ score: number; exact: boolean }>) {
   if (matches.length < 2) return false;
   return matches[0].exact && matches[1].exact;
+}
+
+function extractDialogueLabels(dialogue: string) {
+  const labels: string[] = [];
+  const matcher = /(?:^|\n|;|\s)([A-Za-zÁÉÍÓÚÜÑáéíóúüñ][A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]{0,50})\s*:/g;
+  for (const match of dialogue.matchAll(matcher)) {
+    const label = match[1].trim();
+    if (label && !labels.some((item) => normalize(item) === normalize(label))) labels.push(label);
+  }
+  return labels;
+}
+
+function labelsPresentInShot(spoken: string, sceneLabels: string[]) {
+  const normalizedSpoken = normalize(spoken);
+  return sceneLabels.filter((label) => {
+    const normalizedLabel = normalize(label);
+    return new RegExp(`(?:^| )${escapeRegex(normalizedLabel)}(?: |$)`).test(normalizedSpoken) &&
+      new RegExp(`${escapeRegex(label)}\\s*:`, 'i').test(spoken);
+  });
 }
 
 function containsPhrase(container: string, phrase: string) {
@@ -202,6 +244,10 @@ function normalize(value: string) {
     .replace(/[^a-z0-9ñ]+/gi, ' ')
     .trim()
     .replace(/\s+/g, ' ');
+}
+
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function wordCount(value: string) {
