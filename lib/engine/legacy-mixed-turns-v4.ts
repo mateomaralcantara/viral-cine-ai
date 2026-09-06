@@ -51,7 +51,7 @@ export function buildLegacyMixedTurnPlan(project: FilmProject): MixedTurnPlanRep
   const classification = classifyLegacyProjectShots(project);
   const ambiguousShotIds = new Set(
     classification.rows
-      .filter((row) => row.classification === 'ambiguous' && row.spokenText.trim())
+      .filter((row) => row.classification === 'ambiguous' && row.spokenText.trim() && !row.currentSpeakerId)
       .map((row) => row.shotId)
   );
   const supportVoices = project.supportVoices || [];
