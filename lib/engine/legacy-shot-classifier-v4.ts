@@ -114,6 +114,20 @@ function classifyShot(
     });
   }
 
+  // Un texto no etiquetado antes de la primera etiqueta puede ser la continuación del hablante
+  // de la toma anterior. Aunque después haya un único personaje explícito, el segmento completo
+  // no puede considerarse de un solo hablante sin adivinar.
+  if (speakerLabels.length === 1) {
+    const prefix = textBeforeFirstSpeakerLabel(spoken, speakerLabels[0]);
+    if (wordCount(prefix) >= 3 && narrationScore < 0.15) {
+      return row(scene, shot, {
+        classification: 'ambiguous', confidence: 0,
+        reason: `La toma contiene texto previo sin etiqueta antes de ${speakerLabels[0]}; puede ser continuación de otro hablante y debe dividirse antes de asignar speakerId.`,
+        narrationScore, bestDialogueScore, speakerLabels, existingMedia
+      });
+    }
+  }
+
   // Si existe una etiqueta de personaje y también una porción material de narración,
   // el clip es mixto narrador+personaje y tampoco admite un speakerId único.
   if (speakerLabels.length === 1 && narrationScore >= 0.15) {
@@ -211,6 +225,11 @@ function labelsPresentInShot(spoken: string, sceneLabels: string[]) {
     return new RegExp(`(?:^| )${escapeRegex(normalizedLabel)}(?: |$)`).test(normalizedSpoken) &&
       new RegExp(`${escapeRegex(label)}\\s*:`, 'i').test(spoken);
   });
+}
+
+function textBeforeFirstSpeakerLabel(spoken: string, label: string) {
+  const match = new RegExp(`${escapeRegex(label)}\\s*:`, 'i').exec(spoken);
+  return match ? spoken.slice(0, match.index).trim() : '';
 }
 
 function containsPhrase(container: string, phrase: string) {
