@@ -1,4 +1,5 @@
 import type { FilmProject } from '@/lib/domain/schemas';
+import { hasMultipleDialogueSpeakers, resolveSingleSpeakerId } from '@/lib/engine/speaker-resolution';
 
 const TRUE_VALUES = new Set(['1', 'true', 'yes', 'on']);
 const DISABLED_CREDENTIAL = /^(?:disabled(?:_offline)?|off|none|null|undefined|your[_-].*|replace[_-].*|changeme|example)$/i;
@@ -89,25 +90,37 @@ export function assertProductionCanQueue(project?: Pick<FilmProject, 'plan'>) {
   const plan = project?.plan;
   if (!plan) return;
 
+  const multiSpeakerSpoken = plan.scenes.flatMap((scene) =>
+    scene.shots
+      .filter((shot) => Boolean(shot.spokenText.trim()) && hasMultipleDialogueSpeakers(shot))
+      .map((shot) => `escena ${scene.order}/segmento ${shot.order}`)
+  );
+  if (multiSpeakerSpoken.length) {
+    throw new ProductionSafetyError(
+      `Segmentación de diálogo incompleta: ${multiSpeakerSpoken.length} segmento(s) contienen varios hablantes. ` +
+      `${multiSpeakerSpoken.slice(0, 8).join(' | ')}. Divide cada turno en un segmento monohablante antes de habilitar gasto.`
+    );
+  }
+
   const unresolvedSpoken = plan.scenes.flatMap((scene) =>
     scene.shots
-      .filter((shot) => Boolean(shot.spokenText.trim()) && !shotSpeakerId(shot))
+      .filter((shot) => Boolean(shot.spokenText.trim()) && !resolveSingleSpeakerId(shot))
       .map((shot) => `escena ${scene.order}/segmento ${shot.order}`)
   );
   if (unresolvedSpoken.length) {
     throw new ProductionSafetyError(
-      `Casting de hablantes incompleto: ${unresolvedSpoken.length} segmento(s) con texto hablado no tienen speakerId. ` +
+      `Casting de hablantes incompleto: ${unresolvedSpoken.length} segmento(s) con texto hablado no tienen un hablante único. ` +
       `${unresolvedSpoken.slice(0, 8).join(' | ')}. Resuelve el Speaker Lab antes de habilitar gasto.`
     );
   }
 
   const speakingCharacterIds = new Set(
     plan.scenes.flatMap((scene) => scene.shots)
-      .map((shot) => shotSpeakerId(shot))
+      .map((shot) => resolveSingleSpeakerId(shot))
       .filter((speakerId): speakerId is string => Boolean(speakerId && speakerId !== 'narrator'))
   );
   const hasNarration = plan.scenes.some((scene) =>
-    scene.shots.some((shot) => shotSpeakerId(shot) === 'narrator' && Boolean(shot.spokenText.trim()))
+    scene.shots.some((shot) => resolveSingleSpeakerId(shot) === 'narrator' && Boolean(shot.spokenText.trim()))
   );
   if (hasNarration) {
     if (!hasUsableCredential('ELEVENLABS_API_KEY')) {
@@ -158,8 +171,4 @@ export function safeErrorMessage(error: unknown) {
     .replace(/(?:sk|key|token|gho|ghp|AIza)[-_A-Za-z0-9.]{8,}/g, '[CREDENCIAL_OCULTA]')
     .replace(/(?:authorization|cookie|set-cookie)\s*[:=]\s*[^\s,;]+/gi, '$1=[OCULTO]')
     .slice(0, 1200);
-}
-
-function shotSpeakerId(shot: { speakerId?: string; dialogueLines?: Array<{ speakerId: string }> }) {
-  return shot.speakerId || shot.dialogueLines?.[0]?.speakerId;
 }
