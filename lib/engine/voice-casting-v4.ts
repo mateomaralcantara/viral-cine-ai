@@ -161,7 +161,7 @@ function applySettings(
 ) {
   profile.voiceProvider = input.provider;
   profile.voiceId = cleanOptional(input.voiceId);
-  profile.voiceModel = cleanOptional(input.model);
+  if (input.model !== undefined) profile.voiceModel = cleanOptional(input.model);
   if (input.instructions !== undefined) profile.voiceInstructions = input.instructions.trim();
   profile.voiceStability = boundedOptional(input.stability, 0, 1, 'stability');
   profile.voiceSimilarity = boundedOptional(input.similarity, 0, 1, 'similarity');
