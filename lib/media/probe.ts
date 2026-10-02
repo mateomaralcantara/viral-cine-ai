@@ -74,7 +74,18 @@ export async function assertCinematicVideoTrack(filePath: string, expectedSecond
     );
   }
 
-  return { ...probe, blackRatio, freezeRatio };
+  const detail = await analyzeVisualDetail(filePath);
+  const minStdDev = numberEnv('MIN_VISUAL_LUMA_STDDEV', 7, 1, 60);
+  const minEdgeMean = numberEnv('MIN_VISUAL_EDGE_MEAN', 0.75, 0.05, 20);
+  if (detail.lumaStdDev < minStdDev && detail.edgeMean < minEdgeMean) {
+    throw new Error(
+      `Fuente visual rechazada: contenido de muy baja informacion visual ` +
+      `(desviacion luma ${detail.lumaStdDev.toFixed(2)}, detalle ${detail.edgeMean.toFixed(2)}). ` +
+      'Parece un fondo/placeholder y no una escena cinematografica.'
+    );
+  }
+
+  return { ...probe, blackRatio, freezeRatio, ...detail };
 }
 
 export async function assertCinematicSceneVideo(
@@ -141,6 +152,64 @@ async function analyzeFrames(filePath: string) {
   return { blackSeconds, freezeSeconds };
 }
 
+async function analyzeVisualDetail(filePath: string) {
+  const width = 96;
+  const height = 54;
+  const frameBytes = width * height;
+  const raw = await runFfmpegBinary([
+    '-hide_banner', '-nostdin', '-i', filePath,
+    '-vf', `fps=1,scale=${width}:${height}:flags=area,format=gray`,
+    '-frames:v', '8',
+    '-an', '-f', 'rawvideo', '-pix_fmt', 'gray', 'pipe:1'
+  ]);
+
+  const frameCount = Math.floor(raw.length / frameBytes);
+  if (frameCount < 1) {
+    throw new Error('No se pudieron muestrear fotogramas para validar la informacion visual.');
+  }
+
+  let stdTotal = 0;
+  let edgeTotal = 0;
+  let meanTotal = 0;
+
+  for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
+    const frame = raw.subarray(frameIndex * frameBytes, (frameIndex + 1) * frameBytes);
+    let sum = 0;
+    for (const value of frame) sum += value;
+    const mean = sum / frame.length;
+    meanTotal += mean;
+
+    let variance = 0;
+    let edge = 0;
+    let edgeSamples = 0;
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const index = y * width + x;
+        const value = frame[index];
+        const delta = value - mean;
+        variance += delta * delta;
+        if (x > 0) {
+          edge += Math.abs(value - frame[index - 1]);
+          edgeSamples += 1;
+        }
+        if (y > 0) {
+          edge += Math.abs(value - frame[index - width]);
+          edgeSamples += 1;
+        }
+      }
+    }
+    stdTotal += Math.sqrt(variance / frame.length);
+    edgeTotal += edge / Math.max(1, edgeSamples);
+  }
+
+  return {
+    sampledFrames: frameCount,
+    meanLuma: meanTotal / frameCount,
+    lumaStdDev: stdTotal / frameCount,
+    edgeMean: edgeTotal / frameCount
+  };
+}
+
 async function analyzeAudio(filePath: string) {
   const output = await runFfmpeg([
     '-hide_banner', '-nostdin', '-i', filePath,
@@ -182,6 +251,31 @@ async function runProbe(args: string[]) {
       settled = true;
       if (code === 0) resolve(stdout);
       else reject(new Error(`ffprobe termino con codigo ${code}. ${stderr.slice(-1200)}`));
+    });
+  });
+}
+
+async function runFfmpegBinary(args: string[]) {
+  return new Promise<Buffer>((resolve, reject) => {
+    const child = spawn(ffmpegExecutable(), args, { windowsHide: true });
+    const chunks: Buffer[] = [];
+    let stderr = '';
+    let settled = false;
+    child.stdout.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+    child.stderr.on('data', (chunk) => {
+      stderr += String(chunk);
+      if (stderr.length > 8_000) stderr = stderr.slice(-8_000);
+    });
+    child.once('error', (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    });
+    child.once('close', (code) => {
+      if (settled) return;
+      settled = true;
+      if (code === 0) resolve(Buffer.concat(chunks));
+      else reject(new Error(`ffmpeg termino con codigo ${code}. ${stderr.slice(-1200)}`));
     });
   });
 }
