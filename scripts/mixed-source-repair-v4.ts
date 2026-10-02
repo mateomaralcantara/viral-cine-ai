@@ -66,7 +66,8 @@ if (command === 'preview') {
   console.log('  SOLO LECTURA: no modifica project.json ni media.');
   console.log('  No llama OpenAI, Veo ni Fal.ai.');
   console.log('  Gasto: US$0');
-  process.exit(inspection.needsGeneration ? 2 : 0);
+  console.log('\nPREVIEW_RESULT=' + (inspection.needsGeneration ? 'NEEDS_GENERATION' : 'SOURCE_READY'));
+  process.exit(0);
 }
 
 const confirmation = rest.join(' ').trim();
