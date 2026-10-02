@@ -18,6 +18,7 @@ import { prepareAudioFirstVoice, applyAudioFirstLipSync } from '@/lib/engine/aud
 import { locateVoiceProfile } from '@/lib/engine/voice-casting-v4';
 import { assertPaidGenerationAllowed, hasUsableCredential } from '@/lib/engine/production-safety';
 import { planSegmentedAudioTiming } from '@/lib/engine/segmented-timing-v4';
+import { assertCinematicSceneVideo, assertCinematicVideoTrack } from '@/lib/media/probe';
 
 const TIMING_TOLERANCE_SECONDS = 0.025;
 const OUTPUT_DURATION_TOLERANCE_SECONDS = 0.12;
@@ -241,6 +242,10 @@ export async function renderSegmentedShotOffline(
   await concatenate(renderedTurns, outputPath);
 
   await assertVideoStream(outputPath, 'Salida recompuesta');
+  await assertCinematicSceneVideo(outputPath, plan.shotDurationSeconds, {
+    requireMotion: true,
+    requireAudibleAudio: true
+  });
   const outputDurationSeconds = await probeMediaDurationSeconds(outputPath);
   const durationDeltaSeconds = Math.abs(outputDurationSeconds - plan.shotDurationSeconds);
   if (durationDeltaSeconds > OUTPUT_DURATION_TOLERANCE_SECONDS) {
@@ -286,6 +291,7 @@ export async function renderSegmentedShotReal(
 
   await access(plan.sourceVideoPath);
   await assertVideoStream(plan.sourceVideoPath, 'MP4 fuente');
+  await assertCinematicVideoTrack(plan.sourceVideoPath, plan.shotDurationSeconds);
   const sourceDurationSeconds = await probeMediaDurationSeconds(plan.sourceVideoPath);
   if (sourceDurationSeconds + OUTPUT_DURATION_TOLERANCE_SECONDS < plan.shotDurationSeconds) {
     throw new Error(
@@ -430,6 +436,10 @@ export async function renderSegmentedShotReal(
   await concatenate(renderedTurns, outputPath);
 
   await assertVideoStream(outputPath, 'Salida recompuesta');
+  await assertCinematicSceneVideo(outputPath, plan.shotDurationSeconds, {
+    requireMotion: true,
+    requireAudibleAudio: true
+  });
   const outputDurationSeconds = await probeMediaDurationSeconds(outputPath);
   const durationDeltaSeconds = Math.abs(outputDurationSeconds - plan.shotDurationSeconds);
   if (durationDeltaSeconds > OUTPUT_DURATION_TOLERANCE_SECONDS) {
