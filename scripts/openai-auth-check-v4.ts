@@ -1,9 +1,8 @@
-import { existsSync } from 'node:fs';
-import { loadEnvFile } from 'node:process';
 import path from 'node:path';
+import { loadProjectLocalEnvOverride } from '@/lib/env/local-env';
 import OpenAI from 'openai';
 
-loadLocalEnvSafely();
+loadProjectLocalEnvOverride();
 
 const key = process.env.OPENAI_API_KEY?.trim();
 if (!key || key.length < 20) {
@@ -32,13 +31,4 @@ try {
   console.error('CODE=' + (e.code ?? 'N/D'));
   console.error((e.message || String(error)).replace(key, '[OPENAI_API_KEY]'));
   process.exit(2);
-}
-
-function loadLocalEnvSafely() {
-  for (const name of ['.env.local', '.env']) {
-    const file = path.resolve(process.cwd(), name);
-    if (!existsSync(file)) continue;
-    loadEnvFile(file);
-    break;
-  }
 }
