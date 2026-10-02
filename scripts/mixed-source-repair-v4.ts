@@ -1,6 +1,5 @@
-import { existsSync } from 'node:fs';
-import { loadEnvFile } from 'node:process';
 import path from 'node:path';
+import { loadProjectLocalEnvOverride } from '@/lib/env/local-env';
 import { getProject } from '@/lib/storage/project-store';
 import {
   ensureMixedShotVisualSourceReal,
@@ -9,7 +8,7 @@ import {
 import { estimateOperationCost } from '@/lib/engine/spend-ledger';
 import { estimatedGenerationCost } from '@/lib/engine/spend-guard';
 
-loadLocalEnvSafely();
+loadProjectLocalEnvOverride();
 
 const [command, projectId, shotId, ...rest] = process.argv.slice(2);
 if (!command || !projectId || !shotId || !['preview', 'run'].includes(command)) {
@@ -109,15 +108,6 @@ console.log('Tipo: ' + result.selectedKind);
 console.log('Referencia: ' + (result.referenceImageAsset || 'N/D'));
 console.log('El MP4 histórico no se sobrescribe; la reparación vive en segmented-v4-source/.');
 console.log('No se ejecutó lip-sync de Fal en este comando.');
-
-function loadLocalEnvSafely() {
-  for (const name of ['.env.local', '.env']) {
-    const file = path.resolve(process.cwd(), name);
-    if (!existsSync(file)) continue;
-    loadEnvFile(file);
-    break;
-  }
-}
 
 function usage() {
   console.log('Uso:');
