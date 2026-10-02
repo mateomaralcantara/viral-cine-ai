@@ -51,7 +51,7 @@ import {
   safeErrorMessage
 } from '@/lib/engine/production-safety';
 import { prepareAudioFirstVoice, applyAudioFirstLipSync } from '@/lib/engine/audio-first';
-import { appendSpend, estimateOperationCost } from '@/lib/engine/spend-ledger';
+import { appendSpend, assertSpendRetrySafe, estimateOperationCost } from '@/lib/engine/spend-ledger';
 import { assertPilotShotBudget, pilotModeEnabled, pilotSceneLimit, pilotShotLimit } from '@/lib/engine/pilot';
 import { hasMultipleDialogueSpeakers } from '@/lib/engine/speaker-resolution';
 import { renderSegmentedShotReal } from '@/lib/engine/segmented-renderer-v4';
@@ -600,6 +600,7 @@ async function prepareShotReferenceFrame(
   if (process.env.PRODUCTION_MODE === 'real' && hasUsableCredential('OPENAI_API_KEY')) {
     const estimatedUsd = estimateOperationCost('image', 1);
     const idempotencyKey = `image:${shot.id}`;
+    await assertSpendRetrySafe(project.id, idempotencyKey, 'imagen de referencia OpenAI');
     await appendSpend(project.id, {
       operation: 'image', provider: 'openai', model: process.env.OPENAI_IMAGE_MODEL,
       state: 'submitted', estimatedUsd, sceneId: scene.id, shotId: shot.id, idempotencyKey
@@ -616,9 +617,12 @@ async function prepareShotReferenceFrame(
         outputAsset: imagePath
       });
     } catch (error) {
+      const authRejected = isOpenAIAuthRejected(error);
       await appendSpend(project.id, {
         operation: 'image', provider: 'openai', model: process.env.OPENAI_IMAGE_MODEL,
-        state: 'failed-unknown', estimatedUsd, sceneId: scene.id, shotId: shot.id, idempotencyKey,
+        state: authRejected ? 'failed-no-charge' : 'failed-unknown',
+        estimatedUsd, actualUsd: authRejected ? 0 : undefined,
+        sceneId: scene.id, shotId: shot.id, idempotencyKey,
         error: messageOf(error)
       });
       throw error;
@@ -735,6 +739,7 @@ async function prepareCharacters(project: FilmProject) {
     if (process.env.PRODUCTION_MODE === 'real' && hasUsableCredential('OPENAI_API_KEY')) {
       const estimatedUsd = estimateOperationCost('image', 1);
       const idempotencyKey = `character-image:${character.id}`;
+      await assertSpendRetrySafe(project.id, idempotencyKey, 'imagen de personaje OpenAI');
       await appendSpend(project.id, {
         operation: 'image', provider: 'openai', model: process.env.OPENAI_IMAGE_MODEL,
         state: 'submitted', estimatedUsd, characterId: character.id, idempotencyKey
@@ -749,9 +754,12 @@ async function prepareCharacters(project: FilmProject) {
           state: 'succeeded', estimatedUsd, characterId: character.id, idempotencyKey, outputAsset: destination
         });
       } catch (error) {
+        const authRejected = isOpenAIAuthRejected(error);
         await appendSpend(project.id, {
           operation: 'image', provider: 'openai', model: process.env.OPENAI_IMAGE_MODEL,
-          state: 'failed-unknown', estimatedUsd, characterId: character.id, idempotencyKey, error: messageOf(error)
+          state: authRejected ? 'failed-no-charge' : 'failed-unknown',
+          estimatedUsd, actualUsd: authRejected ? 0 : undefined,
+          characterId: character.id, idempotencyKey, error: messageOf(error)
         });
         throw error;
       }
@@ -813,6 +821,18 @@ function aggregateQuality(shots: FilmShot[]) {
   const scores = shots.map((shot) => shot.qualityScore).filter((score): score is number => score !== undefined);
   if (!scores.length) return undefined;
   return Math.round((scores.reduce((sum, score) => sum + score, 0) / scores.length) * 100) / 100;
+}
+
+function isOpenAIAuthRejected(error: unknown) {
+  const candidate = error as {
+    status?: number;
+    code?: string;
+    error?: { code?: string; type?: string };
+  };
+  const status = candidate?.status;
+  const code = candidate?.code || candidate?.error?.code;
+  const type = candidate?.error?.type;
+  return status === 401 || code === 'invalid_api_key' || type === 'invalid_request_error' && code === 'invalid_api_key';
 }
 
 const pad = (value: number) => String(value).padStart(3, '0');
