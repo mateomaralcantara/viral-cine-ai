@@ -5,12 +5,18 @@ import type { DialogueLine, FilmProject, FilmScene, FilmShot } from '@/lib/domai
 import { assetAbsolutePath, assetRelativePath, projectAssetDir } from '@/lib/storage/project-store';
 import { concatenate, createSyntheticSpeechAudio } from '@/lib/media/ffmpeg';
 import {
+  concatenateAudioSegments,
   extractVideoOnlySegment,
+  fitAudioToSlot,
   muxSegmentAudio,
   probeMediaDurationSeconds
 } from '@/lib/media/segmented-ffmpeg';
 import { hasMultipleDialogueSpeakers } from '@/lib/engine/speaker-resolution';
 import { requiresLipSyncForSpeaker } from '@/lib/engine/lip-sync-policy-v4';
+import { prepareAudioFirstVoice, applyAudioFirstLipSync } from '@/lib/engine/audio-first';
+import { locateVoiceProfile } from '@/lib/engine/voice-casting-v4';
+import { assertPaidGenerationAllowed, hasUsableCredential } from '@/lib/engine/production-safety';
+import { planSegmentedAudioTiming } from '@/lib/engine/segmented-timing-v4';
 
 const TIMING_TOLERANCE_SECONDS = 0.025;
 const OUTPUT_DURATION_TOLERANCE_SECONDS = 0.12;
@@ -20,6 +26,7 @@ export type SegmentedTurn = {
   index: number;
   speakerId: string;
   text: string;
+  emotion?: string;
   startSeconds: number;
   endSeconds: number;
   durationSeconds: number;
@@ -57,6 +64,40 @@ export type SegmentedRendererPreview = {
   }>;
 };
 
+export type RealSegmentedRenderTurn = {
+  index: number;
+  speakerId: string;
+  startSeconds: number;
+  endSeconds: number;
+  durationSeconds: number;
+  rawAudioDurationSeconds: number;
+  speedFactor: number;
+  requiresLipSync: boolean;
+  voicePath: string;
+  alignedAudioPath: string;
+  renderedPath: string;
+};
+
+export type RealSegmentedRenderResult = {
+  projectId: string;
+  sceneId: string;
+  shotId: string;
+  sourceVideoAsset: string;
+  sourceSha256Before: string;
+  sourceSha256After: string;
+  sourcePreserved: boolean;
+  sourceDurationSeconds: number;
+  outputPath: string;
+  outputAsset: string;
+  masterAudioPath: string;
+  masterAudioAsset: string;
+  outputDurationSeconds: number;
+  durationDeltaSeconds: number;
+  lipSyncTurns: number;
+  turns: RealSegmentedRenderTurn[];
+  externalCalls: true;
+};
+
 export type OfflineSegmentedRenderResult = {
   projectId: string;
   sceneId: string;
@@ -80,7 +121,8 @@ export function buildSegmentedShotPlan(
   scene: FilmScene,
   shot: FilmShot
 ): SegmentedShotPlan {
-  if (!shot.videoAsset) throw new Error('La toma multihablante no tiene videoAsset fuente.');
+  const sourceVideoAsset = shot.baseVideoAsset || shot.videoAsset;
+  if (!sourceVideoAsset) throw new Error('La toma multihablante no tiene videoAsset/baseVideoAsset fuente.');
   if (!hasMultipleDialogueSpeakers(shot)) {
     throw new Error('La toma no contiene varios hablantes estructurados; el renderer segmentado no aplica.');
   }
@@ -98,8 +140,8 @@ export function buildSegmentedShotPlan(
     shotId: shot.id,
     shotOrder: shot.order,
     shotDurationSeconds: shot.durationSeconds,
-    sourceVideoAsset: shot.videoAsset,
-    sourceVideoPath: assetAbsolutePath(project.id, shot.videoAsset),
+    sourceVideoAsset,
+    sourceVideoPath: assetAbsolutePath(project.id, sourceVideoAsset),
     turns
   };
 }
@@ -231,6 +273,196 @@ export async function renderSegmentedShotOffline(
   };
 }
 
+export async function renderSegmentedShotReal(
+  project: FilmProject,
+  scene: FilmScene,
+  shot: FilmShot
+): Promise<RealSegmentedRenderResult> {
+  const plan = buildSegmentedShotPlan(project, scene, shot);
+  assertSegmentedRealReadiness(project, plan);
+  assertPaidGenerationAllowed('renderizar toma multihablante real');
+
+  await access(plan.sourceVideoPath);
+  const sourceDurationSeconds = await probeMediaDurationSeconds(plan.sourceVideoPath);
+  if (sourceDurationSeconds + OUTPUT_DURATION_TOLERANCE_SECONDS < plan.shotDurationSeconds) {
+    throw new Error(
+      'El MP4 fuente dura ' + sourceDurationSeconds.toFixed(3) +
+      's y la toma exige ' + plan.shotDurationSeconds.toFixed(3) + 's.'
+    );
+  }
+
+  const sourceSha256Before = await sha256File(plan.sourceVideoPath);
+  const folder = 'scene-' + pad(scene.order) + '-shot-' + pad(shot.order) + '-' + shot.id;
+  const videoDir = path.join(projectAssetDir(project.id, 'video'), 'segmented-v4-real', folder);
+  const audioDir = path.join(projectAssetDir(project.id, 'audio'), 'segmented-v4-real', folder);
+  await Promise.all([
+    mkdir(videoDir, { recursive: true }),
+    mkdir(audioDir, { recursive: true })
+  ]);
+
+  const preparedTurns: Array<{
+    turn: SegmentedTurn;
+    turnShot: FilmShot;
+    voicePath: string;
+    rawAudioDurationSeconds: number;
+    hash: string;
+  }> = [];
+
+  for (const turn of plan.turns) {
+    const hash = createHash('sha256')
+      .update(turn.speakerId + '\0' + turn.text)
+      .digest('hex')
+      .slice(0, 10);
+    const turnShot = makeTurnShot(shot, turn, turn.durationSeconds, hash);
+    const key =
+      'seg-s' + pad(scene.order) + '-t' + pad(shot.order) +
+      '-turn-' + pad(turn.index) + '-' + hash;
+    const prepared = await prepareAudioFirstVoice(project, scene, turnShot, key);
+    const rawAudioDurationSeconds = await probeMediaDurationSeconds(prepared.voicePath);
+    preparedTurns.push({
+      turn,
+      turnShot,
+      voicePath: prepared.voicePath,
+      rawAudioDurationSeconds,
+      hash
+    });
+  }
+
+  const maxSpeed = boundedMaxSpeed(process.env.SEGMENTED_TTS_MAX_SPEED);
+  const allocations = planSegmentedAudioTiming(
+    preparedTurns.map(({ turn, rawAudioDurationSeconds }) => ({
+      id: turn.id,
+      index: turn.index,
+      slotDurationSeconds: turn.durationSeconds,
+      audioDurationSeconds: rawAudioDurationSeconds
+    })),
+    plan.shotDurationSeconds,
+    maxSpeed
+  );
+
+  const renderedTurns: string[] = [];
+  const alignedAudios: string[] = [];
+  const realTurns: RealSegmentedRenderTurn[] = [];
+
+  for (let index = 0; index < preparedTurns.length; index += 1) {
+    const prepared = preparedTurns[index];
+    const allocation = allocations[index];
+    const prefix = 'turn-' + pad(prepared.turn.index);
+    const alignedAudioPath = path.join(audioDir, prefix + '-aligned.wav');
+    const videoOnlyPath = path.join(videoDir, prefix + '-video.mp4');
+    const lipSyncPath = path.join(videoDir, prefix + '-lipsync.mp4');
+    const renderedPath = path.join(videoDir, prefix + '.mp4');
+
+    if (!(await fileExists(alignedAudioPath))) {
+      await fitAudioToSlot(
+        prepared.voicePath,
+        allocation.speedFactor,
+        allocation.targetDurationSeconds,
+        alignedAudioPath
+      );
+    }
+
+    if (!(await fileExists(videoOnlyPath))) {
+      await extractVideoOnlySegment(
+        plan.sourceVideoPath,
+        allocation.startSeconds,
+        allocation.targetDurationSeconds,
+        videoOnlyPath,
+        project.input.aspectRatio
+      );
+    }
+
+    let videoForMux = videoOnlyPath;
+    if (prepared.turn.requiresLipSync) {
+      if (!(await fileExists(lipSyncPath))) {
+        const adjustedTurnShot = makeTurnShot(
+          shot,
+          prepared.turn,
+          allocation.targetDurationSeconds,
+          prepared.hash
+        );
+        await applyAudioFirstLipSync(
+          project,
+          scene,
+          adjustedTurnShot,
+          videoOnlyPath,
+          alignedAudioPath,
+          lipSyncPath
+        );
+      }
+      videoForMux = lipSyncPath;
+    }
+
+    if (!(await fileExists(renderedPath))) {
+      await muxSegmentAudio(
+        videoForMux,
+        alignedAudioPath,
+        allocation.targetDurationSeconds,
+        renderedPath,
+        project.input.aspectRatio
+      );
+    }
+
+    renderedTurns.push(renderedPath);
+    alignedAudios.push(alignedAudioPath);
+    realTurns.push({
+      index: prepared.turn.index,
+      speakerId: prepared.turn.speakerId,
+      startSeconds: allocation.startSeconds,
+      endSeconds: allocation.endSeconds,
+      durationSeconds: allocation.targetDurationSeconds,
+      rawAudioDurationSeconds: prepared.rawAudioDurationSeconds,
+      speedFactor: allocation.speedFactor,
+      requiresLipSync: prepared.turn.requiresLipSync,
+      voicePath: prepared.voicePath,
+      alignedAudioPath,
+      renderedPath
+    });
+  }
+
+  const masterAudioPath = path.join(audioDir, 'master-audio.wav');
+  await concatenateAudioSegments(alignedAudios, masterAudioPath);
+
+  const outputPath = path.join(videoDir, 'recomposed-real.mp4');
+  await concatenate(renderedTurns, outputPath);
+
+  const outputDurationSeconds = await probeMediaDurationSeconds(outputPath);
+  const durationDeltaSeconds = Math.abs(outputDurationSeconds - plan.shotDurationSeconds);
+  if (durationDeltaSeconds > OUTPUT_DURATION_TOLERANCE_SECONDS) {
+    throw new Error(
+      'La recomposición real dura ' + outputDurationSeconds.toFixed(3) +
+      's; debía durar ' + plan.shotDurationSeconds.toFixed(3) +
+      's (delta ' + durationDeltaSeconds.toFixed(3) + 's).'
+    );
+  }
+
+  const sourceSha256After = await sha256File(plan.sourceVideoPath);
+  const sourcePreserved = sourceSha256Before === sourceSha256After;
+  if (!sourcePreserved) {
+    throw new Error('Protección de media: el SHA256 del MP4 fuente cambió durante el render segmentado real.');
+  }
+
+  return {
+    projectId: project.id,
+    sceneId: scene.id,
+    shotId: shot.id,
+    sourceVideoAsset: plan.sourceVideoAsset,
+    sourceSha256Before,
+    sourceSha256After,
+    sourcePreserved,
+    sourceDurationSeconds,
+    outputPath,
+    outputAsset: assetRelativePath(project.id, outputPath),
+    masterAudioPath,
+    masterAudioAsset: assetRelativePath(project.id, masterAudioPath),
+    outputDurationSeconds,
+    durationDeltaSeconds,
+    lipSyncTurns: realTurns.filter((turn) => turn.requiresLipSync).length,
+    turns: realTurns,
+    externalCalls: true
+  };
+}
+
 function normalizeTurns(project: FilmProject, lines: DialogueLine[], shotDurationSeconds: number): SegmentedTurn[] {
   return lines.map((line, index) => {
     const startSeconds = line.startSeconds;
@@ -248,6 +480,7 @@ function normalizeTurns(project: FilmProject, lines: DialogueLine[], shotDuratio
       index: index + 1,
       speakerId: line.speakerId,
       text: line.text.trim(),
+      emotion: line.emotion,
       startSeconds,
       endSeconds,
       durationSeconds: endSeconds - startSeconds,
@@ -289,6 +522,85 @@ function assertOfflineSafety() {
   }
   if (process.env.ALLOW_PAID_GENERATION === 'true') {
     throw new Error('Renderer offline exige ALLOW_PAID_GENERATION=false.');
+  }
+}
+
+function makeTurnShot(
+  parent: FilmShot,
+  turn: SegmentedTurn,
+  durationSeconds: number,
+  hash: string
+): FilmShot {
+  return {
+    ...parent,
+    id: parent.id + ':turn:' + turn.index + ':' + hash,
+    durationSeconds,
+    spokenText: turn.text,
+    speakerId: turn.speakerId,
+    dialogueLines: [{
+      id: turn.id,
+      speakerId: turn.speakerId,
+      text: turn.text,
+      emotion: turn.emotion,
+      startSeconds: 0,
+      endSeconds: durationSeconds
+    }],
+    voiceAsset: undefined,
+    alignmentAsset: undefined,
+    lipSyncAsset: undefined,
+    videoAsset: undefined,
+    baseVideoAsset: undefined
+  };
+}
+
+function assertSegmentedRealReadiness(project: FilmProject, plan: SegmentedShotPlan) {
+  const blockers: string[] = [];
+
+  for (const turn of plan.turns) {
+    const located = locateVoiceProfile(project, turn.speakerId);
+    const profile = located?.profile;
+    const provider = profile?.voiceProvider || 'elevenlabs';
+    const label = located?.label || turn.speakerId;
+
+    if (!located) {
+      blockers.push(label + ': no existe un perfil vocal persistente.');
+      continue;
+    }
+
+    if (provider === 'elevenlabs') {
+      const voiceId = profile.voiceId ||
+        (turn.speakerId === 'narrator' ? process.env.ELEVENLABS_NARRATOR_VOICE_ID : undefined);
+      if (!voiceId?.trim()) blockers.push(label + ': falta voiceId persistente de ElevenLabs.');
+      if (!hasUsableCredential('ELEVENLABS_API_KEY')) blockers.push(label + ': falta ELEVENLABS_API_KEY.');
+    } else if (provider === 'openai') {
+      if (!hasUsableCredential('OPENAI_API_KEY')) blockers.push(label + ': falta OPENAI_API_KEY.');
+    } else {
+      blockers.push(label + ': proveedor vocal ' + provider + ' no es válido para render real.');
+    }
+
+    if (turn.requiresLipSync) {
+      if (process.env.ENABLE_LIPSYNC === 'false') blockers.push(label + ': ENABLE_LIPSYNC=false.');
+      if (!hasUsableCredential('FAL_KEY')) blockers.push(label + ': falta FAL_KEY.');
+    }
+  }
+
+  if (blockers.length) {
+    throw new Error('Preflight segmentado real bloqueado: ' + [...new Set(blockers)].join(' | '));
+  }
+}
+
+function boundedMaxSpeed(value: string | undefined) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 1.2;
+  return Math.max(1, Math.min(1.2, parsed));
+}
+
+async function fileExists(filePath: string) {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
   }
 }
 
