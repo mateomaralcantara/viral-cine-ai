@@ -26,6 +26,7 @@
     "turns:structure": "node --import tsx scripts/structure-mixed-turns-v4.ts",
     "segments:4": "node --import tsx scripts/segmented-renderer-v4.ts",
     "segments:real": "node --import tsx scripts/segmented-real-preflight-v4.ts",
+    "segments:pilot": "node --import tsx scripts/segmented-real-pilot-v4.ts",
     "support:voices": "node --import tsx scripts/support-voices-v4.ts",
     "verify:4": "npm run typecheck && npm test"
   },
