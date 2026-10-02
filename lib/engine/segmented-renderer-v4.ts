@@ -558,14 +558,15 @@ function assertSegmentedRealReadiness(project: FilmProject, plan: SegmentedShotP
 
   for (const turn of plan.turns) {
     const located = locateVoiceProfile(project, turn.speakerId);
-    const profile = located?.profile;
-    const provider = profile?.voiceProvider || 'elevenlabs';
     const label = located?.label || turn.speakerId;
 
     if (!located) {
       blockers.push(label + ': no existe un perfil vocal persistente.');
       continue;
     }
+
+    const profile = located.profile;
+    const provider = profile.voiceProvider || 'elevenlabs';
 
     if (provider === 'elevenlabs') {
       const voiceId = profile.voiceId ||
