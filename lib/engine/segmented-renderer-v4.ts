@@ -5,6 +5,7 @@ import type { DialogueLine, FilmProject, FilmScene, FilmShot } from '@/lib/domai
 import { assetAbsolutePath, assetRelativePath, projectAssetDir } from '@/lib/storage/project-store';
 import { concatenate, createSyntheticSpeechAudio } from '@/lib/media/ffmpeg';
 import {
+  assertVideoStream,
   concatenateAudioSegments,
   extractVideoOnlySegment,
   fitAudioToSlot,
@@ -239,6 +240,7 @@ export async function renderSegmentedShotOffline(
   const outputPath = path.join(outputDir, 'recomposed-offline.mp4');
   await concatenate(renderedTurns, outputPath);
 
+  await assertVideoStream(outputPath, 'Salida recompuesta');
   const outputDurationSeconds = await probeMediaDurationSeconds(outputPath);
   const durationDeltaSeconds = Math.abs(outputDurationSeconds - plan.shotDurationSeconds);
   if (durationDeltaSeconds > OUTPUT_DURATION_TOLERANCE_SECONDS) {
@@ -283,6 +285,7 @@ export async function renderSegmentedShotReal(
   assertPaidGenerationAllowed('renderizar toma multihablante real');
 
   await access(plan.sourceVideoPath);
+  await assertVideoStream(plan.sourceVideoPath, 'MP4 fuente');
   const sourceDurationSeconds = await probeMediaDurationSeconds(plan.sourceVideoPath);
   if (sourceDurationSeconds + OUTPUT_DURATION_TOLERANCE_SECONDS < plan.shotDurationSeconds) {
     throw new Error(
@@ -426,6 +429,7 @@ export async function renderSegmentedShotReal(
   const outputPath = path.join(videoDir, 'recomposed-real.mp4');
   await concatenate(renderedTurns, outputPath);
 
+  await assertVideoStream(outputPath, 'Salida recompuesta');
   const outputDurationSeconds = await probeMediaDurationSeconds(outputPath);
   const durationDeltaSeconds = Math.abs(outputDurationSeconds - plan.shotDurationSeconds);
   if (durationDeltaSeconds > OUTPUT_DURATION_TOLERANCE_SECONDS) {
