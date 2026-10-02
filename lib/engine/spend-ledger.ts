@@ -70,7 +70,7 @@ export function estimateOperationCost(operation: SpendOperation, units = 1) {
     image: envNumber('COST_IMAGE', 0.08),
     voice: envNumber('COST_TTS_1K_CHARS', 0.015),
     video: envNumber('COST_AI_VIDEO_SECOND', 0.10),
-    'lip-sync': envNumber('COST_LIPSYNC_SECOND', 0.014),
+    'lip-sync': envNumber('COST_LIPSYNC_SECOND', 8 / 60),
     music: envNumber('COST_MUSIC_SECOND', 0.003),
     audit: envNumber('COST_QUALITY_REVIEW', 0.03)
   };

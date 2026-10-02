@@ -10,6 +10,7 @@ import {
   probeMediaDurationSeconds
 } from '@/lib/media/segmented-ffmpeg';
 import { hasMultipleDialogueSpeakers } from '@/lib/engine/speaker-resolution';
+import { requiresLipSyncForSpeaker } from '@/lib/engine/lip-sync-policy-v4';
 
 const TIMING_TOLERANCE_SECONDS = 0.025;
 const OUTPUT_DURATION_TOLERANCE_SECONDS = 0.12;
@@ -87,7 +88,7 @@ export function buildSegmentedShotPlan(
     throw new Error('La toma multihablante requiere al menos dos dialogueLines.');
   }
 
-  const turns = normalizeTurns(shot.dialogueLines, shot.durationSeconds);
+  const turns = normalizeTurns(project, shot.dialogueLines, shot.durationSeconds);
   validateContinuousTimeline(turns, shot.durationSeconds);
 
   return {
@@ -230,7 +231,7 @@ export async function renderSegmentedShotOffline(
   };
 }
 
-function normalizeTurns(lines: DialogueLine[], shotDurationSeconds: number): SegmentedTurn[] {
+function normalizeTurns(project: FilmProject, lines: DialogueLine[], shotDurationSeconds: number): SegmentedTurn[] {
   return lines.map((line, index) => {
     const startSeconds = line.startSeconds;
     const endSeconds = line.endSeconds;
@@ -250,7 +251,7 @@ function normalizeTurns(lines: DialogueLine[], shotDurationSeconds: number): Seg
       startSeconds,
       endSeconds,
       durationSeconds: endSeconds - startSeconds,
-      requiresLipSync: line.speakerId !== 'narrator'
+      requiresLipSync: requiresLipSyncForSpeaker(project, line.speakerId)
     };
   });
 }

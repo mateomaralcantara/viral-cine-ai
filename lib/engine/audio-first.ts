@@ -11,6 +11,7 @@ import { hasUsableCredential, safeErrorMessage } from '@/lib/engine/production-s
 import { appendSpend, estimateOperationCost, voiceCostUnits } from '@/lib/engine/spend-ledger';
 import { hasMultipleDialogueSpeakers, resolveSingleSpeakerId } from '@/lib/engine/speaker-resolution';
 import { findVoiceProfile } from '@/lib/engine/support-voice-registry-v4';
+import { decideLipSync } from '@/lib/engine/lip-sync-policy-v4';
 
 export type PreparedVoice = {
   voicePath: string;
@@ -185,9 +186,10 @@ export async function applyAudioFirstLipSync(
     throw new Error('Lip-sync requiere un único hablante por segmento; divide la toma multihablante antes de sincronizar labios.');
   }
   const speakerId = resolveSingleSpeakerId(shot);
-  if (!shot.spokenText.trim() || !speakerId || speakerId === 'narrator') {
+  const lipSyncDecision = decideLipSync(project, speakerId);
+  if (!shot.spokenText.trim() || !lipSyncDecision.required) {
     await copyFile(baseVideoPath, outputPath);
-    return { outputPath, provider: 'none' };
+    return { outputPath, provider: 'none', lipSyncReason: lipSyncDecision.reason };
   }
   if (process.env.PRODUCTION_MODE !== 'real') {
     await runFakeProviderStage('lip-sync', outputPath, async () => {

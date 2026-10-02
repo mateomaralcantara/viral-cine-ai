@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { FilmProject } from '../lib/domain/schemas';
-import { requiresLipSyncForSpeaker } from '../lib/engine/lip-sync-policy-v4';
+import { decideLipSync, requiresLipSyncForSpeaker } from '../lib/engine/lip-sync-policy-v4';
 
 function projectFixture(): FilmProject {
   return {
@@ -32,15 +32,15 @@ function projectFixture(): FilmProject {
       scenes: []
     },
     supportVoices: [
-      { id: 'multitud', label: 'Multitud', voiceInstructions: 'Colectiva', voiceProvider: 'elevenlabs', source: 'legacy-support' },
-      { id: 'soldado', label: 'Soldado', voiceInstructions: 'Firme', voiceProvider: 'elevenlabs', source: 'legacy-support' }
+      { id: 'multitud', label: 'Multitud', voiceInstructions: 'Grupo de personas gritando al unísono.', voiceProvider: 'elevenlabs', source: 'legacy-support' },
+      { id: 'soldado', label: 'Soldado', voiceInstructions: 'Voz masculina individual.', voiceProvider: 'elevenlabs', source: 'legacy-support' }
     ],
     progress: { phase: 'ready', percent: 100, message: 'Test', updatedAt: '2026-09-06T00:00:00.000Z' },
     productionLog: []
   } as FilmProject;
 }
 
-test('Narrador y Multitud no requieren lip-sync facial', () => {
+test('Narrador y Multitud no requieren single-face lip-sync', () => {
   const project = projectFixture();
   assert.equal(requiresLipSyncForSpeaker(project, 'narrator'), false);
   assert.equal(requiresLipSyncForSpeaker(project, 'multitud'), false);
@@ -50,4 +50,18 @@ test('personaje principal y Soldado sí requieren lip-sync facial', () => {
   const project = projectFixture();
   assert.equal(requiresLipSyncForSpeaker(project, 'pilato'), true);
   assert.equal(requiresLipSyncForSpeaker(project, 'soldado'), true);
+});
+
+test('hablante desconocido no dispara lip-sync pagado', () => {
+  const project = projectFixture();
+  const decision = decideLipSync(project, 'desconocido');
+  assert.equal(decision.required, false);
+  assert.equal(decision.kind, 'unknown');
+});
+
+test('la decisión documenta por qué una voz colectiva no usa lip-sync', () => {
+  const project = projectFixture();
+  const decision = decideLipSync(project, 'multitud');
+  assert.equal(decision.required, false);
+  assert.match(decision.reason, /colectiva/i);
 });
