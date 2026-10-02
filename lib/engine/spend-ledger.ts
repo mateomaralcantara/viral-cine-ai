@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { appendFile, mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { projectRoot } from '@/lib/storage/project-store';
+import { ProductionSafetyError } from '@/lib/engine/production-safety';
 
 export type SpendOperation = 'script' | 'image' | 'voice' | 'video' | 'lip-sync' | 'music' | 'audit';
 export type SpendState = 'reserved' | 'submitted' | 'succeeded' | 'failed-no-charge' | 'failed-unknown' | 'reconciled';
@@ -52,6 +53,34 @@ export async function readSpendLedger(projectId: string): Promise<SpendLedgerEnt
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
     throw error;
+  }
+}
+
+export async function latestSpendForKey(projectId: string, idempotencyKey: string) {
+  const entries = await readSpendLedger(projectId);
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    if (entries[index].idempotencyKey === idempotencyKey) return entries[index];
+  }
+  return undefined;
+}
+
+export async function assertSpendRetrySafe(
+  projectId: string,
+  idempotencyKey: string,
+  operationLabel: string
+) {
+  const latest = await latestSpendForKey(projectId, idempotencyKey);
+  if (!latest) return;
+
+  if (latest.state === 'reserved' || latest.state === 'failed-no-charge') return;
+
+  if (['submitted', 'succeeded', 'failed-unknown', 'reconciled'].includes(latest.state)) {
+    throw new ProductionSafetyError(
+      'Bloqueo de reintento de gasto: ' + operationLabel +
+      ' ya tiene estado ' + latest.state +
+      ' para ' + idempotencyKey +
+      '. Verifica el proveedor/asset antes de autorizar otro cobro.'
+    );
   }
 }
 
