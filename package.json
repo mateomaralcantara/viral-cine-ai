@@ -30,6 +30,7 @@
     "fal:check": "node --import tsx scripts/fal-storage-check-v4.ts",
     "fal:reconcile-upload403": "node --import tsx scripts/reconcile-fal-upload403-v4.ts",
     "visual:audit": "node --import tsx scripts/visual-audit-v4.ts",
+    "source:repair": "node --import tsx scripts/mixed-source-repair-v4.ts",
     "support:voices": "node --import tsx scripts/support-voices-v4.ts",
     "verify:4": "npm run typecheck && npm test"
   },
