@@ -1,9 +1,12 @@
+import { loadProjectLocalEnvOverride } from '../lib/env/local-env';
 import { recoverInterruptedProjects } from '../lib/engine/recovery';
 import { produceProject } from '../lib/engine/producer';
 import { produceProjectV4 } from '../lib/engine/producer-v4';
 import { listProjects } from '../lib/storage/project-store';
 import { acquireWorkerLock } from '../lib/engine/worker-lock';
 import { safeErrorMessage } from '../lib/engine/production-safety';
+
+loadProjectLocalEnvOverride();
 
 let stopping = false;
 let activeProject: string | null = null;
