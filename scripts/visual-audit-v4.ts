@@ -5,6 +5,7 @@ import path from 'node:path';
 import { getProject, assetAbsolutePath, projectAssetDir } from '@/lib/storage/project-store';
 import { createSceneContactSheet } from '@/lib/media/ffmpeg';
 import { probeMediaDurationSeconds, probeVideoStreamInfo } from '@/lib/media/segmented-ffmpeg';
+import { inspectMixedShotVisualSource } from '@/lib/engine/producer-v4';
 
 loadLocalEnvSafely();
 
@@ -30,7 +31,8 @@ for (const scene of project.plan.scenes) {
 }
 if (!located) throw new Error('No existe la toma solicitada.');
 
-const sourceAsset = located.shot.baseVideoAsset || located.shot.videoAsset;
+const sourceInspection = await inspectMixedShotVisualSource(project, located.scene, located.shot);
+const sourceAsset = sourceInspection.selectedAsset || located.shot.baseVideoAsset || located.shot.videoAsset;
 if (!sourceAsset) throw new Error('La toma no tiene MP4 fuente.');
 
 const sourcePath = assetAbsolutePath(project.id, sourceAsset);
