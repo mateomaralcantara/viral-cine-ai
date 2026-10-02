@@ -44,6 +44,39 @@ export async function assertPlayableSceneVideo(filePath: string, expectedSeconds
   return probe;
 }
 
+
+export async function assertCinematicVideoTrack(filePath: string, expectedSeconds: number) {
+  const probe = await probeVideo(filePath);
+  const tolerance = Math.max(1.5, expectedSeconds * 0.03);
+  const minimumDuration = Math.max(0.5, expectedSeconds - tolerance);
+  if (!probe.hasVideo || !Number.isFinite(probe.durationSeconds) || probe.durationSeconds < minimumDuration) {
+    throw new Error(
+      `Fuente visual incompleta: video=${probe.hasVideo}, duracion=${probe.durationSeconds.toFixed(2)}s, minimo=${minimumDuration.toFixed(2)}s.`
+    );
+  }
+
+  const analysis = await analyzeFrames(filePath);
+  const blackRatio = analysis.blackSeconds / Math.max(0.1, probe.durationSeconds);
+  const freezeRatio = analysis.freezeSeconds / Math.max(0.1, probe.durationSeconds);
+  const blackLimit = numberEnv('BLACK_FRAME_MAX_RATIO', 0.35, 0.05, 0.95);
+  const freezeLimit = numberEnv('FREEZE_FRAME_MAX_RATIO', 0.60, 0.10, 0.98);
+
+  if (blackRatio > blackLimit) {
+    throw new Error(
+      `Fuente visual rechazada: ${Math.round(blackRatio * 100)}% del clip esta negro/oscuro ` +
+      `(limite ${Math.round(blackLimit * 100)}%). No se usara como video base real.`
+    );
+  }
+  if (freezeRatio > freezeLimit) {
+    throw new Error(
+      `Fuente visual rechazada: ${Math.round(freezeRatio * 100)}% del clip esta congelado ` +
+      `(limite ${Math.round(freezeLimit * 100)}%). No se usara como video base real.`
+    );
+  }
+
+  return { ...probe, blackRatio, freezeRatio };
+}
+
 export async function assertCinematicSceneVideo(
   filePath: string,
   expectedSeconds: number,
