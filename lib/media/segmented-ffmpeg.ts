@@ -118,6 +118,52 @@ export async function concatenateAudioSegments(audioPaths: string[], outputPath:
   return outputPath;
 }
 
+export type VideoStreamInfo = {
+  hasVideo: boolean;
+  codecName?: string;
+  width?: number;
+  height?: number;
+  pixelFormat?: string;
+  avgFrameRate?: string;
+};
+
+export async function probeVideoStreamInfo(filePath: string): Promise<VideoStreamInfo> {
+  const output = await capture(ffprobe(), [
+    '-v', 'error',
+    '-select_streams', 'v:0',
+    '-show_entries', 'stream=codec_name,width,height,pix_fmt,avg_frame_rate',
+    '-of', 'json',
+    filePath
+  ]);
+  const parsed = JSON.parse(output) as {
+    streams?: Array<{
+      codec_name?: string;
+      width?: number;
+      height?: number;
+      pix_fmt?: string;
+      avg_frame_rate?: string;
+    }>;
+  };
+  const stream = parsed.streams?.[0];
+  if (!stream) return { hasVideo: false };
+  return {
+    hasVideo: true,
+    codecName: stream.codec_name,
+    width: stream.width,
+    height: stream.height,
+    pixelFormat: stream.pix_fmt,
+    avgFrameRate: stream.avg_frame_rate
+  };
+}
+
+export async function assertVideoStream(filePath: string, label: string) {
+  const info = await probeVideoStreamInfo(filePath);
+  if (!info.hasVideo || !info.width || !info.height) {
+    throw new Error(label + ': el archivo no contiene una pista de video reproducible.');
+  }
+  return info;
+}
+
 export async function probeMediaDurationSeconds(filePath: string) {
   const output = await capture(ffprobe(), [
     '-v', 'error',
