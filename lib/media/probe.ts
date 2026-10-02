@@ -112,6 +112,17 @@ export async function assertCinematicSceneVideo(
         `(limite ${Math.round(freezeLimit * 100)}%). No se guardara como una escena valida.`
       );
     }
+
+    const detail = await analyzeVisualDetail(filePath);
+    const minStdDev = numberEnv('MIN_VISUAL_LUMA_STDDEV', 7, 1, 60);
+    const minEdgeMean = numberEnv('MIN_VISUAL_EDGE_MEAN', 0.75, 0.05, 20);
+    if (detail.lumaStdDev < minStdDev && detail.edgeMean < minEdgeMean) {
+      throw new Error(
+        `Video rechazado antes de calidad: contenido de muy baja informacion visual ` +
+        `(desviacion luma ${detail.lumaStdDev.toFixed(2)}, detalle ${detail.edgeMean.toFixed(2)}). ` +
+        'No se guardara un fondo/placeholder como escena real.'
+      );
+    }
   }
 
   if (options.requireAudibleAudio) {
