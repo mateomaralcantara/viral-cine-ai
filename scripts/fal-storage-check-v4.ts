@@ -1,9 +1,8 @@
-import { existsSync } from 'node:fs';
-import { loadEnvFile } from 'node:process';
 import path from 'node:path';
+import { loadProjectLocalEnvOverride } from '@/lib/env/local-env';
 import { fal } from '@fal-ai/client';
 
-loadLocalEnvSafely();
+loadProjectLocalEnvOverride();
 
 const key = process.env.FAL_KEY?.trim();
 if (!key || key.length < 8) {
@@ -27,13 +26,4 @@ try {
   console.error('FAL_STORAGE_AUTH=FAIL');
   console.error(message.replace(key, '[FAL_KEY]'));
   process.exit(2);
-}
-
-function loadLocalEnvSafely() {
-  for (const name of ['.env.local', '.env']) {
-    const file = path.resolve(process.cwd(), name);
-    if (!existsSync(file)) continue;
-    loadEnvFile(file);
-    break;
-  }
 }
