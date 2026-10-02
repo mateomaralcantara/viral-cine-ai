@@ -160,6 +160,7 @@ test('render offline recompone 7s en una ruta derivada y conserva SHA256 del MP4
     assert.equal(await sha256(sourcePath), sourceHashBefore);
     assert.notEqual(result.outputPath, sourcePath);
     assert.match(result.outputAsset, /^video\/segmented-v4-offline\//);
+    assert.match(result.outputAsset, new RegExp('-src-' + sourceHashBefore.slice(0, 12)));
     assert.ok(result.durationDeltaSeconds <= 0.12);
     assert.equal(result.externalCalls, false);
     assert.equal(result.spendUsd, 0);
