@@ -36,7 +36,9 @@ jobs:
         run: npm ci
 
       - name: Refresh safe dependency lock
-        run: npm audit fix --package-lock-only
+        run: |
+          npm install --package-lock-only
+          npm audit fix --package-lock-only
 
       - name: Commit audited lockfile
         if: github.event_name == 'push'
