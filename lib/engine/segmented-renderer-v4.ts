@@ -206,10 +206,11 @@ export async function renderSegmentedShotOffline(
   }
 
   const sourceSha256Before = await sha256File(plan.sourceVideoPath);
+  const sourceFingerprint = sourceSha256Before.slice(0, 12);
   const outputDir = path.join(
     projectAssetDir(project.id, 'video'),
     'segmented-v4-offline',
-    `scene-${pad(scene.order)}-shot-${pad(shot.order)}-${shot.id}`
+    `scene-${pad(scene.order)}-shot-${pad(shot.order)}-${shot.id}-src-${sourceFingerprint}`
   );
   await mkdir(outputDir, { recursive: true });
 
@@ -301,7 +302,10 @@ export async function renderSegmentedShotReal(
   }
 
   const sourceSha256Before = await sha256File(plan.sourceVideoPath);
-  const folder = 'scene-' + pad(scene.order) + '-shot-' + pad(shot.order) + '-' + shot.id;
+  const sourceFingerprint = sourceSha256Before.slice(0, 12);
+  const folder =
+    'scene-' + pad(scene.order) + '-shot-' + pad(shot.order) + '-' + shot.id +
+    '-src-' + sourceFingerprint;
   const videoDir = path.join(projectAssetDir(project.id, 'video'), 'segmented-v4-real', folder);
   const audioDir = path.join(projectAssetDir(project.id, 'audio'), 'segmented-v4-real', folder);
   await Promise.all([
@@ -322,7 +326,7 @@ export async function renderSegmentedShotReal(
       .update(turn.speakerId + '\0' + turn.text)
       .digest('hex')
       .slice(0, 10);
-    const turnShot = makeTurnShot(shot, turn, turn.durationSeconds, hash);
+    const turnShot = makeTurnShot(shot, turn, turn.durationSeconds, hash, sourceFingerprint);
     const key =
       'seg-s' + pad(scene.order) + '-t' + pad(shot.order) +
       '-turn-' + pad(turn.index) + '-' + hash;
@@ -388,7 +392,8 @@ export async function renderSegmentedShotReal(
           shot,
           prepared.turn,
           allocation.targetDurationSeconds,
-          prepared.hash
+          prepared.hash,
+          sourceFingerprint
         );
         await applyAudioFirstLipSync(
           project,
@@ -543,11 +548,14 @@ function makeTurnShot(
   parent: FilmShot,
   turn: SegmentedTurn,
   durationSeconds: number,
-  hash: string
+  hash: string,
+  sourceFingerprint: string
 ): FilmShot {
   return {
     ...parent,
-    id: parent.id + ':turn:' + turn.index + ':' + hash,
+    id:
+      parent.id + ':turn:' + turn.index + ':' + hash +
+      ':src:' + sourceFingerprint,
     durationSeconds,
     spokenText: turn.text,
     speakerId: turn.speakerId,
