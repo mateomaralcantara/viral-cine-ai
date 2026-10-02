@@ -8,7 +8,7 @@ import { generateFalLipSync } from '@/lib/providers/fal-media';
 import { runFakeProviderStage } from '@/lib/providers/fake-cinema';
 import { createSilenceAudio, createSyntheticSpeechAudio } from '@/lib/media/ffmpeg';
 import { hasUsableCredential, safeErrorMessage } from '@/lib/engine/production-safety';
-import { appendSpend, estimateOperationCost, voiceCostUnits } from '@/lib/engine/spend-ledger';
+import { appendSpend, assertSpendRetrySafe, estimateOperationCost, voiceCostUnits } from '@/lib/engine/spend-ledger';
 import { hasMultipleDialogueSpeakers, resolveSingleSpeakerId } from '@/lib/engine/speaker-resolution';
 import { findVoiceProfile } from '@/lib/engine/support-voice-registry-v4';
 import { decideLipSync } from '@/lib/engine/lip-sync-policy-v4';
@@ -60,6 +60,7 @@ export async function prepareAudioFirstVoice(
   const voiceProvider = voiceProfile?.voiceProvider || 'elevenlabs';
   const idempotencyKey = `voice:${shot.id}:${speakerId || 'none'}:${text.length}`;
   const estimatedUsd = estimateOperationCost('voice', voiceCostUnits(text));
+  await assertSpendRetrySafe(project.id, idempotencyKey, 'generación de voz');
 
   if (voiceProvider === 'elevenlabs') {
     if (speakerId === 'narrator') {
@@ -207,6 +208,7 @@ export async function applyAudioFirstLipSync(
 
   const estimatedUsd = estimateOperationCost('lip-sync', shot.durationSeconds);
   const idempotencyKey = `lip-sync:${shot.id}:${shot.durationSeconds}`;
+  await assertSpendRetrySafe(project.id, idempotencyKey, 'lip-sync');
   await appendSpend(project.id, {
     operation: 'lip-sync',
     provider: 'fal',
