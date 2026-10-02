@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readdir, stat } from 'node:fs/promises';
 import { loadEnvFile } from 'node:process';
 import path from 'node:path';
 import { getProject, assetAbsolutePath, projectAssetDir } from '@/lib/storage/project-store';
@@ -35,10 +35,12 @@ if (!sourceAsset) throw new Error('La toma no tiene MP4 fuente.');
 
 const sourcePath = assetAbsolutePath(project.id, sourceAsset);
 const folder = 'scene-' + pad(located.scene.order) + '-shot-' + pad(located.shot.order) + '-' + located.shot.id;
-const finalPath = path.join(projectAssetDir(project.id, 'video'), 'segmented-v4-real', folder, 'recomposed-real.mp4');
-if (!existsSync(finalPath)) throw new Error('No existe recomposed-real.mp4 para esta toma.');
+const segmentedRoot = path.join(projectAssetDir(project.id, 'video'), 'segmented-v4-real');
+const finalPath = await resolveLatestSegmentedOutput(segmentedRoot, folder);
+if (!finalPath) throw new Error('No existe recomposed-real.mp4 para esta toma.');
 
-const qualityDir = path.join(projectAssetDir(project.id, 'quality'), 'visual-audit-v4', folder);
+const selectedFolder = path.basename(path.dirname(finalPath));
+const qualityDir = path.join(projectAssetDir(project.id, 'quality'), 'visual-audit-v4', selectedFolder);
 await mkdir(qualityDir, { recursive: true });
 
 const sourceDuration = await probeMediaDurationSeconds(sourcePath);
@@ -91,6 +93,22 @@ function print(label: string, filePath: string, duration: number, info: Awaited<
     console.log('Pixel format: ' + (info.pixelFormat || 'N/D'));
     console.log('FPS: ' + (info.avgFrameRate || 'N/D'));
   }
+}
+
+async function resolveLatestSegmentedOutput(root: string, baseFolder: string) {
+  if (!existsSync(root)) return undefined;
+  const candidates: Array<{ file: string; mtimeMs: number }> = [];
+  const entries = await readdir(root, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    if (entry.name !== baseFolder && !entry.name.startsWith(baseFolder + '-src-')) continue;
+    const file = path.join(root, entry.name, 'recomposed-real.mp4');
+    if (!existsSync(file)) continue;
+    const info = await stat(file);
+    candidates.push({ file, mtimeMs: info.mtimeMs });
+  }
+  candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return candidates[0]?.file;
 }
 
 function loadLocalEnvSafely() {
