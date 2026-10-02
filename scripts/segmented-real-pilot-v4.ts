@@ -5,6 +5,7 @@ import { getProject } from '@/lib/storage/project-store';
 import { buildSegmentedRealPreflight } from '@/lib/engine/segmented-real-preflight-v4';
 import { renderSegmentedShotReal } from '@/lib/engine/segmented-renderer-v4';
 import { safetyStatus } from '@/lib/engine/production-safety';
+import { inspectMixedShotVisualSource } from '@/lib/engine/producer-v4';
 
 loadLocalEnvSafely();
 
@@ -35,15 +36,20 @@ for (const scene of project.plan.scenes) {
 
 if (!located) throw new Error(`No existe la toma '${shotId}'.`);
 
-const preflight = buildSegmentedRealPreflight(project, located.scene, located.shot);
+const sourceInspection = await inspectMixedShotVisualSource(project, located.scene, located.shot);
+const effectiveShot = sourceInspection.selectedAsset
+  ? { ...located.shot, baseVideoAsset: sourceInspection.selectedAsset, videoAsset: sourceInspection.selectedAsset }
+  : located.shot;
+const preflight = buildSegmentedRealPreflight(project, located.scene, effectiveShot);
 
 printPreflight(preflight);
+printVisualSource(sourceInspection);
 
 if (command === 'preview') {
   console.log('\nSEGURIDAD');
   console.log('  SOLO LECTURA: no modifica project.json, ledger ni media.');
-  console.log('  No reserva gasto y no llama ElevenLabs, OpenAI ni Fal.ai.');
-  process.exit(preflight.blockers.length ? 2 : 0);
+  console.log('  No reserva gasto y no llama ElevenLabs, OpenAI, Veo ni Fal.ai.');
+  process.exit(preflight.blockers.length || sourceInspection.needsGeneration ? 2 : 0);
 }
 
 const confirmation = rest.join(' ').trim();
@@ -56,6 +62,13 @@ if (confirmation !== '--confirm-paid SI FAL') {
 if (preflight.blockers.length) {
   throw new Error(
     'Piloto real bloqueado por preflight: ' + preflight.blockers.join(' | ')
+  );
+}
+
+if (sourceInspection.needsGeneration || !sourceInspection.selectedAsset) {
+  throw new Error(
+    'Piloto Fal bloqueado ANTES DE GASTAR: la fuente visual no es cinematográfica. ' +
+    'Primero ejecuta el reparador de video base con autorización SI VIDEO.'
   );
 }
 
@@ -75,7 +88,7 @@ console.log('  APIs externas=HABILITADAS SOLO PARA ESTE PROCESO');
 console.log('  gasto pagado=HABILITADO SOLO PARA ESTE PROCESO');
 console.log('  fallback pagado global=DESHABILITADO');
 
-const result = await renderSegmentedShotReal(project, located.scene, located.shot);
+const result = await renderSegmentedShotReal(project, located.scene, effectiveShot);
 
 console.log('\nSEGMENTED REAL PILOT 4.0 — PASS');
 console.log(`Proyecto: ${result.projectId}`);
@@ -148,6 +161,23 @@ function printPreflight(preview: ReturnType<typeof buildSegmentedRealPreflight>)
   console.log(`  PRODUCTION_MODE=${safety.mode}`);
   console.log(`  APIs externas=${safety.externalCallsEnabled ? 'HABILITADAS' : 'BLOQUEADAS'}`);
   console.log(`  gasto pagado=${safety.paidGenerationEnabled ? 'HABILITADO' : 'BLOQUEADO'}`);
+}
+
+function printVisualSource(
+  inspection: Awaited<ReturnType<typeof inspectMixedShotVisualSource>>
+) {
+  console.log('\nFUENTE VISUAL');
+  if (inspection.selectedAsset) {
+    console.log('  Estado: LISTA');
+    console.log('  Tipo: ' + inspection.selectedKind);
+    console.log('  Asset: ' + inspection.selectedAsset);
+  } else {
+    console.log('  Estado: REQUIERE VIDEO BASE REAL');
+    for (const rejected of inspection.rejected) {
+      console.log('  Rechazada: ' + rejected.asset);
+      console.log('    motivo: ' + rejected.reason);
+    }
+  }
 }
 
 function loadLocalEnvSafely() {
