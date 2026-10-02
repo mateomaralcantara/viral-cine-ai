@@ -457,6 +457,13 @@ export async function ensureMixedShotVisualSourceReal(
     .map((id) => project.plan?.characters.find((character) => character.id === id))
     .filter((character): character is Character => Boolean(character));
 
+  if (!hasUsableCredential('OPENAI_API_KEY')) {
+    throw new Error(
+      'La fuente visual requiere regeneración y falta OPENAI_API_KEY para crear un fotograma de referencia real. ' +
+      'No se usará un placeholder en producción.'
+    );
+  }
+
   const paths = mixedShotSourcePaths(project, scene, shot);
   await Promise.all([
     mkdir(path.dirname(paths.referenceImagePath), { recursive: true }),
