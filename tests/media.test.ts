@@ -14,7 +14,7 @@ import {
   createSyntheticSpeechAudio,
   renderAnimatedImage
 } from '../lib/media/ffmpeg';
-import { assertCinematicSceneVideo, assertPlayableSceneVideo } from '../lib/media/probe';
+import { assertCinematicSceneVideo, assertCinematicVideoTrack, assertPlayableSceneVideo } from '../lib/media/probe';
 
 const execFileAsync = promisify(execFile);
 
@@ -82,5 +82,9 @@ test('rechaza un MP4 negro antes de enviarlo a la auditoria de calidad', async (
   await assert.rejects(
     () => assertCinematicSceneVideo(video, 2, { requireMotion: true }),
     /Video rechazado.*negro/
+  );
+  await assert.rejects(
+    () => assertCinematicVideoTrack(video, 2),
+    /Fuente visual rechazada.*negro/
   );
 });
