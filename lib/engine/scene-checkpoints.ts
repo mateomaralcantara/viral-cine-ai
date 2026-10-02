@@ -260,7 +260,11 @@ async function validateAssets(projectId: string, scene: Pick<FilmScene, 'duratio
     stat(assetAbsolutePath(projectId, assets.voiceAsset))
   ]);
   if (image.size < 1 || voice.size < 1) throw new Error('La escena tiene recursos visuales o de voz incompletos.');
-  return assertPlayableSceneVideo(assetAbsolutePath(projectId, assets.videoAsset), scene.durationSeconds);
+  const videoPath = assetAbsolutePath(projectId, assets.videoAsset);
+  if (activeProductionMode() === 'real') {
+    return assertCinematicSceneVideo(videoPath, scene.durationSeconds, { requireMotion: true });
+  }
+  return assertPlayableSceneVideo(videoPath, scene.durationSeconds);
 }
 
 export function renderedAssets(projectId: string, mode: SceneMode | ShotMode, imagePath: string, voicePath: string, videoPath: string): SceneAssets {
