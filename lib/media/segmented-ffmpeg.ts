@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import type { ProjectInput } from '@/lib/domain/schemas';
@@ -64,6 +64,57 @@ export async function muxSegmentAudio(
     '-ac', '2',
     outputPath
   ]);
+  return outputPath;
+}
+
+export async function fitAudioToSlot(
+  audioPath: string,
+  speedFactor: number,
+  durationSeconds: number,
+  outputPath: string
+) {
+  if (durationSeconds <= 0) throw new Error('La duración destino del audio debe ser positiva.');
+  if (!Number.isFinite(speedFactor) || speedFactor < 1 || speedFactor > 1.2005) {
+    throw new Error('Factor de velocidad fuera del límite seguro 1.0x-1.2x: ' + speedFactor);
+  }
+  await mkdir(path.dirname(outputPath), { recursive: true });
+  const tempo = Math.max(1, Math.min(1.2, speedFactor));
+  await run(ffmpeg(), [
+    '-y',
+    '-i', audioPath,
+    '-af', 'atempo=' + seconds(tempo) + ',apad',
+    '-t', seconds(durationSeconds),
+    '-ar', '48000',
+    '-ac', '2',
+    '-c:a', 'pcm_s16le',
+    outputPath
+  ]);
+  return outputPath;
+}
+
+export async function concatenateAudioSegments(audioPaths: string[], outputPath: string) {
+  if (!audioPaths.length) throw new Error('No existen audios para recomponer.');
+  await mkdir(path.dirname(outputPath), { recursive: true });
+  const listPath = path.join(path.dirname(outputPath), 'audio-concat-' + process.pid + '.txt');
+  await writeFile(
+    listPath,
+    audioPaths.map((audio) => "file '" + audio.replaceAll("'", "'\\''") + "'").join('\n'),
+    'utf8'
+  );
+  try {
+    await run(ffmpeg(), [
+      '-y',
+      '-f', 'concat',
+      '-safe', '0',
+      '-i', listPath,
+      '-ar', '48000',
+      '-ac', '2',
+      '-c:a', 'pcm_s16le',
+      outputPath
+    ]);
+  } finally {
+    await rm(listPath, { force: true });
+  }
   return outputPath;
 }
 
