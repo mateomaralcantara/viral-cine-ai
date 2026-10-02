@@ -52,6 +52,8 @@ import {
 import { prepareAudioFirstVoice, applyAudioFirstLipSync } from '@/lib/engine/audio-first';
 import { appendSpend, estimateOperationCost } from '@/lib/engine/spend-ledger';
 import { assertPilotShotBudget, pilotModeEnabled, pilotSceneLimit, pilotShotLimit } from '@/lib/engine/pilot';
+import { hasMultipleDialogueSpeakers } from '@/lib/engine/speaker-resolution';
+import { renderSegmentedShotReal } from '@/lib/engine/segmented-renderer-v4';
 
 const GOOGLE_BILLING_COOLDOWN_MS = 15 * 60 * 1000;
 let googleBillingBlockedUntil = 0;
@@ -296,7 +298,7 @@ async function produceShotV4(project: FilmProject, sceneIndex: number, shotIndex
 
     shot.status = 'ready';
     shot.error = undefined;
-    shot.pipelineVersion = '4.0-audio-first';
+    shot.pipelineVersion = hasMultipleDialogueSpeakers(shot) ? '4.0-segmented-real' : '4.0-audio-first';
     scene.status = 'rendering';
     project.productionLog.push(`${new Date().toISOString()} Escena ${scene.order}, segmento ${shot.order} terminado con Real Cinema 4.0`);
     return saveProject(project);
@@ -312,6 +314,9 @@ async function produceShotV4(project: FilmProject, sceneIndex: number, shotIndex
 
 async function renderShotV4(project: FilmProject, scene: FilmScene, shot: FilmShot): Promise<SceneAssets> {
   if (!project.plan) throw new Error('Plan ausente');
+  if (hasMultipleDialogueSpeakers(shot) && process.env.PRODUCTION_MODE === 'real') {
+    return renderMixedShotV4(project, scene, shot);
+  }
   const activeCharacterIds = shot.characterIds.length ? shot.characterIds : scene.characterIds;
   const characters = activeCharacterIds
     .map((id) => project.plan?.characters.find((character) => character.id === id))
@@ -372,6 +377,51 @@ async function renderShotV4(project: FilmProject, scene: FilmScene, shot: FilmSh
   shot.videoAsset = assetRelativePath(project.id, normalizedPath);
   shot.pipelineVersion = '4.0-audio-first';
   return renderedAssets(project.id, shot.mode, imagePath, voicePath, normalizedPath);
+}
+
+async function renderMixedShotV4(
+  project: FilmProject,
+  scene: FilmScene,
+  shot: FilmShot
+): Promise<SceneAssets> {
+  if (!project.plan) throw new Error('Plan ausente');
+
+  const sourceAsset = shot.baseVideoAsset || shot.videoAsset;
+  if (!sourceAsset) {
+    throw new Error(
+      'La toma multihablante todavía no tiene un MP4 fuente. Genera/hidrata el video base antes del renderer segmentado real.'
+    );
+  }
+
+  const activeCharacterIds = shot.characterIds.length ? shot.characterIds : scene.characterIds;
+  const characters = activeCharacterIds
+    .map((id) => project.plan?.characters.find((character) => character.id === id))
+    .filter((character): character is Character => Boolean(character));
+  const lead = characters[0] || project.plan.characters[0];
+
+  if (!lead?.referenceAsset && !shot.imageAsset) {
+    throw new Error('La toma multihablante no tiene imagen/referencia visual para el checkpoint.');
+  }
+
+  const imageAsset = shot.imageAsset || lead!.referenceAsset!;
+  const result = await renderSegmentedShotReal(project, scene, shot);
+
+  shot.baseVideoAsset = sourceAsset;
+  shot.voiceAsset = result.masterAudioAsset;
+  shot.lipSyncAsset = result.lipSyncTurns > 0 ? result.outputAsset : undefined;
+  shot.videoAsset = result.outputAsset;
+  shot.lastProvider = result.lipSyncTurns > 0
+    ? 'segmented-elevenlabs-fal'
+    : 'segmented-elevenlabs';
+  shot.lastGenerationState = 'succeeded';
+  shot.pipelineVersion = '4.0-segmented-real';
+
+  return {
+    mode: shot.mode,
+    imageAsset,
+    voiceAsset: result.masterAudioAsset,
+    videoAsset: result.outputAsset
+  };
 }
 
 async function prepareShotReferenceFrame(
