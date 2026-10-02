@@ -27,6 +27,8 @@
     "segments:4": "node --import tsx scripts/segmented-renderer-v4.ts",
     "segments:real": "node --import tsx scripts/segmented-real-preflight-v4.ts",
     "segments:pilot": "node --import tsx scripts/segmented-real-pilot-v4.ts",
+    "fal:check": "node --import tsx scripts/fal-storage-check-v4.ts",
+    "fal:reconcile-upload403": "node --import tsx scripts/reconcile-fal-upload403-v4.ts",
     "support:voices": "node --import tsx scripts/support-voices-v4.ts",
     "verify:4": "npm run typecheck && npm test"
   },
