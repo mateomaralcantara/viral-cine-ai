@@ -33,7 +33,7 @@
     "@fal-ai/client": "^1.6.2",
     "@google/genai": "^2.15.0",
     "lucide-react": "^0.468.0",
-    "next": "16.2.12",
+    "next": "^16.2.12",
     "openai": "^6.15.0",
     "react": "19.1.1",
     "react-dom": "19.1.1",
