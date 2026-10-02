@@ -1,13 +1,12 @@
-import { existsSync } from 'node:fs';
-import { loadEnvFile } from 'node:process';
 import path from 'node:path';
+import { loadProjectLocalEnvOverride } from '@/lib/env/local-env';
 import { getProject } from '@/lib/storage/project-store';
 import { buildSegmentedRealPreflight } from '@/lib/engine/segmented-real-preflight-v4';
 import { renderSegmentedShotReal } from '@/lib/engine/segmented-renderer-v4';
 import { safetyStatus } from '@/lib/engine/production-safety';
 import { inspectMixedShotVisualSource } from '@/lib/engine/producer-v4';
 
-loadLocalEnvSafely();
+loadProjectLocalEnvOverride();
 
 const [command, projectId, shotId, ...rest] = process.argv.slice(2);
 
@@ -177,15 +176,6 @@ function printVisualSource(
       console.log('  Rechazada: ' + rejected.asset);
       console.log('    motivo: ' + rejected.reason);
     }
-  }
-}
-
-function loadLocalEnvSafely() {
-  for (const name of ['.env.local', '.env']) {
-    const file = path.resolve(process.cwd(), name);
-    if (!existsSync(file)) continue;
-    loadEnvFile(file);
-    break;
   }
 }
 
