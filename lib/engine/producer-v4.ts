@@ -1,4 +1,4 @@
-import { access, rm } from 'node:fs/promises';
+import { access, mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import type { Character, FilmPlan, FilmProject, FilmScene, FilmShot } from '@/lib/domain/schemas';
 import {
@@ -44,6 +44,7 @@ import { preflightPlan } from '@/lib/engine/shot-plan';
 import { estimateBudget } from '@/lib/engine/budget';
 import { assertEstimatedBudgetAllowed, reserveShotGeneration } from '@/lib/engine/spend-guard';
 import {
+  assertPaidGenerationAllowed,
   assertProductionCanQueue,
   classifyProductionError,
   hasUsableCredential,
@@ -54,6 +55,7 @@ import { appendSpend, estimateOperationCost } from '@/lib/engine/spend-ledger';
 import { assertPilotShotBudget, pilotModeEnabled, pilotSceneLimit, pilotShotLimit } from '@/lib/engine/pilot';
 import { hasMultipleDialogueSpeakers } from '@/lib/engine/speaker-resolution';
 import { renderSegmentedShotReal } from '@/lib/engine/segmented-renderer-v4';
+import { assertCinematicVideoTrack } from '@/lib/media/probe';
 
 const GOOGLE_BILLING_COOLDOWN_MS = 15 * 60 * 1000;
 let googleBillingBlockedUntil = 0;
@@ -379,6 +381,150 @@ async function renderShotV4(project: FilmProject, scene: FilmScene, shot: FilmSh
   return renderedAssets(project.id, shot.mode, imagePath, voicePath, normalizedPath);
 }
 
+export type MixedShotVisualSourceInspection = {
+  selectedAsset?: string;
+  selectedPath?: string;
+  selectedKind?: 'repaired' | 'base' | 'video';
+  referenceImageAsset?: string;
+  needsGeneration: boolean;
+  rejected: Array<{ asset: string; reason: string }>;
+};
+
+export async function inspectMixedShotVisualSource(
+  project: FilmProject,
+  scene: FilmScene,
+  shot: FilmShot
+): Promise<MixedShotVisualSourceInspection> {
+  const paths = mixedShotSourcePaths(project, scene, shot);
+  const repairedAsset = assetRelativePath(project.id, paths.videoPath);
+  const rejected: MixedShotVisualSourceInspection['rejected'] = [];
+  const candidates = [
+    { kind: 'repaired' as const, asset: repairedAsset },
+    shot.baseVideoAsset ? { kind: 'base' as const, asset: shot.baseVideoAsset } : undefined,
+    shot.videoAsset ? { kind: 'video' as const, asset: shot.videoAsset } : undefined
+  ].filter((value): value is { kind: 'repaired' | 'base' | 'video'; asset: string } => Boolean(value));
+
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    if (seen.has(candidate.asset)) continue;
+    seen.add(candidate.asset);
+    const absolute = assetAbsolutePath(project.id, candidate.asset);
+    try {
+      await access(absolute);
+      await assertCinematicVideoTrack(absolute, shot.durationSeconds);
+      return {
+        selectedAsset: candidate.asset,
+        selectedPath: absolute,
+        selectedKind: candidate.kind,
+        referenceImageAsset: await fileExists(paths.referenceImagePath)
+          ? assetRelativePath(project.id, paths.referenceImagePath)
+          : undefined,
+        needsGeneration: false,
+        rejected
+      };
+    } catch (error) {
+      rejected.push({ asset: candidate.asset, reason: messageOf(error) });
+    }
+  }
+
+  return {
+    needsGeneration: true,
+    referenceImageAsset: await fileExists(paths.referenceImagePath)
+      ? assetRelativePath(project.id, paths.referenceImagePath)
+      : undefined,
+    rejected
+  };
+}
+
+export async function ensureMixedShotVisualSourceReal(
+  project: FilmProject,
+  scene: FilmScene,
+  shot: FilmShot
+): Promise<MixedShotVisualSourceInspection> {
+  const current = await inspectMixedShotVisualSource(project, scene, shot);
+  if (!current.needsGeneration && current.selectedAsset && current.selectedPath) return current;
+
+  if (process.env.PRODUCTION_MODE !== 'real') {
+    throw new Error(
+      'La toma multihablante no tiene una fuente visual cinematográfica válida y el modo actual no permite regenerarla.'
+    );
+  }
+  assertPaidGenerationAllowed('generar video base real para toma multihablante');
+
+  if (!project.plan) throw new Error('Plan ausente');
+  const activeCharacterIds = shot.characterIds.length ? shot.characterIds : scene.characterIds;
+  const characters = activeCharacterIds
+    .map((id) => project.plan?.characters.find((character) => character.id === id))
+    .filter((character): character is Character => Boolean(character));
+
+  const paths = mixedShotSourcePaths(project, scene, shot);
+  await Promise.all([
+    mkdir(path.dirname(paths.referenceImagePath), { recursive: true }),
+    mkdir(path.dirname(paths.videoPath), { recursive: true })
+  ]);
+
+  if (!(await fileExists(paths.referenceImagePath))) {
+    await prepareShotReferenceFrame(project, scene, shot, characters, paths.referenceImagePath);
+  }
+
+  if (await fileExists(paths.videoPath)) {
+    try {
+      await assertCinematicVideoTrack(paths.videoPath, shot.durationSeconds);
+      return {
+        selectedAsset: assetRelativePath(project.id, paths.videoPath),
+        selectedPath: paths.videoPath,
+        selectedKind: 'repaired',
+        referenceImageAsset: assetRelativePath(project.id, paths.referenceImagePath),
+        needsGeneration: false,
+        rejected: current.rejected
+      };
+    } catch (error) {
+      throw new Error(
+        'Existe un video base reparado pero no supera la validación visual. ' +
+        'No se sobrescribirá automáticamente: ' + messageOf(error)
+      );
+    }
+  }
+
+  const referencePaths = [
+    paths.referenceImagePath,
+    ...characters
+      .map((character) => character.referenceAsset)
+      .filter((asset): asset is string => Boolean(asset))
+      .map((asset) => assetAbsolutePath(project.id, asset))
+  ];
+
+  await generateBaseVideo(project, scene, shot, referencePaths, paths.videoPath);
+  await assertCinematicVideoTrack(paths.videoPath, shot.durationSeconds);
+
+  return {
+    selectedAsset: assetRelativePath(project.id, paths.videoPath),
+    selectedPath: paths.videoPath,
+    selectedKind: 'repaired',
+    referenceImageAsset: assetRelativePath(project.id, paths.referenceImagePath),
+    needsGeneration: false,
+    rejected: current.rejected
+  };
+}
+
+function mixedShotSourcePaths(project: FilmProject, scene: FilmScene, shot: FilmShot) {
+  const folder = `scene-${pad(scene.order)}-shot-${padShot(shot.order)}-${shot.id}`;
+  return {
+    referenceImagePath: path.join(
+      projectAssetDir(project.id, 'images'),
+      'segmented-v4-source',
+      folder,
+      'reference.png'
+    ),
+    videoPath: path.join(
+      projectAssetDir(project.id, 'video'),
+      'segmented-v4-source',
+      folder,
+      'base-real.mp4'
+    )
+  };
+}
+
 async function renderMixedShotV4(
   project: FilmProject,
   scene: FilmScene,
@@ -386,11 +532,9 @@ async function renderMixedShotV4(
 ): Promise<SceneAssets> {
   if (!project.plan) throw new Error('Plan ausente');
 
-  const sourceAsset = shot.baseVideoAsset || shot.videoAsset;
-  if (!sourceAsset) {
-    throw new Error(
-      'La toma multihablante todavía no tiene un MP4 fuente. Genera/hidrata el video base antes del renderer segmentado real.'
-    );
+  const source = await ensureMixedShotVisualSourceReal(project, scene, shot);
+  if (!source.selectedAsset) {
+    throw new Error('No se pudo resolver una fuente visual cinematográfica válida.');
   }
 
   const activeCharacterIds = shot.characterIds.length ? shot.characterIds : scene.characterIds;
@@ -399,14 +543,20 @@ async function renderMixedShotV4(
     .filter((character): character is Character => Boolean(character));
   const lead = characters[0] || project.plan.characters[0];
 
-  if (!lead?.referenceAsset && !shot.imageAsset) {
+  const imageAsset = source.referenceImageAsset || shot.imageAsset || lead?.referenceAsset;
+  if (!imageAsset) {
     throw new Error('La toma multihablante no tiene imagen/referencia visual para el checkpoint.');
   }
 
-  const imageAsset = shot.imageAsset || lead!.referenceAsset!;
-  const result = await renderSegmentedShotReal(project, scene, shot);
+  const renderShot: FilmShot = {
+    ...shot,
+    baseVideoAsset: source.selectedAsset,
+    videoAsset: source.selectedAsset
+  };
+  const result = await renderSegmentedShotReal(project, scene, renderShot);
 
-  shot.baseVideoAsset = sourceAsset;
+  shot.baseVideoAsset = source.selectedAsset;
+  shot.imageAsset = imageAsset;
   shot.voiceAsset = result.masterAudioAsset;
   shot.lipSyncAsset = result.lipSyncTurns > 0 ? result.outputAsset : undefined;
   shot.videoAsset = result.outputAsset;
