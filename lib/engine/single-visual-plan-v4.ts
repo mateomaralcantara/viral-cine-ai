@@ -40,7 +40,7 @@ export function buildSingleVisualPlan(
     .join(' | ');
 
   const setting = extractSettingAnchor(scene.visualPrompt || shot.visualPrompt);
-  const action = extractActionAnchor(shot.visualPrompt);
+  const action = extractActionAnchor(shot.visualPrompt, setting);
   const narration = shot.spokenText.trim();
 
   const prompt = [
@@ -50,7 +50,7 @@ export function buildSingleVisualPlan(
     continuity ? 'Character continuity: ' + continuity + '.' : '',
     'Create ONE coherent cinematic shot, not a montage and not a sequence of different camera angles.',
     'Use a medium-wide lateral composition with clear geography and natural depth.',
-    'The principal action must remain readable in one frame; secondary characters stay secondary.',
+    'The principal action must remain readable in one frame; secondary characters stay visually subordinate and do not perform a competing story beat.',
     'Narrator is off camera. Nobody addresses the camera and nobody is framed for lip-sync.',
     'Grounded historical realism, natural anatomy, stable faces, physically plausible posture and weight.',
     'Restrained non-graphic staging suitable for a general audience.',
@@ -65,6 +65,7 @@ export function buildSingleVisualPlan(
     'Use only a slow controlled lateral tracking movement or subtle side dolly.',
     'Preserve exact subject identities, wardrobe, architecture, lighting direction, framing and camera axis.',
     action ? 'Continue only this immediate action: ' + action + '.' : '',
+    'Secondary characters may react subtly in the background but must not begin a separate narrative action.',
     'Use restrained natural body movement, believable weight, cloth motion and light atmospheric dust.',
     'Keep faces stable and hands anatomically plausible.',
     'Do not introduce new characters, props or later story beats.',
@@ -104,10 +105,11 @@ function extractSettingAnchor(value: string) {
   return firstSentence.slice(0, 260).trim();
 }
 
-function extractActionAnchor(value: string) {
+function extractActionAnchor(value: string, settingAnchor: string) {
   const compact = value.replace(/\s+/g, ' ').trim();
   if (!compact) return '';
 
+  const normalizedSetting = normalizeSentence(settingAnchor);
   const sentences = compact
     .split(/(?<=[.!?])\s+/)
     .map((item) => item.trim())
@@ -115,9 +117,19 @@ function extractActionAnchor(value: string) {
     .filter((item) => !/^Plano\s+\d+/i.test(item))
     .filter((item) => !/^Movimiento continuo/i.test(item))
     .filter((item) => !/^Sin fotograf/i.test(item))
-    .filter((item) => !/^Momento narrativo/i.test(item));
+    .filter((item) => !/^Momento narrativo/i.test(item))
+    .filter((item) => normalizeSentence(item) !== normalizedSetting);
 
-  return sentences.slice(0, 4).join(' ').slice(0, 900).trim();
+  // A single-shot plan needs one dominant action. Other characters remain continuity/background.
+  return (sentences[0] || '').slice(0, 520).trim();
+}
+
+function normalizeSentence(value: string) {
+  return value
+    .replace(/[.!?]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
 }
 
 function providerDuration(seconds: number): 4 | 6 | 8 {
