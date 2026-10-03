@@ -75,9 +75,9 @@ export function buildSegmentedVisualPlan(
       role
     );
     const visiblePeopleLimit =
-      role === 'speaker-closeup' ? 3 :
-      role === 'crowd-reaction' ? 10 :
-      role === 'establishing' ? 10 : 4;
+      role === 'speaker-closeup' ? 2 :
+      role === 'crowd-reaction' ? 8 :
+      role === 'establishing' ? 8 : 4;
 
     return {
       index: zeroIndex + 1,
@@ -129,12 +129,12 @@ function referenceCharactersForTurn(
 
   if (role === 'speaker-closeup') {
     const speakerIsCharacter = project.plan.characters.some((character) => character.id === speakerId);
-    return speakerIsCharacter
-      ? [speakerId, ...valid.filter((id) => id !== speakerId).slice(0, 1)]
-      : valid.slice(0, 2);
+    return speakerIsCharacter ? [speakerId] : valid.slice(0, 1);
   }
 
-  if (role === 'crowd-reaction') return valid.slice(0, 1);
+  // Collective shots should not inherit a hero face reference and accidentally
+  // turn the crowd into repeated copies of a principal character.
+  if (role === 'crowd-reaction') return [];
   return valid.slice(0, 2);
 }
 
@@ -147,11 +147,21 @@ function visualPromptForTurn(
   role: SegmentedVisualRole,
   visiblePeopleLimit: number
 ) {
+  const speakerCharacter = project.plan?.characters.find((character) => character.name === speakerLabel) ||
+    project.plan?.characters.find((character) => character.id === shot.speakerId);
+  const speakerContinuity = speakerCharacter
+    ? 'Speaker continuity: ' + speakerCharacter.name + '; appearance: ' + speakerCharacter.appearance +
+      '; wardrobe: ' + speakerCharacter.wardrobe + '.'
+    : '';
+
   const common = [
     project.plan?.creativeDirection || '',
     scene.visualPrompt,
-    shot.visualPrompt,
-    'Cinematic historical drama with grounded physical realism.',
+    'TURN-SPECIFIC COVERAGE OVERRIDES wider framing or action implied by the scene context.',
+    'Do not combine other dialogue beats, other speakers, or the parent shot staging into this turn.',
+    'Cinematic historical drama with grounded physical realism and observational composition.',
+    'Avoid generic staged biblical tableau, poster-like symmetry, centered ensemble posing and spectacle-for-spectacle framing.',
+    'Prefer motivated asymmetry, readable negative space, one dominant visual idea and controlled depth.',
     'Preserve character identity, wardrobe continuity, architecture, time of day and lighting direction.',
     'Natural human anatomy, stable faces, physically plausible motion, restrained gestures.',
     'No text, subtitles, captions, logos or watermarks.'
@@ -161,10 +171,12 @@ function visualPromptForTurn(
     return [
       common,
       'Dedicated dialogue coverage for ' + speakerLabel + '.',
-      'Medium close-up or medium shot; speaker occupies roughly 40-55 percent of the frame.',
+      speakerContinuity,
+      'Medium close-up or medium shot; speaker occupies roughly 45-60 percent of the frame.',
       'Face fully visible in three-quarter or near-frontal angle; eyes and mouth unobstructed.',
       'Maximum ' + visiblePeopleLimit + ' visible people; any secondary figures remain soft and out of focus.',
-      'No hands, weapons, helmets or foreground bodies crossing the speaker face.',
+      'No hands, weapons, helmets, bowls, props or foreground bodies crossing the speaker face.',
+      'Do not perform unrelated parent-shot actions during this dialogue beat; keep hands below the chest or outside frame.',
       'Minimal head movement and restrained body movement suitable for later lip-sync.',
       'Camera locked or very slow controlled push-in; shallow depth of field.',
       'Do not show the speaker talking; neutral closed-mouth performance prepared for dialogue replacement.',
@@ -177,6 +189,7 @@ function visualPromptForTurn(
       common,
       'Dedicated crowd reaction coverage; maximum ' + visiblePeopleLimit + ' clearly readable people.',
       'Use a coherent representative group rather than a huge mass of faces.',
+      'No principal-character hero framing; the group reaction is the subject.',
       'Avoid repeated faces, duplicated bodies, chaotic hands near faces, extreme foreground limbs and aggressive morphing.',
       'Medium-wide composition with layered depth and one clear visual direction.',
       'Natural group reaction and restrained coordinated movement; no single-face lip-sync framing.',
@@ -188,6 +201,7 @@ function visualPromptForTurn(
     return [
       common,
       'Establishing coverage for narration; maximum ' + visiblePeopleLimit + ' clearly readable people.',
+      'Do not stage the later dialogue actions yet; establish place, tension and spatial relationships only.',
       'Strong foreground-midground-background separation and one unmistakable focal path.',
       'Avoid a wall of faces and avoid a large human figure blocking the foreground.',
       'Slow cinematic motion only: subtle dolly, atmospheric dust, cloth movement and restrained human motion.',
