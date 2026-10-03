@@ -118,7 +118,7 @@ export async function generateSegmentedTurnReferencesReal(
       .filter((character): character is NonNullable<typeof character> => Boolean(character?.referenceAsset))
       .map((character) => assetAbsolutePath(project.id, character.referenceAsset!));
 
-    const idempotencyKey = 'visual-turn-image:' + shot.id + ':' + turn.index + ':v1';
+    const idempotencyKey = 'visual-turn-image:' + shot.id + ':' + turn.index + ':v2';
     const estimatedUsd = estimateOperationCost('image', 1);
     await assertSpendRetrySafe(project.id, idempotencyKey, 'referencia visual por turno ' + turn.index);
     await appendSpend(project.id, {
@@ -197,7 +197,7 @@ export async function generateSegmentedTurnVideosReal(
     }
 
     await mkdir(path.dirname(status.videoPath), { recursive: true });
-    const idempotencyKey = 'visual-turn-video:' + shot.id + ':' + turn.index + ':v1';
+    const idempotencyKey = 'visual-turn-video:' + shot.id + ':' + turn.index + ':v2';
     const estimatedUsd = estimateOperationCost('video', turn.providerDurationSeconds);
     await assertSpendRetrySafe(project.id, idempotencyKey, 'video visual por turno ' + turn.index);
     await appendSpend(project.id, {
