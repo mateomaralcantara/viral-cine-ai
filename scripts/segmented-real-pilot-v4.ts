@@ -5,6 +5,10 @@ import { buildSegmentedRealPreflight } from '@/lib/engine/segmented-real-preflig
 import { renderSegmentedShotReal } from '@/lib/engine/segmented-renderer-v4';
 import { safetyStatus } from '@/lib/engine/production-safety';
 import { inspectMixedShotVisualSource } from '@/lib/engine/producer-v4';
+import {
+  inspectSegmentedTurnVisualSources,
+  turnSourceAssetMap
+} from '@/lib/engine/segmented-visual-sources-v4';
 
 loadProjectLocalEnvOverride();
 
@@ -36,19 +40,23 @@ for (const scene of project.plan.scenes) {
 if (!located) throw new Error(`No existe la toma '${shotId}'.`);
 
 const sourceInspection = await inspectMixedShotVisualSource(project, located.scene, located.shot);
-const effectiveShot = sourceInspection.selectedAsset
-  ? { ...located.shot, baseVideoAsset: sourceInspection.selectedAsset, videoAsset: sourceInspection.selectedAsset }
+const visualTurns = await inspectSegmentedTurnVisualSources(project, located.scene, located.shot);
+const firstTurnAsset = visualTurns.turns.find((turn) => turn.videoReady)?.videoAsset;
+const effectiveSource = firstTurnAsset || sourceInspection.selectedAsset;
+const effectiveShot = effectiveSource
+  ? { ...located.shot, baseVideoAsset: effectiveSource, videoAsset: effectiveSource }
   : located.shot;
 const preflight = buildSegmentedRealPreflight(project, located.scene, effectiveShot);
 
 printPreflight(preflight);
 printVisualSource(sourceInspection);
+printVisualTurns(visualTurns);
 
 if (command === 'preview') {
   console.log('\nSEGURIDAD');
   console.log('  SOLO LECTURA: no modifica project.json, ledger ni media.');
   console.log('  No reserva gasto y no llama ElevenLabs, OpenAI, Veo ni Fal.ai.');
-  process.exit(preflight.blockers.length || sourceInspection.needsGeneration ? 2 : 0);
+  process.exit(preflight.blockers.length || !visualTurns.allVideosReady ? 2 : 0);
 }
 
 const confirmation = rest.join(' ').trim();
@@ -64,10 +72,11 @@ if (preflight.blockers.length) {
   );
 }
 
-if (sourceInspection.needsGeneration || !sourceInspection.selectedAsset) {
+if (!visualTurns.allVideosReady) {
   throw new Error(
-    'Piloto Fal bloqueado ANTES DE GASTAR: la fuente visual no es cinematográfica. ' +
-    'Primero ejecuta el reparador de video base con autorización SI VIDEO.'
+    'Piloto Fal bloqueado ANTES DE GASTAR: faltan fuentes visuales 4.1 por turno. ' +
+    'Ejecuta primero npm run visual:turns -- preview <projectId> <shotId>, ' +
+    'aprueba las referencias y genera los videos por turno.'
   );
 }
 
@@ -87,12 +96,23 @@ console.log('  APIs externas=HABILITADAS SOLO PARA ESTE PROCESO');
 console.log('  gasto pagado=HABILITADO SOLO PARA ESTE PROCESO');
 console.log('  fallback pagado global=DESHABILITADO');
 
-const result = await renderSegmentedShotReal(project, located.scene, effectiveShot);
+const result = await renderSegmentedShotReal(
+  project,
+  located.scene,
+  effectiveShot,
+  { turnSourceAssets: turnSourceAssetMap(visualTurns) }
+);
 
 console.log('\nSEGMENTED REAL PILOT 4.0 — PASS');
 console.log(`Proyecto: ${result.projectId}`);
 console.log(`Toma: E${located.scene.order}/T${located.shot.order} ${result.shotId}`);
 console.log(`MP4 fuente: ${result.sourceVideoAsset}`);
+console.log(`Modo fuente visual: ${result.sourceMode}`);
+if (result.turnSourceAssets) {
+  for (const [turnIndex, asset] of Object.entries(result.turnSourceAssets)) {
+    console.log(`Fuente turno ${turnIndex}: ${asset}`);
+  }
+}
 console.log(`Duración fuente: ${result.sourceDurationSeconds.toFixed(3)}s`);
 console.log(`Duración final: ${result.outputDurationSeconds.toFixed(3)}s`);
 console.log(`Delta: ${result.durationDeltaSeconds.toFixed(3)}s`);
@@ -160,6 +180,23 @@ function printPreflight(preview: ReturnType<typeof buildSegmentedRealPreflight>)
   console.log(`  PRODUCTION_MODE=${safety.mode}`);
   console.log(`  APIs externas=${safety.externalCallsEnabled ? 'HABILITADAS' : 'BLOQUEADAS'}`);
   console.log(`  gasto pagado=${safety.paidGenerationEnabled ? 'HABILITADO' : 'BLOQUEADO'}`);
+}
+
+function printVisualTurns(
+  inspection: Awaited<ReturnType<typeof inspectSegmentedTurnVisualSources>>
+) {
+  console.log('\nFUENTES VISUALES 4.1 POR TURNO');
+  console.log('  Referencias: ' + (inspection.allReferencesReady ? 'LISTAS' : 'PENDIENTES'));
+  console.log('  Videos: ' + (inspection.allVideosReady ? 'LISTOS' : 'PENDIENTES'));
+  for (const turn of inspection.turns) {
+    console.log(
+      '  ' + turn.index + '. ' + turn.speakerLabel +
+      ' | role=' + turn.role +
+      ' | ref=' + (turn.referenceReady ? 'LISTA' : 'PENDIENTE') +
+      ' | video=' + (turn.videoReady ? 'LISTO' : 'PENDIENTE')
+    );
+  }
+  console.log('  Pipeline 4.1 usa estas fuentes por turno; la fuente única 4.0 queda solo como legado.');
 }
 
 function printVisualSource(
