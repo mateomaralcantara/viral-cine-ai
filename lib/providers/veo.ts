@@ -10,10 +10,12 @@ export async function generateVeoVideo(imagePath: string, prompt: string, input:
   const bytes = await readFile(imagePath);
   let operation = await ai.models.generateVideos({
     model: process.env.GEMINI_VIDEO_MODEL || 'veo-3.1-fast-generate-preview',
-    prompt,
-    image: {
-      imageBytes: bytes.toString('base64'),
-      mimeType: extname(imagePath).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg'
+    source: {
+      prompt,
+      image: {
+        imageBytes: bytes.toString('base64'),
+        mimeType: extname(imagePath).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg'
+      }
     },
     config: {
       aspectRatio: input.aspectRatio,
