@@ -32,6 +32,7 @@
     "single:promote": "node --import tsx scripts/promote-single-pilot-v4.ts",
     "scene2:continuity": "node --import tsx scripts/scene2-continuity-v4.ts",
     "scene2:narration": "node --import tsx scripts/scene2-narration-continuity-v4.ts",
+    "scene2:t3-fix": "node --import tsx scripts/scene2-t3-continuity-fix-v4.ts",
     "fal:check": "node --import tsx scripts/fal-storage-check-v4.ts",
     "fal:reconcile-upload403": "node --import tsx scripts/reconcile-fal-upload403-v4.ts",
     "visual:audit": "node --import tsx scripts/visual-audit-v4.ts",
