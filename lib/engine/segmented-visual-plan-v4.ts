@@ -21,6 +21,7 @@ export type SegmentedVisualTurnPlan = {
   visiblePeopleLimit: number;
   referenceCharacterIds: string[];
   prompt: string;
+  videoPrompt: string;
   negativePrompt: string;
 };
 
@@ -97,6 +98,14 @@ export function buildSegmentedVisualPlan(
         shot,
         speakerLabel,
         line.text,
+        role,
+        visiblePeopleLimit
+      ),
+      videoPrompt: videoPromptForTurn(
+        project,
+        scene,
+        shot,
+        speakerLabel,
         role,
         visiblePeopleLimit
       ),
@@ -217,6 +226,76 @@ function visualPromptForTurn(
     'Keep the principal subject readable and unobstructed, with restrained physical movement.',
     'No single-face lip-sync unless explicitly required by the speaker policy.',
     'Context: ' + spokenText
+  ].join(' ');
+}
+
+
+function videoPromptForTurn(
+  project: FilmProject,
+  scene: FilmScene,
+  shot: FilmShot,
+  speakerLabel: string,
+  role: SegmentedVisualRole,
+  visiblePeopleLimit: number
+) {
+  const speakerCharacter = project.plan?.characters.find((character) => character.name === speakerLabel) ||
+    project.plan?.characters.find((character) => character.id === shot.speakerId);
+  const settingAnchor = extractSettingAnchor(scene.visualPrompt);
+  const common = [
+    settingAnchor ? 'Historical setting: ' + settingAnchor + '.' : '',
+    'Animate the approved first-frame reference faithfully instead of redesigning the shot.',
+    'Preserve exact subject identity, wardrobe, architecture, lighting direction, framing and camera axis.',
+    'Keep motion physically plausible, restrained and cinematic.',
+    'Do not introduce new characters, props, text, subtitles, logos or watermarks.',
+    'Keep the scene non-graphic and suitable for a general audience.'
+  ].filter(Boolean).join(' ');
+
+  if (role === 'speaker-closeup') {
+    const continuity = speakerCharacter
+      ? 'Maintain the exact face and wardrobe of ' + speakerCharacter.name + '.'
+      : 'Maintain the exact speaker identity from the reference.';
+    return [
+      common,
+      'Dedicated silent dialogue plate for ' + speakerLabel + '.',
+      continuity,
+      'Medium close-up or medium shot; keep the speaker at roughly the same scale as the reference.',
+      'Face, eyes and mouth remain fully visible and unobstructed.',
+      'Maximum ' + visiblePeopleLimit + ' visible people; background figures stay soft and secondary.',
+      'The speaker must remain silent with a neutral closed mouth for later lip-sync.',
+      'Minimal head and body movement, natural blinking and breathing only.',
+      'Keep hands below the chest or outside frame.',
+      'Camera locked or use only a very slow controlled push-in.'
+    ].join(' ');
+  }
+
+  if (role === 'crowd-reaction') {
+    return [
+      common,
+      'Dedicated crowd-reaction motion plate with at most ' + visiblePeopleLimit + ' clearly readable people.',
+      'Preserve the same representative group from the reference; do not multiply or replace faces.',
+      'The group reacts in a forceful collective protest toward an off-camera authority without depicting physical violence.',
+      'Use restrained coordinated gestures, natural cloth movement and believable facial motion.',
+      'Avoid extreme foreground hands, tangled limbs, duplicated bodies and face morphing.',
+      'Keep the camera stable with only subtle cinematic movement.'
+    ].join(' ');
+  }
+
+  if (role === 'establishing') {
+    return [
+      common,
+      'Establishing motion plate for narration with at most ' + visiblePeopleLimit + ' clearly readable people.',
+      'Do not advance later dialogue actions.',
+      'Use a slow subtle dolly or controlled atmospheric camera drift.',
+      'Allow only restrained human movement, natural cloth movement and light dust in the air.',
+      'Preserve foreground, midground and background separation and the original focal path.'
+    ].join(' ');
+  }
+
+  return [
+    common,
+    'Reaction motion plate for ' + speakerLabel + ' with at most ' + visiblePeopleLimit + ' visible people.',
+    'Keep the principal subject readable and unobstructed.',
+    'Use restrained physical movement and stable facial identity.'
   ].join(' ');
 }
 
