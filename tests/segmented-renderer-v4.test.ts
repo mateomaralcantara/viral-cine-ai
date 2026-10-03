@@ -149,8 +149,14 @@ test('plan visual 4.1 separa narrador, hablante y multitud en coberturas distint
   assert.doesNotMatch(visual.turns[1].prompt, /Pilato se lava las manos/);
   assert.doesNotMatch(visual.turns[1].prompt, /ACCION CONTAMINADA/);
   assert.match(visual.turns[1].prompt, /Scene setting anchor: Patio exterior del pretorio romano en Jerusalén al amanecer/i);
+  assert.match(visual.turns[1].videoPrompt, /silent dialogue plate/i);
+  assert.match(visual.turns[1].videoPrompt, /closed mouth/i);
+  assert.doesNotMatch(visual.turns[1].videoPrompt, /Hola\./);
+  assert.doesNotMatch(visual.turns[1].videoPrompt, /Pilato se lava las manos/i);
   assert.deepEqual(visual.turns[1].referenceCharacterIds, ['character-a']);
   assert.match(visual.turns[2].prompt, /representative group/i);
+  assert.match(visual.turns[2].videoPrompt, /collective protest/i);
+  assert.doesNotMatch(visual.turns[2].videoPrompt, /Sigue\./);
   assert.deepEqual(visual.turns[2].referenceCharacterIds, []);
 });
 
