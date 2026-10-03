@@ -127,6 +127,7 @@ test('plan visual 4.1 separa narrador, hablante y multitud en coberturas distint
   const scene = project.plan!.scenes[0];
   const shot = scene.shots[0];
 
+  scene.visualPrompt = 'Patio exterior del pretorio romano en Jerusalén al amanecer, Pilato se lava las manos y Jesús permanece al centro. ACCION CONTAMINADA.';
   shot.visualPrompt = 'CONTAMINATED PARENT SHOT. Plano general. NARRADOR: otro texto. MULTITUD: otro texto.';
   const visual = buildSegmentedVisualPlan(project, scene, shot);
   assert.equal(visual.version, '4.1-per-turn-visual');
@@ -145,6 +146,9 @@ test('plan visual 4.1 separa narrador, hablante y multitud en coberturas distint
   assert.match(visual.turns[1].prompt, /Hola\./);
   assert.doesNotMatch(visual.turns[1].prompt, /CONTAMINATED PARENT SHOT/);
   assert.doesNotMatch(visual.turns[1].prompt, /otro texto/);
+  assert.doesNotMatch(visual.turns[1].prompt, /Pilato se lava las manos/);
+  assert.doesNotMatch(visual.turns[1].prompt, /ACCION CONTAMINADA/);
+  assert.match(visual.turns[1].prompt, /Scene setting anchor: Patio exterior del pretorio romano en Jerusalén al amanecer/i);
   assert.deepEqual(visual.turns[1].referenceCharacterIds, ['character-a']);
   assert.match(visual.turns[2].prompt, /representative group/i);
   assert.deepEqual(visual.turns[2].referenceCharacterIds, []);
