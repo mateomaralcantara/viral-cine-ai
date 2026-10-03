@@ -6,7 +6,7 @@ import { buildSegmentedVisualPlan, type SegmentedVisualTurnPlan } from '@/lib/en
 import { appendSpend, assertSpendRetrySafe, estimateOperationCost } from '@/lib/engine/spend-ledger';
 import { assertPaidGenerationAllowed, hasUsableCredential, safeErrorMessage } from '@/lib/engine/production-safety';
 import { generateImageWithReferences } from '@/lib/providers/openai-media';
-import { generateVeoVideo } from '@/lib/providers/veo';
+import { generateVeoVideo, isVeoNoChargeFailure } from '@/lib/providers/veo';
 import { assertCinematicVideoTrack } from '@/lib/media/probe';
 
 export type SegmentedTurnVisualSourceStatus = {
@@ -24,6 +24,7 @@ export type SegmentedTurnVisualSourceStatus = {
   videoReady: boolean;
   rejectedReason?: string;
   prompt: string;
+  videoPrompt: string;
   negativePrompt: string;
   estimatedReferenceUsd: number;
   estimatedVideoUsd: number;
@@ -76,6 +77,7 @@ export async function inspectSegmentedTurnVisualSources(
       videoReady,
       rejectedReason,
       prompt: turn.prompt,
+      videoPrompt: turn.videoPrompt,
       negativePrompt: turn.negativePrompt,
       estimatedReferenceUsd: referenceReady ? 0 : estimateOperationCost('image', 1),
       estimatedVideoUsd: videoReady ? 0 : estimateOperationCost('video', turn.providerDurationSeconds)
@@ -197,7 +199,7 @@ export async function generateSegmentedTurnVideosReal(
     }
 
     await mkdir(path.dirname(status.videoPath), { recursive: true });
-    const idempotencyKey = 'visual-turn-video:' + shot.id + ':' + turn.index + ':v2';
+    const idempotencyKey = 'visual-turn-video:' + shot.id + ':' + turn.index + ':v3';
     const estimatedUsd = estimateOperationCost('video', turn.providerDurationSeconds);
     await assertSpendRetrySafe(project.id, idempotencyKey, 'video visual por turno ' + turn.index);
     await appendSpend(project.id, {
@@ -214,7 +216,7 @@ export async function generateSegmentedTurnVideosReal(
     try {
       await generateVeoVideo(
         status.referencePath,
-        turn.prompt + ' Negative constraints: ' + turn.negativePrompt,
+        turn.videoPrompt,
         project.input,
         status.videoPath,
         turn.slotDurationSeconds
@@ -232,12 +234,14 @@ export async function generateSegmentedTurnVideosReal(
         outputAsset: status.videoAsset
       });
     } catch (error) {
+      const noCharge = isVeoNoChargeFailure(error);
       await appendSpend(project.id, {
         operation: 'video',
         provider: 'Veo',
         model: process.env.GEMINI_VIDEO_MODEL,
-        state: 'failed-unknown',
+        state: noCharge ? 'failed-no-charge' : 'failed-unknown',
         estimatedUsd,
+        actualUsd: noCharge ? 0 : undefined,
         sceneId: scene.id,
         shotId: shot.id,
         idempotencyKey,
