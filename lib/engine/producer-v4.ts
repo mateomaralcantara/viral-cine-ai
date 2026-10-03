@@ -304,7 +304,7 @@ async function produceShotV4(project: FilmProject, sceneIndex: number, shotIndex
 
     shot.status = 'ready';
     shot.error = undefined;
-    shot.pipelineVersion = hasMultipleDialogueSpeakers(shot) ? '4.0-segmented-real' : '4.0-audio-first';
+    shot.pipelineVersion = hasMultipleDialogueSpeakers(shot) ? '4.1-segmented-visual-turns' : '4.0-audio-first';
     scene.status = 'rendering';
     project.productionLog.push(`${new Date().toISOString()} Escena ${scene.order}, segmento ${shot.order} terminado con Real Cinema 4.0`);
     return saveProject(project);
