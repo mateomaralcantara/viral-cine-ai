@@ -41,7 +41,9 @@ export function buildSingleVisualPlan(
 
   const setting = extractSettingAnchor(scene.visualPrompt || shot.visualPrompt);
   const action = extractActionAnchor(shot.visualPrompt, setting);
+  const camera = shot.camera.replace(/\s+/g, ' ').trim();
   const narration = shot.spokenText.trim();
+  const narrationContext = action ? '' : narration;
 
   const prompt = [
     project.plan.creativeDirection || '',
@@ -49,12 +51,13 @@ export function buildSingleVisualPlan(
     action ? 'Narrative action for this frame: ' + action + '.' : '',
     continuity ? 'Character continuity: ' + continuity + '.' : '',
     'Create ONE coherent cinematic shot, not a montage and not a sequence of different camera angles.',
-    'Use a medium-wide lateral composition with clear geography and natural depth.',
+    camera ? 'Camera direction: ' + camera + '.' : '',
+    'Honor the requested framing and camera direction while keeping clear geography and natural depth.',
     'The principal action must remain readable in one frame; secondary characters stay visually subordinate and do not perform a competing story beat.',
     'Narrator is off camera. Nobody addresses the camera and nobody is framed for lip-sync.',
     'Grounded historical realism, natural anatomy, stable faces, physically plausible posture and weight.',
     'Restrained non-graphic staging suitable for a general audience.',
-    narration ? 'Narration context only: ' + narration : '',
+    narrationContext ? 'Narration context only: ' + narrationContext : '',
     'No text, subtitles, captions, logos or watermarks.'
   ].filter(Boolean).join(' ');
 
@@ -62,7 +65,8 @@ export function buildSingleVisualPlan(
     setting ? 'Historical setting: ' + setting + '.' : '',
     'Animate the approved first-frame reference faithfully instead of redesigning it.',
     'ONE continuous cinematic take for the full clip; no cuts, no montage, no POV insert, no angle change.',
-    'Use only a slow controlled lateral tracking movement or subtle side dolly.',
+    camera ? 'Camera direction: ' + camera + '.' : '',
+    'Use restrained, controlled camera movement that follows the requested framing; do not invent a different shot type.',
     'Preserve exact subject identities, wardrobe, architecture, lighting direction, framing and camera axis.',
     action ? 'Continue only this immediate action: ' + action + '.' : '',
     'Secondary characters may react subtly in the background but must not begin a separate narrative action.',
@@ -109,6 +113,11 @@ function extractActionAnchor(value: string, settingAnchor: string) {
   const compact = value.replace(/\s+/g, ' ').trim();
   if (!compact) return '';
 
+  const explicitBeat = compact.match(
+    /Una sola (?:acción dominante|idea visual)\s*:\s*([^.!?]+[.!?]?)/i
+  )?.[1]?.trim();
+  if (explicitBeat) return explicitBeat.slice(0, 520).trim();
+
   const normalizedSetting = normalizeSentence(settingAnchor);
   const sentences = compact
     .split(/(?<=[.!?])\s+/)
@@ -118,10 +127,20 @@ function extractActionAnchor(value: string, settingAnchor: string) {
     .filter((item) => !/^Movimiento continuo/i.test(item))
     .filter((item) => !/^Sin fotograf/i.test(item))
     .filter((item) => !/^Momento narrativo/i.test(item))
-    .filter((item) => normalizeSentence(item) !== normalizedSetting);
+    .filter((item) => normalizeSentence(item) !== normalizedSetting)
+    .filter((item) => !looksLikeSettingOnly(item));
 
   // A single-shot plan needs one dominant action. Other characters remain continuity/background.
   return (sentences[0] || '').slice(0, 520).trim();
+}
+
+function looksLikeSettingOnly(value: string) {
+  const normalized = normalizeSentence(value);
+  return /^(calle|jerusalen|salida|umbral|patio|interior|exterior|camino|plaza|sendero)\b/.test(
+    normalized
+  ) && !/\b(avanza|camina|cruza|carga|lleva|coloca|sostiene|mira|reconoce|protege|sujeta|abre|aleja|entra|sale)\b/.test(
+    normalized
+  );
 }
 
 function normalizeSentence(value: string) {
