@@ -102,6 +102,7 @@ function printInspection(value: Awaited<ReturnType<typeof inspectSegmentedTurnVi
     console.log('     video: ' + turn.videoAsset);
     if (turn.rejectedReason) console.log('     rechazo: ' + turn.rejectedReason);
     console.log('     prompt: ' + turn.prompt);
+    console.log('     video-prompt: ' + turn.videoPrompt);
     console.log('     negativo: ' + turn.negativePrompt);
   }
 }
