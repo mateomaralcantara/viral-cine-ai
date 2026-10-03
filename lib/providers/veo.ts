@@ -19,7 +19,19 @@ export function isVeoNoChargeFailure(error: unknown) {
 
 export async function generateVeoVideo(imagePath: string, prompt: string, input: ProjectInput, outputPath: string, durationSeconds = 8) {
   assertPaidGenerationAllowed('generar video con Veo', 'GEMINI_API_KEY');
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const geminiApiKey = process.env.GEMINI_API_KEY;
+  const previousGoogleApiKey = process.env.GOOGLE_API_KEY;
+  // @google/genai can prioritize GOOGLE_API_KEY when both variables exist.
+  // ViralCine's Veo path is explicitly guarded by GEMINI_API_KEY, so construct
+  // this client with only that credential visible and restore the process env
+  // immediately afterwards.
+  if (previousGoogleApiKey !== undefined) delete process.env.GOOGLE_API_KEY;
+  let ai: GoogleGenAI;
+  try {
+    ai = new GoogleGenAI({ apiKey: geminiApiKey });
+  } finally {
+    if (previousGoogleApiKey !== undefined) process.env.GOOGLE_API_KEY = previousGoogleApiKey;
+  }
   const bytes = await readFile(imagePath);
   let operation = await ai.models.generateVideos({
     model: process.env.GEMINI_VIDEO_MODEL || 'veo-3.1-fast-generate-preview',
