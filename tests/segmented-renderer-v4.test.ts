@@ -13,6 +13,7 @@ import {
   previewSegmentedRenderer,
   renderSegmentedShotOffline
 } from '../lib/engine/segmented-renderer-v4';
+import { buildSegmentedVisualPlan } from '../lib/engine/segmented-visual-plan-v4';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 
@@ -118,6 +119,29 @@ test('preview valida una toma multihablante continua sin imponer mínimo de 4s p
   assert.equal(preview.readyShots, 1);
   assert.equal(preview.blockedShots, 0);
   assert.equal(preview.turns, 3);
+});
+
+test('plan visual 4.1 separa narrador, hablante y multitud en coberturas distintas', () => {
+  const project = fixture();
+  project.supportVoices![0].label = 'Multitud';
+  const scene = project.plan!.scenes[0];
+  const shot = scene.shots[0];
+
+  const visual = buildSegmentedVisualPlan(project, scene, shot);
+  assert.equal(visual.version, '4.1-per-turn-visual');
+  assert.equal(visual.turns.length, 3);
+  assert.equal(visual.turns[0].role, 'establishing');
+  assert.equal(visual.turns[1].role, 'speaker-closeup');
+  assert.equal(visual.turns[1].requiresLipSync, true);
+  assert.equal(visual.turns[1].visiblePeopleLimit, 3);
+  assert.equal(visual.turns[2].role, 'crowd-reaction');
+  assert.equal(visual.turns[2].requiresLipSync, false);
+  assert.deepEqual(
+    visual.turns.map((turn) => turn.providerDurationSeconds),
+    [4, 4, 4]
+  );
+  assert.match(visual.turns[1].prompt, /mouth unobstructed/i);
+  assert.match(visual.turns[2].prompt, /representative group/i);
 });
 
 test('plan bloquea huecos temporales antes de renderizar', () => {
