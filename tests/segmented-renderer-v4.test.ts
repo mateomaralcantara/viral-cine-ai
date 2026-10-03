@@ -127,13 +127,14 @@ test('plan visual 4.1 separa narrador, hablante y multitud en coberturas distint
   const scene = project.plan!.scenes[0];
   const shot = scene.shots[0];
 
+  shot.visualPrompt = 'CONTAMINATED PARENT SHOT. Plano general. NARRADOR: otro texto. MULTITUD: otro texto.';
   const visual = buildSegmentedVisualPlan(project, scene, shot);
   assert.equal(visual.version, '4.1-per-turn-visual');
   assert.equal(visual.turns.length, 3);
   assert.equal(visual.turns[0].role, 'establishing');
   assert.equal(visual.turns[1].role, 'speaker-closeup');
   assert.equal(visual.turns[1].requiresLipSync, true);
-  assert.equal(visual.turns[1].visiblePeopleLimit, 3);
+  assert.equal(visual.turns[1].visiblePeopleLimit, 2);
   assert.equal(visual.turns[2].role, 'crowd-reaction');
   assert.equal(visual.turns[2].requiresLipSync, false);
   assert.deepEqual(
@@ -141,7 +142,12 @@ test('plan visual 4.1 separa narrador, hablante y multitud en coberturas distint
     [4, 4, 4]
   );
   assert.match(visual.turns[1].prompt, /mouth unobstructed/i);
+  assert.match(visual.turns[1].prompt, /Hola\./);
+  assert.doesNotMatch(visual.turns[1].prompt, /CONTAMINATED PARENT SHOT/);
+  assert.doesNotMatch(visual.turns[1].prompt, /otro texto/);
+  assert.deepEqual(visual.turns[1].referenceCharacterIds, ['character-a']);
   assert.match(visual.turns[2].prompt, /representative group/i);
+  assert.deepEqual(visual.turns[2].referenceCharacterIds, []);
 });
 
 test('plan bloquea huecos temporales antes de renderizar', () => {
