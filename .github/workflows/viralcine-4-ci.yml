@@ -32,10 +32,10 @@ jobs:
           ffmpeg -version | head -n 1
           ffprobe -version | head -n 1
 
-      - name: Refresh safe dependency lock
+      - name: Refresh dependency lock safely
         run: |
           npm install --package-lock-only
-          npm audit fix --package-lock-only
+          npm audit --omit=dev --audit-level=high
 
       - name: Commit audited lockfile
         if: github.event_name == 'push'
