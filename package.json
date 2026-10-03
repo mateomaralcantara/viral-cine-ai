@@ -31,6 +31,7 @@
     "fal:reconcile-upload403": "node --import tsx scripts/reconcile-fal-upload403-v4.ts",
     "visual:audit": "node --import tsx scripts/visual-audit-v4.ts",
     "source:repair": "node --import tsx scripts/mixed-source-repair-v4.ts",
+    "visual:turns": "node --import tsx scripts/segmented-visual-turns-v4.ts",
     "openai:check": "node --import tsx scripts/openai-auth-check-v4.ts",
     "openai:reconcile-auth401": "node --import tsx scripts/reconcile-openai-auth401-v4.ts",
     "support:voices": "node --import tsx scripts/support-voices-v4.ts",
