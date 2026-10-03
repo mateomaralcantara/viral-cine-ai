@@ -55,6 +55,10 @@ import { appendSpend, assertSpendRetrySafe, estimateOperationCost } from '@/lib/
 import { assertPilotShotBudget, pilotModeEnabled, pilotSceneLimit, pilotShotLimit } from '@/lib/engine/pilot';
 import { hasMultipleDialogueSpeakers } from '@/lib/engine/speaker-resolution';
 import { renderSegmentedShotReal } from '@/lib/engine/segmented-renderer-v4';
+import {
+  inspectSegmentedTurnVisualSources,
+  turnSourceAssetMap
+} from '@/lib/engine/segmented-visual-sources-v4';
 import { assertCinematicVideoTrack } from '@/lib/media/probe';
 
 const GOOGLE_BILLING_COOLDOWN_MS = 15 * 60 * 1000;
@@ -539,39 +543,54 @@ async function renderMixedShotV4(
 ): Promise<SceneAssets> {
   if (!project.plan) throw new Error('Plan ausente');
 
-  const source = await ensureMixedShotVisualSourceReal(project, scene, shot);
-  if (!source.selectedAsset) {
-    throw new Error('No se pudo resolver una fuente visual cinematográfica válida.');
+  // 4.1: mixed dialogue no longer reuses one crowded base video for every speaker.
+  // Each temporal turn must have its own manually reviewable visual source.
+  const visualTurns = await inspectSegmentedTurnVisualSources(project, scene, shot);
+  if (!visualTurns.allVideosReady) {
+    const pending = visualTurns.turns
+      .filter((turn) => !turn.videoReady)
+      .map((turn) => turn.index + ':' + turn.speakerLabel)
+      .join(', ');
+    throw new Error(
+      'Toma multihablante bloqueada: faltan fuentes visuales 4.1 por turno (' + pending + '). ' +
+      'Ejecuta primero npm run visual:turns -- preview <projectId> <shotId>, ' +
+      'genera/revisa referencias y luego videos con autorización explícita.'
+    );
   }
 
-  const activeCharacterIds = shot.characterIds.length ? shot.characterIds : scene.characterIds;
-  const characters = activeCharacterIds
-    .map((id) => project.plan?.characters.find((character) => character.id === id))
-    .filter((character): character is Character => Boolean(character));
-  const lead = characters[0] || project.plan.characters[0];
+  const turnSources = turnSourceAssetMap(visualTurns);
+  const firstTurn = visualTurns.turns[0];
+  const firstVideoAsset = firstTurn?.videoAsset;
+  const imageAsset =
+    visualTurns.turns.find((turn) => turn.referenceReady)?.referenceAsset ||
+    shot.imageAsset;
 
-  const imageAsset = source.referenceImageAsset || shot.imageAsset || lead?.referenceAsset;
-  if (!imageAsset) {
-    throw new Error('La toma multihablante no tiene imagen/referencia visual para el checkpoint.');
+  if (!firstVideoAsset || !imageAsset) {
+    throw new Error('La toma multihablante no tiene fuentes visuales 4.1 completas.');
   }
 
   const renderShot: FilmShot = {
     ...shot,
-    baseVideoAsset: source.selectedAsset,
-    videoAsset: source.selectedAsset
+    baseVideoAsset: firstVideoAsset,
+    videoAsset: firstVideoAsset
   };
-  const result = await renderSegmentedShotReal(project, scene, renderShot);
+  const result = await renderSegmentedShotReal(
+    project,
+    scene,
+    renderShot,
+    { turnSourceAssets: turnSources }
+  );
 
-  shot.baseVideoAsset = source.selectedAsset;
+  shot.baseVideoAsset = firstVideoAsset;
   shot.imageAsset = imageAsset;
   shot.voiceAsset = result.masterAudioAsset;
   shot.lipSyncAsset = result.lipSyncTurns > 0 ? result.outputAsset : undefined;
   shot.videoAsset = result.outputAsset;
   shot.lastProvider = result.lipSyncTurns > 0
-    ? 'segmented-elevenlabs-fal'
-    : 'segmented-elevenlabs';
+    ? 'segmented-visual-turns-elevenlabs-fal'
+    : 'segmented-visual-turns-elevenlabs';
   shot.lastGenerationState = 'succeeded';
-  shot.pipelineVersion = '4.0-segmented-real';
+  shot.pipelineVersion = '4.1-segmented-visual-turns';
 
   return {
     mode: shot.mode,
