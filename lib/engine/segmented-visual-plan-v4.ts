@@ -154,9 +154,11 @@ function visualPromptForTurn(
       '; wardrobe: ' + speakerCharacter.wardrobe + '.'
     : '';
 
+  const settingAnchor = extractSettingAnchor(scene.visualPrompt);
+
   const common = [
     project.plan?.creativeDirection || '',
-    scene.visualPrompt,
+    settingAnchor ? 'Scene setting anchor: ' + settingAnchor + '.' : '',
     'TURN-SPECIFIC COVERAGE OVERRIDES wider framing or action implied by the scene context.',
     'Do not combine other dialogue beats, other speakers, or the parent shot staging into this turn.',
     'Cinematic historical drama with grounded physical realism and observational composition.',
@@ -232,6 +234,17 @@ function negativePromptForTurn(scene: FilmScene, role: SegmentedVisualRole) {
     'warped architecture, melting objects, temporal flicker, unstable costumes, camera shake',
     roleSpecific
   ].filter(Boolean).join(', ');
+}
+
+function extractSettingAnchor(value: string) {
+  const compact = value.replace(/\s+/g, ' ').trim();
+  if (!compact) return '';
+
+  const firstSentence = compact.split(/[.!?]/, 1)[0]?.trim() || compact;
+  const firstClause = firstSentence.split(',', 1)[0]?.trim() || firstSentence;
+  const candidate = firstClause.length >= 18 ? firstClause : firstSentence;
+
+  return candidate.slice(0, 240).trim();
 }
 
 function providerDuration(seconds: number): 4 | 6 | 8 {
