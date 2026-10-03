@@ -80,11 +80,17 @@ export type RealSegmentedRenderTurn = {
   renderedPath: string;
 };
 
+export type SegmentedRealRenderOptions = {
+  turnSourceAssets?: Record<number, string>;
+};
+
 export type RealSegmentedRenderResult = {
   projectId: string;
   sceneId: string;
   shotId: string;
   sourceVideoAsset: string;
+  sourceMode: 'single' | 'per-turn';
+  turnSourceAssets?: Record<number, string>;
   sourceSha256Before: string;
   sourceSha256After: string;
   sourcePreserved: boolean;
@@ -284,24 +290,58 @@ export async function renderSegmentedShotOffline(
 export async function renderSegmentedShotReal(
   project: FilmProject,
   scene: FilmScene,
-  shot: FilmShot
+  shot: FilmShot,
+  options: SegmentedRealRenderOptions = {}
 ): Promise<RealSegmentedRenderResult> {
   const plan = buildSegmentedShotPlan(project, scene, shot);
   assertSegmentedRealReadiness(project, plan);
   assertPaidGenerationAllowed('renderizar toma multihablante real');
 
-  await access(plan.sourceVideoPath);
-  await assertVideoStream(plan.sourceVideoPath, 'MP4 fuente');
-  await assertCinematicVideoTrack(plan.sourceVideoPath, plan.shotDurationSeconds);
-  const sourceDurationSeconds = await probeMediaDurationSeconds(plan.sourceVideoPath);
-  if (sourceDurationSeconds + OUTPUT_DURATION_TOLERANCE_SECONDS < plan.shotDurationSeconds) {
-    throw new Error(
-      'El MP4 fuente dura ' + sourceDurationSeconds.toFixed(3) +
-      's y la toma exige ' + plan.shotDurationSeconds.toFixed(3) + 's.'
-    );
+  const turnSourceAssets = options.turnSourceAssets || {};
+  const useTurnSources =
+    plan.turns.length > 0 &&
+    plan.turns.every((turn) => Boolean(turnSourceAssets[turn.index]));
+
+  const turnSourcePaths = new Map<number, string>();
+  const sourceBeforeParts: string[] = [];
+  let sourceDurationSeconds = 0;
+
+  if (useTurnSources) {
+    for (const turn of plan.turns) {
+      const asset = turnSourceAssets[turn.index];
+      const sourcePath = assetAbsolutePath(project.id, asset);
+      await access(sourcePath);
+      await assertVideoStream(sourcePath, 'MP4 fuente turno ' + turn.index);
+      await assertCinematicVideoTrack(sourcePath, turn.durationSeconds);
+      const duration = await probeMediaDurationSeconds(sourcePath);
+      if (duration + OUTPUT_DURATION_TOLERANCE_SECONDS < turn.durationSeconds) {
+        throw new Error(
+          'La fuente visual del turno ' + turn.index + ' dura ' + duration.toFixed(3) +
+          's y el turno exige ' + turn.durationSeconds.toFixed(3) + 's.'
+        );
+      }
+      const sha = await sha256File(sourcePath);
+      sourceBeforeParts.push(turn.index + ':' + sha);
+      sourceDurationSeconds += duration;
+      turnSourcePaths.set(turn.index, sourcePath);
+    }
+  } else {
+    await access(plan.sourceVideoPath);
+    await assertVideoStream(plan.sourceVideoPath, 'MP4 fuente');
+    await assertCinematicVideoTrack(plan.sourceVideoPath, plan.shotDurationSeconds);
+    sourceDurationSeconds = await probeMediaDurationSeconds(plan.sourceVideoPath);
+    if (sourceDurationSeconds + OUTPUT_DURATION_TOLERANCE_SECONDS < plan.shotDurationSeconds) {
+      throw new Error(
+        'El MP4 fuente dura ' + sourceDurationSeconds.toFixed(3) +
+        's y la toma exige ' + plan.shotDurationSeconds.toFixed(3) + 's.'
+      );
+    }
+    sourceBeforeParts.push(await sha256File(plan.sourceVideoPath));
   }
 
-  const sourceSha256Before = await sha256File(plan.sourceVideoPath);
+  const sourceSha256Before = createHash('sha256')
+    .update(sourceBeforeParts.join('|'))
+    .digest('hex');
   const sourceFingerprint = sourceSha256Before.slice(0, 12);
   const folder =
     'scene-' + pad(scene.order) + '-shot-' + pad(shot.order) + '-' + shot.id +
@@ -326,7 +366,10 @@ export async function renderSegmentedShotReal(
       .update(turn.speakerId + '\0' + turn.text)
       .digest('hex')
       .slice(0, 10);
-    const turnShot = makeTurnShot(shot, turn, turn.durationSeconds, hash, sourceFingerprint);
+
+    // Audio identity intentionally excludes the visual-source fingerprint.
+    // Replacing a bad video must not trigger duplicate TTS spend.
+    const turnShot = makeTurnShot(shot, turn, turn.durationSeconds, hash);
     const key =
       'seg-s' + pad(scene.order) + '-t' + pad(shot.order) +
       '-turn-' + pad(turn.index) + '-' + hash;
@@ -376,9 +419,13 @@ export async function renderSegmentedShotReal(
     }
 
     if (!(await fileExists(videoOnlyPath))) {
+      const sourcePath = useTurnSources
+        ? turnSourcePaths.get(prepared.turn.index)!
+        : plan.sourceVideoPath;
+      const sourceStartSeconds = useTurnSources ? 0 : allocation.startSeconds;
       await extractVideoOnlySegment(
-        plan.sourceVideoPath,
-        allocation.startSeconds,
+        sourcePath,
+        sourceStartSeconds,
         allocation.targetDurationSeconds,
         videoOnlyPath,
         project.input.aspectRatio
@@ -455,10 +502,24 @@ export async function renderSegmentedShotReal(
     );
   }
 
-  const sourceSha256After = await sha256File(plan.sourceVideoPath);
+  const sourceAfterParts: string[] = [];
+  if (useTurnSources) {
+    for (const turn of plan.turns) {
+      sourceAfterParts.push(
+        turn.index + ':' + await sha256File(turnSourcePaths.get(turn.index)!)
+      );
+    }
+  } else {
+    sourceAfterParts.push(await sha256File(plan.sourceVideoPath));
+  }
+  const sourceSha256After = createHash('sha256')
+    .update(sourceAfterParts.join('|'))
+    .digest('hex');
   const sourcePreserved = sourceSha256Before === sourceSha256After;
   if (!sourcePreserved) {
-    throw new Error('Protección de media: el SHA256 del MP4 fuente cambió durante el render segmentado real.');
+    throw new Error(
+      'Protección de media: el SHA256 de las fuentes visuales cambió durante el render segmentado real.'
+    );
   }
 
   return {
@@ -466,6 +527,8 @@ export async function renderSegmentedShotReal(
     sceneId: scene.id,
     shotId: shot.id,
     sourceVideoAsset: plan.sourceVideoAsset,
+    sourceMode: useTurnSources ? 'per-turn' : 'single',
+    turnSourceAssets: useTurnSources ? { ...turnSourceAssets } : undefined,
     sourceSha256Before,
     sourceSha256After,
     sourcePreserved,
@@ -549,13 +612,13 @@ function makeTurnShot(
   turn: SegmentedTurn,
   durationSeconds: number,
   hash: string,
-  sourceFingerprint: string
+  sourceFingerprint?: string
 ): FilmShot {
   return {
     ...parent,
     id:
       parent.id + ':turn:' + turn.index + ':' + hash +
-      ':src:' + sourceFingerprint,
+      (sourceFingerprint ? ':src:' + sourceFingerprint : ''),
     durationSeconds,
     spokenText: turn.text,
     speakerId: turn.speakerId,
