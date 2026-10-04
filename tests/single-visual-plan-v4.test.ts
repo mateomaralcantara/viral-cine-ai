@@ -76,3 +76,26 @@ test('single visual acepta una idea visual explícita como beat dominante', () =
   assert.match(plan.prompt, /Narrative action for this frame: la distancia física y emocional entre una madre y su hijo/i);
   assert.match(plan.videoPrompt, /Continue only this immediate action: la distancia física y emocional entre una madre y su hijo/i);
 });
+
+
+test('single visual video bloquea luminarias modernas y deriva de identidad', () => {
+  const shot: any = {
+    id: 'shot-5b',
+    order: 5,
+    durationSeconds: 7,
+    visualPrompt:
+      'Calle de Jerusalén del siglo I. ' +
+      'Una sola acción dominante: María y Juan permanecen de espaldas mientras Jesús se aleja cargando un solo madero.',
+    camera: 'Contraplano continuo desde detrás de María y Juan.',
+    spokenText: 'fragmento narrado',
+    speakerId: 'narrator',
+    dialogueLines: [{ id: 'l1', speakerId: 'narrator', text: 'fragmento narrado', startSeconds: 0 }],
+    characterIds: ['jesus']
+  };
+
+  const plan = buildSingleVisualPlan(project, scene, shot);
+
+  assert.match(plan.videoPrompt, /Do not add anachronistic or modern street furniture/i);
+  assert.match(plan.videoPrompt, /wall lamps/i);
+  assert.match(plan.videoPrompt, /Do not change established age, facial hair or recognizable identity/i);
+});
