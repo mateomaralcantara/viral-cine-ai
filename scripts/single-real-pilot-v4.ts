@@ -103,7 +103,7 @@ function printPreflight(value: Awaited<ReturnType<typeof buildSingleRealPrefligh
   console.log('Checkpoint vocal 4.1: ' + (value.voiceCheckpointReady ? 'LISTO' : 'PENDIENTE'));
   console.log('Costo voz pendiente: US$' + value.voiceEstimatedUsd.toFixed(4));
   console.log('Lip-sync: ' + (value.requiresLipSync ? 'SI' : 'NO'));
-  console.log('Fal estimado: US
+  console.log('Fal estimado: US$' + value.lipSyncEstimatedUsd.toFixed(4));
   console.log('Bloqueos: ' + value.blockers.length);
   if (value.blockers.length) {
     for (const blocker of value.blockers) console.log('  - ' + blocker);
@@ -123,24 +123,4 @@ function usage() {
   console.log('  npm run single:pilot -- preview <projectId> <shotId>');
   console.log('  npm run single:pilot -- run <projectId> <shotId> --confirm-paid SI VOICE');
   console.log('  Si la toma requiere lip-sync: --confirm-paid SI VOICE FAL');
-}
- + value.lipSyncEstimatedUsd.toFixed(4));
-  console.log('Bloqueos: ' + value.blockers.length);
-  if (value.blockers.length) {
-    for (const blocker of value.blockers) console.log('  - ' + blocker);
-  } else {
-    console.log('  ninguno');
-  }
-  console.log('\nTEXTO');
-  console.log(value.text);
-  console.log('\nCORTAFUEGOS ACTUAL');
-  console.log('  PRODUCTION_MODE=' + safety.mode);
-  console.log('  APIs externas=' + (safety.externalCallsEnabled ? 'HABILITADAS' : 'BLOQUEADAS'));
-  console.log('  gasto pagado=' + (safety.paidGenerationEnabled ? 'HABILITADO' : 'BLOQUEADO'));
-}
-
-function usage() {
-  console.log('Uso:');
-  console.log('  npm run single:pilot -- preview <projectId> <shotId>');
-  console.log('  npm run single:pilot -- run <projectId> <shotId> --confirm-paid SI VOICE');
 }
