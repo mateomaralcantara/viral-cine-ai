@@ -158,6 +158,83 @@ test('preflight real queda sin bloqueos cuando los tres perfiles y credenciales 
   }
 });
 
+
+test('E2/T7-like Narrador + María + Juan queda sin bloqueo con autocasting para los dos personajes', () => {
+  const previousEleven = process.env.ELEVENLABS_API_KEY;
+  const previousNarrator = process.env.ELEVENLABS_NARRATOR_VOICE_ID;
+  const previousFal = process.env.FAL_KEY;
+  const previousLip = process.env.ENABLE_LIPSYNC;
+
+  try {
+    process.env.ELEVENLABS_API_KEY = 'eleven-test-secret-123';
+    process.env.ELEVENLABS_NARRATOR_VOICE_ID = 'narrator-ready-123';
+    process.env.FAL_KEY = 'fal-test-secret-123';
+    process.env.ENABLE_LIPSYNC = 'true';
+
+    const project = fixture();
+    project.plan!.characters = [
+      {
+        ...project.plan!.characters[0],
+        id: 'maria',
+        name: 'María',
+        role: 'Madre',
+        appearance: 'Mujer judía de unos 50 años.',
+        voiceId: undefined
+      },
+      {
+        ...project.plan!.characters[0],
+        id: 'juan',
+        name: 'Juan',
+        role: 'Discípulo',
+        appearance: 'Hombre judío joven.',
+        voiceId: undefined
+      }
+    ];
+    project.supportVoices = [];
+    const scene = project.plan!.scenes[0];
+    const shot = scene.shots[0];
+    shot.characterIds = ['maria', 'juan'];
+    shot.dialogueLines = [
+      {
+        id: 't1',
+        speakerId: 'narrator',
+        text: 'El camino había comenzado.',
+        startSeconds: 0,
+        endSeconds: 2.333
+      },
+      {
+        id: 't2',
+        speakerId: 'maria',
+        text: 'Jesús...',
+        startSeconds: 2.333,
+        endSeconds: 4.667
+      },
+      {
+        id: 't3',
+        speakerId: 'juan',
+        text: 'Estoy contigo. No te soltaré.',
+        startSeconds: 4.667,
+        endSeconds: 7
+      }
+    ];
+    shot.spokenText = shot.dialogueLines.map((line) => line.text).join(' ');
+
+    const result = buildSegmentedRealPreflight(project, scene, shot);
+
+    assert.equal(result.blockers.length, 0);
+    assert.equal(result.totals.profilesRequired, 3);
+    assert.equal(result.totals.profilesReady, 1);
+    assert.equal(result.totals.profilesAutoCast, 2);
+    assert.equal(result.turns.find((turn) => turn.speakerId === 'maria')?.autoCastRequired, true);
+    assert.equal(result.turns.find((turn) => turn.speakerId === 'juan')?.autoCastRequired, true);
+  } finally {
+    restore('ELEVENLABS_API_KEY', previousEleven);
+    restore('ELEVENLABS_NARRATOR_VOICE_ID', previousNarrator);
+    restore('FAL_KEY', previousFal);
+    restore('ENABLE_LIPSYNC', previousLip);
+  }
+});
+
 function restore(name: string, value: string | undefined) {
   if (value === undefined) delete process.env[name];
   else process.env[name] = value;
