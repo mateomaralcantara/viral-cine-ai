@@ -111,7 +111,7 @@ export async function renderSingleShotReal(
   ]);
 
   const masterAudioPath = path.join(audioDir, 'master-audio.wav');
-  if (!(await fileExists(masterAudioPath))) {
+  if (!(await mediaDurationMatches(masterAudioPath, renderDurationSeconds))) {
     await fitAudioToSlot(
       prepared.voicePath,
       speedFactor,
@@ -121,7 +121,7 @@ export async function renderSingleShotReal(
   }
 
   const videoOnlyPath = path.join(videoDir, 'video-only.mp4');
-  if (!(await fileExists(videoOnlyPath))) {
+  if (!(await mediaDurationMatches(videoOnlyPath, renderDurationSeconds))) {
     await extractVideoOnlySegmentWithTailHold(
       visual.videoPath,
       0,
@@ -156,7 +156,7 @@ export async function renderSingleShotReal(
     videoDir,
     lipSyncRequired ? 'final-real-lipsync.mp4' : 'final-real.mp4'
   );
-  if (!(await fileExists(outputPath))) {
+  if (!(await mediaDurationMatches(outputPath, renderDurationSeconds))) {
     await muxSegmentAudio(
       videoForMux,
       masterAudioPath,
@@ -282,6 +282,16 @@ export function singleVoiceCheckpointPath(
     'single-v4-voice',
     'scene-' + pad(scene.order) + '-shot-' + pad(shot.order) + '-' + voiceHash + '.mp3'
   );
+}
+
+async function mediaDurationMatches(filePath: string, expectedSeconds: number) {
+  if (!(await fileExists(filePath))) return false;
+  try {
+    const duration = await probeMediaDurationSeconds(filePath);
+    return Math.abs(duration - expectedSeconds) <= OUTPUT_TOLERANCE_SECONDS;
+  } catch {
+    return false;
+  }
 }
 
 async function sha256File(filePath: string) {
