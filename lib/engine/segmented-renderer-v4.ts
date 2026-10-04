@@ -503,12 +503,12 @@ export async function renderSegmentedShotReal(
   await concatenate(renderedTurns, outputPath);
 
   await assertVideoStream(outputPath, 'Salida recompuesta');
-  await assertCinematicSceneVideo(outputPath, plan.shotDurationSeconds, {
+  await assertCinematicSceneVideo(outputPath, renderDurationSeconds, {
     requireMotion: true,
     requireAudibleAudio: true
   });
   const outputDurationSeconds = await probeMediaDurationSeconds(outputPath);
-  const durationDeltaSeconds = Math.abs(outputDurationSeconds - plan.shotDurationSeconds);
+  const durationDeltaSeconds = Math.abs(outputDurationSeconds - renderDurationSeconds);
   if (durationDeltaSeconds > OUTPUT_DURATION_TOLERANCE_SECONDS) {
     throw new Error(
       'La recomposición real dura ' + outputDurationSeconds.toFixed(3) +
