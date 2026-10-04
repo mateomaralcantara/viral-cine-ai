@@ -7,6 +7,7 @@ import { buildSingleVeoFallbackPrompt } from '@/lib/engine/single-visual-plan-v4
 import { appendSpend, assertSpendRetrySafe, estimateOperationCost } from '@/lib/engine/spend-ledger';
 import { assertPaidGenerationAllowed, hasUsableCredential, safeErrorMessage } from '@/lib/engine/production-safety';
 import { generateImageWithReferences } from '@/lib/providers/openai-media';
+import { buildProviderSafeImagePrompt } from '@/lib/engine/openai-image-safety-v4';
 import { generateVeoVideo, isVeoNoChargeFailure, isVeoQuotaFailure } from '@/lib/providers/veo';
 import { assertCinematicVideoTrack } from '@/lib/media/probe';
 import { renderCinematicStillVideo } from '@/lib/media/ffmpeg';
@@ -122,7 +123,7 @@ export async function generateSegmentedTurnReferencesReal(
       .filter((character): character is NonNullable<typeof character> => Boolean(character?.referenceAsset))
       .map((character) => assetAbsolutePath(project.id, character.referenceAsset!));
 
-    const idempotencyKey = 'visual-turn-image:' + shot.id + ':' + turn.index + ':v2';
+    const idempotencyKey = 'visual-turn-image:' + shot.id + ':' + turn.index + ':v3-safe';
     const estimatedUsd = estimateOperationCost('image', 1);
     await assertSpendRetrySafe(project.id, idempotencyKey, 'referencia visual por turno ' + turn.index);
     await appendSpend(project.id, {
@@ -137,9 +138,15 @@ export async function generateSegmentedTurnReferencesReal(
     });
 
     try {
+      const providerPrompt = buildProviderSafeImagePrompt(
+        turn.prompt + ' Negative constraints: ' + turn.negativePrompt
+      );
+      console.log(
+        'OpenAI reference prompt turn ' + turn.index + ': PROVIDER-SAFE'
+      );
       await generateImageWithReferences(
         references,
-        turn.prompt + ' Negative constraints: ' + turn.negativePrompt,
+        providerPrompt,
         paths.referencePath
       );
       await appendSpend(project.id, {
