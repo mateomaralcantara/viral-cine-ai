@@ -69,8 +69,30 @@ export async function assertSpendRetrySafe(
   idempotencyKey: string,
   operationLabel: string
 ) {
-  const latest = await latestSpendForKey(projectId, idempotencyKey);
+  let latest = await latestSpendForKey(projectId, idempotencyKey);
   if (!latest) return;
+
+  // Compatibilidad con ejecuciones anteriores a la clasificación explícita
+  // de cuota Veo: un 429/RESOURCE_EXHAUSTED fallaba antes de crear video,
+  // pero quedaba registrado como failed-unknown y bloqueaba reintentos futuros.
+  if (isKnownNoChargeLedgerFailure(latest)) {
+    latest = await appendSpend(projectId, {
+      operation: latest.operation,
+      provider: latest.provider,
+      model: latest.model,
+      state: 'failed-no-charge',
+      estimatedUsd: latest.estimatedUsd,
+      actualUsd: 0,
+      sceneId: latest.sceneId,
+      shotId: latest.shotId,
+      characterId: latest.characterId,
+      idempotencyKey: latest.idempotencyKey,
+      providerRequestId: latest.providerRequestId,
+      error:
+        '[auto-reconciled-no-charge] ' +
+        (latest.error || 'Veo 429/RESOURCE_EXHAUSTED antes de generar video.')
+    });
+  }
 
   if (latest.state === 'reserved' || latest.state === 'failed-no-charge') return;
 
@@ -82,6 +104,20 @@ export async function assertSpendRetrySafe(
       '. Verifica el proveedor/asset antes de autorizar otro cobro.'
     );
   }
+}
+
+export function isKnownNoChargeLedgerFailure(entry: SpendLedgerEntry) {
+  if (entry.state !== 'failed-unknown') return false;
+  if (entry.operation !== 'video') return false;
+  if (entry.provider.toLowerCase() !== 'veo') return false;
+
+  const detail = (entry.error || '').toUpperCase();
+  return (
+    /\b429\b/.test(detail) ||
+    detail.includes('RESOURCE_EXHAUSTED') ||
+    detail.includes('CURRENT QUOTA') ||
+    detail.includes('RATE LIMIT')
+  );
 }
 
 export async function reservedMovieSpend(projectId: string) {
