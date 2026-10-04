@@ -7,6 +7,7 @@ import { getProject, projectRoot } from '@/lib/storage/project-store';
 import {
   buildBatchQueue,
   canFitBatchBudget,
+  formatBatchMachineSummary,
   isFullFlow42Complete,
   roundMoney
 } from '@/lib/engine/batch-full-flow-v4';
@@ -484,10 +485,14 @@ function usage() {
 
 // Salida estable ASCII para automatizaciones externas (PowerShell/CI).
 // No depende de tildes ni de la codificación de la consola de Windows.
-console.log('BATCH_SELECTED_SHOTS=' + preflightRows.length);
-console.log('BATCH_PREFLIGHT_PASS=' + (preflightRows.length - blocked.length));
-console.log('BATCH_BLOCKED=' + blocked.length);
-console.log('BATCH_ESTIMATED_USD=' + totalEstimatedUsd.toFixed(4));
+for (const line of formatBatchMachineSummary({
+  selectedShots: preflightRows.length,
+  preflightPass: preflightRows.length - blocked.length,
+  blocked: blocked.length,
+  estimatedUsd: totalEstimatedUsd
+})) {
+  console.log(line);
+}
 
 if (command === 'preview') {
   console.log('\nSEGURIDAD');
