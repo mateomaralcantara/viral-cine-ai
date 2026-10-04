@@ -8,6 +8,7 @@ import {
   assertVideoStream,
   concatenateAudioSegments,
   extractVideoOnlySegment,
+  extractVideoOnlySegmentWithTailHold,
   fitAudioToSlot,
   muxSegmentAudio,
   probeMediaDurationSeconds
@@ -17,7 +18,7 @@ import { requiresLipSyncForSpeaker } from '@/lib/engine/lip-sync-policy-v4';
 import { prepareAudioFirstVoice, applyAudioFirstLipSync } from '@/lib/engine/audio-first';
 import { locateVoiceProfile } from '@/lib/engine/voice-casting-v4';
 import { assertPaidGenerationAllowed, hasUsableCredential } from '@/lib/engine/production-safety';
-import { planSegmentedAudioTiming } from '@/lib/engine/segmented-timing-v4';
+import { planSegmentedRenderTiming } from '@/lib/engine/segmented-timing-v4';
 import { assertCinematicSceneVideo, assertCinematicVideoTrack } from '@/lib/media/probe';
 
 const TIMING_TOLERANCE_SECONDS = 0.025;
@@ -100,6 +101,8 @@ export type RealSegmentedRenderResult = {
   masterAudioPath: string;
   masterAudioAsset: string;
   outputDurationSeconds: number;
+  scheduledDurationSeconds: number;
+  durationAdjusted: boolean;
   durationDeltaSeconds: number;
   lipSyncTurns: number;
   turns: RealSegmentedRenderTurn[];
@@ -249,12 +252,12 @@ export async function renderSegmentedShotOffline(
   await concatenate(renderedTurns, outputPath);
 
   await assertVideoStream(outputPath, 'Salida recompuesta');
-  await assertCinematicSceneVideo(outputPath, plan.shotDurationSeconds, {
+  await assertCinematicSceneVideo(outputPath, renderDurationSeconds, {
     requireMotion: true,
     requireAudibleAudio: true
   });
   const outputDurationSeconds = await probeMediaDurationSeconds(outputPath);
-  const durationDeltaSeconds = Math.abs(outputDurationSeconds - plan.shotDurationSeconds);
+  const durationDeltaSeconds = Math.abs(outputDurationSeconds - renderDurationSeconds);
   if (durationDeltaSeconds > OUTPUT_DURATION_TOLERANCE_SECONDS) {
     throw new Error(
       `La recomposición dura ${outputDurationSeconds.toFixed(3)}s; debía durar ${plan.shotDurationSeconds.toFixed(3)}s ` +
@@ -385,7 +388,7 @@ export async function renderSegmentedShotReal(
   }
 
   const maxSpeed = boundedMaxSpeed(process.env.SEGMENTED_TTS_MAX_SPEED);
-  const allocations = planSegmentedAudioTiming(
+  const timing = planSegmentedRenderTiming(
     preparedTurns.map(({ turn, rawAudioDurationSeconds }) => ({
       id: turn.id,
       index: turn.index,
@@ -395,6 +398,8 @@ export async function renderSegmentedShotReal(
     plan.shotDurationSeconds,
     maxSpeed
   );
+  const allocations = timing.allocations;
+  const renderDurationSeconds = timing.outputDurationSeconds;
 
   const renderedTurns: string[] = [];
   const alignedAudios: string[] = [];
@@ -423,13 +428,23 @@ export async function renderSegmentedShotReal(
         ? turnSourcePaths.get(prepared.turn.index)!
         : plan.sourceVideoPath;
       const sourceStartSeconds = useTurnSources ? 0 : allocation.startSeconds;
-      await extractVideoOnlySegment(
-        sourcePath,
-        sourceStartSeconds,
-        allocation.targetDurationSeconds,
-        videoOnlyPath,
-        project.input.aspectRatio
-      );
+      if (useTurnSources) {
+        await extractVideoOnlySegmentWithTailHold(
+          sourcePath,
+          sourceStartSeconds,
+          allocation.targetDurationSeconds,
+          videoOnlyPath,
+          project.input.aspectRatio
+        );
+      } else {
+        await extractVideoOnlySegment(
+          sourcePath,
+          sourceStartSeconds,
+          allocation.targetDurationSeconds,
+          videoOnlyPath,
+          project.input.aspectRatio
+        );
+      }
     }
 
     let videoForMux = videoOnlyPath;
@@ -497,7 +512,7 @@ export async function renderSegmentedShotReal(
   if (durationDeltaSeconds > OUTPUT_DURATION_TOLERANCE_SECONDS) {
     throw new Error(
       'La recomposición real dura ' + outputDurationSeconds.toFixed(3) +
-      's; debía durar ' + plan.shotDurationSeconds.toFixed(3) +
+      's; debía durar ' + renderDurationSeconds.toFixed(3) +
       's (delta ' + durationDeltaSeconds.toFixed(3) + 's).'
     );
   }
@@ -538,6 +553,8 @@ export async function renderSegmentedShotReal(
     masterAudioPath,
     masterAudioAsset: assetRelativePath(project.id, masterAudioPath),
     outputDurationSeconds,
+    scheduledDurationSeconds: plan.shotDurationSeconds,
+    durationAdjusted: timing.durationAdjusted,
     durationDeltaSeconds,
     lipSyncTurns: realTurns.filter((turn) => turn.requiresLipSync).length,
     turns: realTurns,
