@@ -6,7 +6,7 @@ import { buildSingleVisualPlan, buildSingleVeoFallbackPrompt } from '@/lib/engin
 import { appendSpend, assertSpendRetrySafe, estimateOperationCost } from '@/lib/engine/spend-ledger';
 import { assertPaidGenerationAllowed, hasUsableCredential, safeErrorMessage } from '@/lib/engine/production-safety';
 import { generateImageWithReferences } from '@/lib/providers/openai-media';
-import { generateVeoVideo, isVeoNoChargeFailure } from '@/lib/providers/veo';
+import { generateVeoVideo, isVeoNoChargeFailure, isVeoQuotaFailure } from '@/lib/providers/veo';
 import { assertCinematicVideoTrack } from '@/lib/media/probe';
 import { renderCinematicStillVideo } from '@/lib/media/ffmpeg';
 
@@ -222,7 +222,8 @@ export async function generateSingleVideoReal(
       break;
     } catch (error) {
       lastError = error;
-      const noCharge = isVeoNoChargeFailure(error);
+      const quotaFailure = isVeoQuotaFailure(error);
+      const noCharge = isVeoNoChargeFailure(error) || quotaFailure;
       await appendSpend(project.id, {
         operation: 'video',
         provider: 'Veo',
@@ -240,6 +241,33 @@ export async function generateSingleVideoReal(
 
       if (!noCharge) {
         throw error;
+      }
+
+      if (quotaFailure) {
+        console.warn(
+          'Veo respondió RESOURCE_EXHAUSTED/429 antes de generar video; usando fallback cinematográfico local de costo US$0.'
+        );
+        await renderCinematicStillVideo(
+          before.referencePath,
+          shot.durationSeconds,
+          before.videoPath,
+          project.input.aspectRatio
+        );
+        await assertCinematicVideoTrack(before.videoPath, shot.durationSeconds);
+        await appendSpend(project.id, {
+          operation: 'video',
+          provider: 'local-ffmpeg',
+          model: 'cinematic-still-motion-v1-quota-fallback',
+          state: 'reconciled',
+          estimatedUsd: 0,
+          actualUsd: 0,
+          sceneId: scene.id,
+          shotId: shot.id,
+          idempotencyKey,
+          outputAsset: before.videoAsset
+        });
+        lastError = undefined;
+        break;
       }
 
       if (attempt === attempts.length - 1) {
