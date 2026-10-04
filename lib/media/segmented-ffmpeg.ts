@@ -110,11 +110,11 @@ export async function fitAudioToSlot(
   outputPath: string
 ) {
   if (durationSeconds <= 0) throw new Error('La duración destino del audio debe ser positiva.');
-  if (!Number.isFinite(speedFactor) || speedFactor < 1 || speedFactor > 1.2505) {
-    throw new Error('Factor de velocidad fuera del límite duro 1.0x-1.25x: ' + speedFactor);
+  if (!Number.isFinite(speedFactor) || speedFactor < 1 || speedFactor > 1.3305) {
+    throw new Error('Factor de velocidad fuera del límite duro 1.0x-1.33x: ' + speedFactor);
   }
   await mkdir(path.dirname(outputPath), { recursive: true });
-  const tempo = Math.max(1, Math.min(1.25, speedFactor));
+  const tempo = Math.max(1, Math.min(1.33, speedFactor));
   await run(ffmpeg(), [
     '-y',
     '-i', audioPath,
