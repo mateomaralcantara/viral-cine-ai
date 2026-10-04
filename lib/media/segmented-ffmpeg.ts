@@ -34,6 +34,42 @@ export async function extractVideoOnlySegment(
   return outputPath;
 }
 
+export async function extractVideoOnlySegmentWithTailHold(
+  sourcePath: string,
+  startSeconds: number,
+  durationSeconds: number,
+  outputPath: string,
+  aspectRatio: ProjectInput['aspectRatio']
+) {
+  if (startSeconds < 0) throw new Error('El inicio del subsegmento no puede ser negativo.');
+  if (durationSeconds <= 0) throw new Error('La duración del subsegmento debe ser positiva.');
+  await mkdir(path.dirname(outputPath), { recursive: true });
+  const { width, height } = dimensions(aspectRatio);
+  const filter = [
+    `scale=${width}:${height}:force_original_aspect_ratio=increase`,
+    `crop=${width}:${height}`,
+    'fps=25',
+    // Si el audio necesita unas décimas adicionales, congela únicamente
+    // el último fotograma en lugar de repetir el clip desde el inicio.
+    `tpad=stop_mode=clone:stop_duration=${seconds(durationSeconds + 0.5)}`,
+    'format=yuv420p'
+  ].join(',');
+  await run(ffmpeg(), [
+    '-y',
+    '-ss', seconds(startSeconds),
+    '-i', sourcePath,
+    '-t', seconds(durationSeconds),
+    '-an',
+    '-vf', filter,
+    '-c:v', 'libx264',
+    '-preset', 'veryfast',
+    '-crf', '20',
+    '-r', '25',
+    outputPath
+  ]);
+  return outputPath;
+}
+
 export async function muxSegmentAudio(
   videoPath: string,
   audioPath: string,
