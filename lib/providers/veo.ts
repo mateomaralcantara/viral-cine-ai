@@ -17,6 +17,37 @@ export function isVeoNoChargeFailure(error: unknown) {
   return error instanceof VeoNoVideoError;
 }
 
+export function isVeoQuotaFailure(error: unknown) {
+  const candidate = error as {
+    status?: number;
+    code?: string | number;
+    message?: string;
+    error?: {
+      code?: string | number;
+      status?: string;
+      message?: string;
+    };
+  };
+
+  const status = Number(candidate?.status ?? candidate?.code ?? candidate?.error?.code);
+  if (status === 429) return true;
+
+  const detail = [
+    candidate?.message,
+    candidate?.error?.status,
+    candidate?.error?.message
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toUpperCase();
+
+  return (
+    detail.includes('RESOURCE_EXHAUSTED') ||
+    detail.includes('CURRENT QUOTA') ||
+    detail.includes('RATE LIMIT')
+  );
+}
+
 export async function generateVeoVideo(imagePath: string, prompt: string, input: ProjectInput, outputPath: string, durationSeconds = 8) {
   assertPaidGenerationAllowed('generar video con Veo', 'GEMINI_API_KEY');
   const geminiApiKey = process.env.GEMINI_API_KEY;
