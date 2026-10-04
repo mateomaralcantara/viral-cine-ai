@@ -1,9 +1,83 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Character, NarratorVoice, SupportVoice } from '@/lib/domain/schemas';
-import { assertPaidGenerationAllowed } from '@/lib/engine/production-safety';
+import { assertPaidGenerationAllowed, externalCallsEnabled, hasUsableCredential } from '@/lib/engine/production-safety';
 
 export type VoiceProfile = Character | SupportVoice | NarratorVoice;
+
+export type ElevenLabsAvailableVoice = {
+  voiceId: string;
+  name: string;
+  gender?: string;
+  age?: string;
+  languages: string[];
+};
+
+type ElevenLabsVoicesResponse = {
+  voices?: Array<{
+    voice_id?: string;
+    name?: string;
+    labels?: Record<string, string>;
+    verified_languages?: Array<{ language?: string }>;
+  }>;
+  has_more?: boolean;
+  next_page_token?: string | null;
+};
+
+export async function listAvailableElevenLabsVoices(): Promise<ElevenLabsAvailableVoice[]> {
+  if (!externalCallsEnabled()) {
+    throw new Error('Bloqueo de seguridad: listar voces de ElevenLabs requiere producción real con APIs externas habilitadas.');
+  }
+  if (!hasUsableCredential('ELEVENLABS_API_KEY')) {
+    throw new Error('Falta ELEVENLABS_API_KEY para autocasting.');
+  }
+
+  const apiKey = process.env.ELEVENLABS_API_KEY!;
+  const results: ElevenLabsAvailableVoice[] = [];
+  let nextPageToken: string | undefined;
+
+  for (let page = 0; page < 5; page += 1) {
+    const url = new URL('https://api.elevenlabs.io/v2/voices');
+    url.searchParams.set('page_size', '100');
+    if (nextPageToken) url.searchParams.set('next_page_token', nextPageToken);
+
+    const response = await fetch(url, {
+      headers: { 'xi-api-key': apiKey }
+    });
+
+    if (!response.ok) {
+      const detail = (await response.text()).slice(0, 1200);
+      throw new Error(`ElevenLabs rechazó listado de voces (${response.status}): ${detail}`);
+    }
+
+    const payload = await response.json() as ElevenLabsVoicesResponse;
+    for (const voice of payload.voices || []) {
+      if (!voice.voice_id) continue;
+      results.push({
+        voiceId: voice.voice_id,
+        name: voice.name || voice.voice_id,
+        gender: voice.labels?.gender,
+        age: voice.labels?.age,
+        languages: (voice.verified_languages || [])
+          .map((item) => item.language || '')
+          .filter(Boolean)
+      });
+    }
+
+    if (!payload.has_more || !payload.next_page_token) break;
+    nextPageToken = payload.next_page_token;
+  }
+
+  const unique = new Map<string, ElevenLabsAvailableVoice>();
+  for (const voice of results) unique.set(voice.voiceId, voice);
+  const voices = [...unique.values()];
+
+  if (!voices.length) {
+    throw new Error('ElevenLabs no devolvió voces disponibles para autocasting.');
+  }
+
+  return voices;
+}
 
 export type VoiceGenerationResult = {
   audioPath: string;
