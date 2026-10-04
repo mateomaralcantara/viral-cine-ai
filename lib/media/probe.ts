@@ -47,8 +47,16 @@ export async function assertPlayableSceneVideo(filePath: string, expectedSeconds
 
 export async function assertCinematicVideoTrack(filePath: string, expectedSeconds: number) {
   const probe = await probeVideo(filePath);
-  const tolerance = Math.max(1.5, expectedSeconds * 0.03);
-  const minimumDuration = Math.max(0.5, expectedSeconds - tolerance);
+  // Turnos segmentados pueden ser legítimamente menores de 0.50s. Para esos
+  // micro-turnos no imponemos el piso de 0.50s del clip completo.
+  const tolerance =
+    expectedSeconds < 0.5
+      ? Math.max(0.08, expectedSeconds * 0.2)
+      : Math.max(1.5, expectedSeconds * 0.03);
+  const minimumDuration =
+    expectedSeconds < 0.5
+      ? Math.max(0.12, expectedSeconds - tolerance)
+      : Math.max(0.5, expectedSeconds - tolerance);
   if (!probe.hasVideo || !Number.isFinite(probe.durationSeconds) || probe.durationSeconds < minimumDuration) {
     throw new Error(
       `Fuente visual incompleta: video=${probe.hasVideo}, duracion=${probe.durationSeconds.toFixed(2)}s, minimo=${minimumDuration.toFixed(2)}s.`
