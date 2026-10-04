@@ -7,6 +7,10 @@ import { appendSpend, assertSpendRetrySafe, estimateOperationCost } from '@/lib/
 import { assertPaidGenerationAllowed, hasUsableCredential, safeErrorMessage } from '@/lib/engine/production-safety';
 import { generateImageWithReferences } from '@/lib/providers/openai-media';
 import { buildProviderSafeImagePrompt } from '@/lib/engine/openai-image-safety-v4';
+import {
+  createImageReferenceFallback,
+  isImageProviderFallbackEligible
+} from '@/lib/engine/image-reference-fallback-v4';
 import { generateVeoVideo, isVeoNoChargeFailure, isVeoQuotaFailure } from '@/lib/providers/veo';
 import { assertCinematicVideoTrack } from '@/lib/media/probe';
 import { renderCinematicStillVideo } from '@/lib/media/ffmpeg';
@@ -127,6 +131,9 @@ export async function generateSingleReferenceReal(
     });
   } catch (error) {
     const authRejected = isOpenAIAuthRejected(error);
+    const fallbackEligible =
+      !authRejected && isImageProviderFallbackEligible(error);
+
     await appendSpend(project.id, {
       operation: 'image',
       provider: 'openai',
@@ -139,7 +146,35 @@ export async function generateSingleReferenceReal(
       idempotencyKey,
       error: safeErrorMessage(error)
     });
-    throw error;
+
+    if (!fallbackEligible) throw error;
+
+    console.warn(
+      'OpenAI Images no pudo entregar la referencia; usando fallback visual local/de continuidad y continuando la toma.'
+    );
+
+    const fallback = await createImageReferenceFallback({
+      project,
+      scene,
+      shot,
+      destinationPath: paths.referencePath
+    });
+
+    await appendSpend(project.id, {
+      operation: 'image',
+      provider: 'local-continuity',
+      model: 'reference-fallback-v1',
+      state: 'reconciled',
+      estimatedUsd: 0,
+      actualUsd: 0,
+      sceneId: scene.id,
+      shotId: shot.id,
+      idempotencyKey,
+      outputAsset: assetRelativePath(project.id, paths.referencePath),
+      error:
+        'fallback=' + fallback.mode +
+        (fallback.sourcePath ? ' source=' + fallback.sourcePath : '')
+    });
   }
 
   return inspectSingleVisualSource(project, scene, shot);
