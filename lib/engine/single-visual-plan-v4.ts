@@ -200,3 +200,15 @@ function providerDuration(seconds: number): 4 | 6 | 8 {
   if (seconds <= 6) return 6;
   return 8;
 }
+
+export function buildSingleVeoFallbackPrompt() {
+  return [
+    'Animate the approved reference image faithfully without redesigning it.',
+    'Keep the exact same people, clothing, architecture, lighting, framing and camera axis.',
+    'Use only subtle natural motion: breathing, blinking, small posture shifts, gentle cloth movement and light atmospheric dust.',
+    'Camera nearly locked with at most a very slow cinematic drift.',
+    'Do not introduce any new action, object, character, injury, weapon, text, sign, logo or modern element.',
+    'No speaking, no lip movement for dialogue, no cuts, no montage, no angle change, no reframing.',
+    'Keep the scene calm, non-graphic and visually stable.'
+  ].join(' ');
+}
