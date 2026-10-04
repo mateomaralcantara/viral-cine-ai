@@ -61,6 +61,20 @@ export function buildBatchQueue(
   return rows;
 }
 
+export function formatBatchMachineSummary(input: {
+  selectedShots: number;
+  preflightPass: number;
+  blocked: number;
+  estimatedUsd: number;
+}) {
+  return [
+    'BATCH_SELECTED_SHOTS=' + input.selectedShots,
+    'BATCH_PREFLIGHT_PASS=' + input.preflightPass,
+    'BATCH_BLOCKED=' + input.blocked,
+    'BATCH_ESTIMATED_USD=' + roundMoney(input.estimatedUsd).toFixed(4)
+  ];
+}
+
 export function canFitBatchBudget(
   spentOrReservedUsd: number,
   nextEstimatedUsd: number,
