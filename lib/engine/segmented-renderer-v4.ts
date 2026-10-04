@@ -101,6 +101,7 @@ export type RealSegmentedRenderResult = {
   masterAudioPath: string;
   masterAudioAsset: string;
   outputDurationSeconds: number;
+  targetDurationSeconds: number;
   scheduledDurationSeconds: number;
   durationAdjusted: boolean;
   durationDeltaSeconds: number;
@@ -553,6 +554,7 @@ export async function renderSegmentedShotReal(
     masterAudioPath,
     masterAudioAsset: assetRelativePath(project.id, masterAudioPath),
     outputDurationSeconds,
+    targetDurationSeconds: renderDurationSeconds,
     scheduledDurationSeconds: plan.shotDurationSeconds,
     durationAdjusted: timing.durationAdjusted,
     durationDeltaSeconds,
