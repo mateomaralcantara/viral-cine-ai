@@ -255,9 +255,10 @@ if (rendered.durationAdjusted) {
   console.log(
     'Duración segmentada autoajustada compatible con schema: ' +
     rendered.scheduledDurationSeconds.toFixed(3) + 's -> ' +
-    rendered.outputDurationSeconds.toFixed(3) + 's'
+    rendered.targetDurationSeconds.toFixed(3) + 's' +
+    ' (media real ' + rendered.outputDurationSeconds.toFixed(3) + 's)'
   );
-  located.shot.durationSeconds = rendered.outputDurationSeconds;
+  located.shot.durationSeconds = rendered.targetDurationSeconds;
   for (let index = 0; index < located.shot.dialogueLines.length; index += 1) {
     const renderedTurn = rendered.turns[index];
     if (!renderedTurn) continue;
@@ -340,7 +341,8 @@ project.productionLog.push(
   (rendered.durationAdjusted
     ? ' | duración autoajustada=' +
       rendered.scheduledDurationSeconds.toFixed(3) + 's->' +
-      rendered.outputDurationSeconds.toFixed(3) + 's'
+      rendered.targetDurationSeconds.toFixed(3) + 's' +
+      ' | media=' + rendered.outputDurationSeconds.toFixed(3) + 's'
     : '') +
   (readyMusic.enabled ? ' | música=' + readyMusic.asset : '')
 );
