@@ -69,6 +69,39 @@ export async function renderAnimatedImage(
   return outputPath;
 }
 
+export async function renderCinematicStillVideo(
+  imagePath: string,
+  durationSeconds: number,
+  outputPath: string,
+  aspectRatio: ProjectInput['aspectRatio']
+) {
+  const { width, height } = dimensions(aspectRatio);
+  const frames = Math.max(1, Math.round(durationSeconds * 25));
+  const filter = [
+    `scale=${width * 2}:${height * 2}:force_original_aspect_ratio=increase`,
+    `crop=${width * 2}:${height * 2}`,
+    `zoompan=z='min(zoom+0.00045,1.08)':d=${frames}:s=${width}x${height}:fps=25:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'`,
+    'format=yuv420p'
+  ].join(',');
+
+  await run([
+    '-y',
+    '-loop', '1',
+    '-i', imagePath,
+    '-t', String(durationSeconds),
+    '-vf', filter,
+    '-an',
+    '-c:v', 'libx264',
+    '-preset', 'medium',
+    '-crf', '19',
+    '-r', '25',
+    '-pix_fmt', 'yuv420p',
+    '-movflags', '+faststart',
+    outputPath
+  ]);
+  return outputPath;
+}
+
 export async function normalizeGeneratedVideo(
   videoPath: string,
   audioPath: string,
