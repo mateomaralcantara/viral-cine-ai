@@ -148,7 +148,10 @@ export async function renderSingleShotReal(
     videoForMux = lipSyncPath;
   }
 
-  const outputPath = path.join(videoDir, 'final-real.mp4');
+  const outputPath = path.join(
+    videoDir,
+    lipSyncRequired ? 'final-real-lipsync.mp4' : 'final-real.mp4'
+  );
   if (!(await fileExists(outputPath))) {
     await muxSegmentAudio(
       videoForMux,
