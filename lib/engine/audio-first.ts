@@ -1,4 +1,4 @@
-import { access, copyFile, writeFile } from 'node:fs/promises';
+import { access, copyFile, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { FilmProject, FilmScene, FilmShot } from '@/lib/domain/schemas';
 import { projectAssetDir } from '@/lib/storage/project-store';
@@ -28,6 +28,7 @@ export async function prepareAudioFirstVoice(
 ): Promise<PreparedVoice> {
   const voicePath = path.join(projectAssetDir(project.id, 'audio'), `${key}.mp3`);
   const alignmentPath = path.join(projectAssetDir(project.id, 'audio'), `${key}.alignment.json`);
+  await mkdir(path.dirname(voicePath), { recursive: true });
   if (await exists(voicePath)) {
     return {
       voicePath,
