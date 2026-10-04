@@ -2,7 +2,7 @@ import { access, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import type { FilmProject, FilmScene, FilmShot } from '@/lib/domain/schemas';
 import { assetAbsolutePath, assetRelativePath, projectAssetDir } from '@/lib/storage/project-store';
-import { buildSingleVisualPlan } from '@/lib/engine/single-visual-plan-v4';
+import { buildSingleVisualPlan, buildSingleVeoFallbackPrompt } from '@/lib/engine/single-visual-plan-v4';
 import { appendSpend, assertSpendRetrySafe, estimateOperationCost } from '@/lib/engine/spend-ledger';
 import { assertPaidGenerationAllowed, hasUsableCredential, safeErrorMessage } from '@/lib/engine/production-safety';
 import { generateImageWithReferences } from '@/lib/providers/openai-media';
@@ -170,53 +170,84 @@ export async function generateSingleVideoReal(
   const estimatedUsd = estimateOperationCost('video', plan.providerDurationSeconds);
   await assertSpendRetrySafe(project.id, idempotencyKey, 'video visual único');
 
-  await appendSpend(project.id, {
-    operation: 'video',
-    provider: 'Veo',
-    model: process.env.GEMINI_VIDEO_MODEL,
-    state: 'submitted',
-    estimatedUsd,
-    sceneId: scene.id,
-    shotId: shot.id,
-    idempotencyKey
-  });
+  const attempts = [
+    { label: 'primary', prompt: plan.videoPrompt },
+    { label: 'safe-fallback', prompt: buildSingleVeoFallbackPrompt() }
+  ];
 
-  try {
-    await generateVeoVideo(
-      before.referencePath,
-      plan.videoPrompt,
-      project.input,
-      before.videoPath,
-      shot.durationSeconds
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < attempts.length; attempt += 1) {
+    const current = attempts[attempt];
+
+    await assertSpendRetrySafe(
+      project.id,
+      idempotencyKey,
+      'video visual único (' + current.label + ')'
     );
-    await assertCinematicVideoTrack(before.videoPath, shot.durationSeconds);
+
     await appendSpend(project.id, {
       operation: 'video',
       provider: 'Veo',
       model: process.env.GEMINI_VIDEO_MODEL,
-      state: 'succeeded',
+      state: 'submitted',
       estimatedUsd,
       sceneId: scene.id,
       shotId: shot.id,
-      idempotencyKey,
-      outputAsset: before.videoAsset
+      idempotencyKey
     });
-  } catch (error) {
-    const noCharge = isVeoNoChargeFailure(error);
-    await appendSpend(project.id, {
-      operation: 'video',
-      provider: 'Veo',
-      model: process.env.GEMINI_VIDEO_MODEL,
-      state: noCharge ? 'failed-no-charge' : 'failed-unknown',
-      estimatedUsd,
-      actualUsd: noCharge ? 0 : undefined,
-      sceneId: scene.id,
-      shotId: shot.id,
-      idempotencyKey,
-      error: safeErrorMessage(error)
-    });
-    throw error;
+
+    try {
+      await generateVeoVideo(
+        before.referencePath,
+        current.prompt,
+        project.input,
+        before.videoPath,
+        shot.durationSeconds
+      );
+      await assertCinematicVideoTrack(before.videoPath, shot.durationSeconds);
+      await appendSpend(project.id, {
+        operation: 'video',
+        provider: 'Veo',
+        model: process.env.GEMINI_VIDEO_MODEL,
+        state: 'succeeded',
+        estimatedUsd,
+        sceneId: scene.id,
+        shotId: shot.id,
+        idempotencyKey,
+        outputAsset: before.videoAsset
+      });
+      lastError = undefined;
+      break;
+    } catch (error) {
+      lastError = error;
+      const noCharge = isVeoNoChargeFailure(error);
+      await appendSpend(project.id, {
+        operation: 'video',
+        provider: 'Veo',
+        model: process.env.GEMINI_VIDEO_MODEL,
+        state: noCharge ? 'failed-no-charge' : 'failed-unknown',
+        estimatedUsd,
+        actualUsd: noCharge ? 0 : undefined,
+        sceneId: scene.id,
+        shotId: shot.id,
+        idempotencyKey,
+        error:
+          '[' + current.label + '] ' +
+          safeErrorMessage(error)
+      });
+
+      if (!noCharge || attempt === attempts.length - 1) {
+        throw error;
+      }
+
+      console.warn(
+        'Veo no devolvió video y reportó no-charge; reintentando una vez con motion prompt seguro.'
+      );
+    }
   }
+
+  if (lastError) throw lastError;
 
   return inspectSingleVisualSource(project, scene, shot);
 }
