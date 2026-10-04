@@ -165,10 +165,7 @@ if (autoCastSpeakerIds.length) {
     if (!located) throw new Error('La toma desapareció después del autocasting.');
   }
   for (const assignment of autoCast.assignments) {
-    console.log(
-      '  ' + assignment.label + ' -> ' + assignment.voiceName +
-      ' [' + assignment.voiceId.slice(0, 6) + '…]'
-    );
+    console.log('  ' + assignment.label + ' -> ' + assignment.voiceName);
   }
   console.log('Autocasting vocal: LISTO');
 }
