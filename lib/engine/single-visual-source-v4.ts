@@ -87,7 +87,7 @@ export async function generateSingleReferenceReal(
     .filter((character): character is NonNullable<typeof character> => Boolean(character?.referenceAsset))
     .map((character) => assetAbsolutePath(project.id, character.referenceAsset!));
 
-  const idempotencyKey = 'single-visual-image:' + shot.id + ':v2';
+  const idempotencyKey = 'single-visual-image:' + shot.id + ':v3';
   const estimatedUsd = estimateOperationCost('image', 1);
   await assertSpendRetrySafe(project.id, idempotencyKey, 'referencia visual única');
 
@@ -166,7 +166,7 @@ export async function generateSingleVideoReal(
 
   await mkdir(path.dirname(before.videoPath), { recursive: true });
 
-  const idempotencyKey = 'single-visual-video:' + shot.id + ':v2';
+  const idempotencyKey = 'single-visual-video:' + shot.id + ':v3';
   const estimatedUsd = estimateOperationCost('video', plan.providerDurationSeconds);
   await assertSpendRetrySafe(project.id, idempotencyKey, 'video visual único');
 
