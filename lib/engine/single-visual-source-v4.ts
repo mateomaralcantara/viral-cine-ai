@@ -62,7 +62,7 @@ export async function inspectSingleVisualSource(
     negativePrompt: plan.negativePrompt,
     providerDurationSeconds: plan.providerDurationSeconds,
     estimatedReferenceUsd: referenceReady ? 0 : estimateOperationCost('image', 1),
-    estimatedVideoUsd: videoReady ? 0 : estimateOperationCost('video', plan.providerDurationSeconds)
+    estimatedVideoUsd: videoReady || localVideoOnly() ? 0 : estimateOperationCost('video', plan.providerDurationSeconds)
   };
 }
 
@@ -151,9 +151,6 @@ export async function generateSingleVideoReal(
   shot: FilmShot
 ) {
   assertPaidGenerationAllowed('generar video visual único');
-  if (!hasUsableCredential('GEMINI_API_KEY')) {
-    throw new Error('Falta GEMINI_API_KEY para generar el video con Veo.');
-  }
 
   const plan = buildSingleVisualPlan(project, scene, shot);
   const before = await inspectSingleVisualSource(project, scene, shot);
@@ -173,6 +170,36 @@ export async function generateSingleVideoReal(
   await mkdir(path.dirname(before.videoPath), { recursive: true });
 
   const idempotencyKey = 'single-visual-video:' + shot.id + ':v5';
+
+  if (localVideoOnly()) {
+    console.warn(
+      'VIRALCINE_LOCAL_VIDEO_ONLY=1: omitiendo Veo y creando video cinematográfico local de costo US$0.'
+    );
+    await renderCinematicStillVideo(
+      before.referencePath,
+      shot.durationSeconds,
+      before.videoPath,
+      project.input.aspectRatio
+    );
+    await assertCinematicVideoTrack(before.videoPath, shot.durationSeconds);
+    await appendSpend(project.id, {
+      operation: 'video',
+      provider: 'local-ffmpeg',
+      model: 'cinematic-still-motion-v1-finish-mode',
+      state: 'reconciled',
+      estimatedUsd: 0,
+      actualUsd: 0,
+      sceneId: scene.id,
+      shotId: shot.id,
+      idempotencyKey,
+      outputAsset: before.videoAsset
+    });
+    return inspectSingleVisualSource(project, scene, shot);
+  }
+
+  if (!hasUsableCredential('GEMINI_API_KEY')) {
+    throw new Error('Falta GEMINI_API_KEY para generar el video con Veo.');
+  }
   const estimatedUsd = estimateOperationCost('video', plan.providerDurationSeconds);
   await assertSpendRetrySafe(project.id, idempotencyKey, 'video visual único');
 
@@ -355,4 +382,11 @@ function isOpenAIAuthRejected(error: unknown) {
 
 function pad(value: number) {
   return String(value).padStart(2, '0');
+}
+
+
+function localVideoOnly() {
+  return /^(?:1|true|yes|on)$/i.test(
+    String(process.env.VIRALCINE_LOCAL_VIDEO_ONLY || '').trim()
+  );
 }
