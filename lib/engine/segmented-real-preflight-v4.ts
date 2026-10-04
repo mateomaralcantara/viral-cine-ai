@@ -4,6 +4,7 @@ import { locateVoiceProfile } from '@/lib/engine/voice-casting-v4';
 import { requiresLipSyncForSpeaker } from '@/lib/engine/lip-sync-policy-v4';
 import { estimateOperationCost, voiceCostUnits } from '@/lib/engine/spend-ledger';
 import { hasUsableCredential, isUsableCredentialValue } from '@/lib/engine/production-safety';
+import { canAutoCastElevenLabsProfile } from '@/lib/engine/auto-voice-casting-v4';
 
 export type SegmentedRealTurnPreflight = {
   index: number;
@@ -15,6 +16,7 @@ export type SegmentedRealTurnPreflight = {
   durationSeconds: number;
   requiresLipSync: boolean;
   voiceIdReady: boolean;
+  autoCastRequired: boolean;
   credentialName?: 'ELEVENLABS_API_KEY' | 'OPENAI_API_KEY';
   credentialVisible: boolean;
   voiceEstimatedUsd: number;
@@ -41,6 +43,7 @@ export type SegmentedRealPreflight = {
     totalEstimatedUsd: number;
     profilesRequired: number;
     profilesReady: number;
+    profilesAutoCast: number;
     blockers: number;
   };
   requiredProfiles: Array<{
@@ -49,6 +52,7 @@ export type SegmentedRealPreflight = {
     kind: 'narrator' | 'character' | 'support' | 'unknown';
     provider: 'elevenlabs' | 'openai' | 'offline' | 'unknown';
     voiceIdReady: boolean;
+    autoCastRequired: boolean;
   }>;
   blockers: string[];
 };
@@ -68,13 +72,18 @@ export function buildSegmentedRealPreflight(
     const blockers: string[] = [];
     let credentialName: SegmentedRealTurnPreflight['credentialName'];
     let voiceIdReady = false;
+    let autoCastRequired = false;
 
     if (!located) blockers.push(`${label}: no existe un perfil vocal persistente.`);
 
     if (provider === 'elevenlabs') {
       credentialName = 'ELEVENLABS_API_KEY';
-      voiceIdReady = isUsableCredentialValue(profile?.voiceId);
-      if (!voiceIdReady) blockers.push(`${label}: falta voiceId persistente de ElevenLabs.`);
+      voiceIdReady =
+        isUsableCredentialValue(profile?.voiceId) ||
+        (
+          turn.speakerId === 'narrator' &&
+          isUsableCredentialValue(process.env.ELEVENLABS_NARRATOR_VOICE_ID)
+        );
     } else if (provider === 'openai') {
       credentialName = 'OPENAI_API_KEY';
       voiceIdReady = true;
@@ -86,6 +95,18 @@ export function buildSegmentedRealPreflight(
 
     const credentialVisible = credentialName ? hasUsableCredential(credentialName) : false;
     if (credentialName && !credentialVisible) blockers.push(`${label}: falta ${credentialName}.`);
+
+    if (
+      located &&
+      provider === 'elevenlabs' &&
+      !voiceIdReady &&
+      credentialVisible &&
+      canAutoCastElevenLabsProfile(project, turn.speakerId)
+    ) {
+      autoCastRequired = true;
+    } else if (located && provider === 'elevenlabs' && !voiceIdReady) {
+      blockers.push(`${label}: falta voiceId persistente de ElevenLabs.`);
+    }
 
     const requiresLipSync = requiresLipSyncForSpeaker(project, turn.speakerId);
     const voiceEstimatedUsd = estimateOperationCost('voice', voiceCostUnits(turn.text));
@@ -107,6 +128,7 @@ export function buildSegmentedRealPreflight(
       durationSeconds: turn.durationSeconds,
       requiresLipSync,
       voiceIdReady,
+      autoCastRequired,
       credentialName,
       credentialVisible,
       voiceEstimatedUsd,
@@ -123,7 +145,8 @@ export function buildSegmentedRealPreflight(
         label: row.label,
         kind: row.kind,
         provider: row.provider,
-        voiceIdReady: row.voiceIdReady
+        voiceIdReady: row.voiceIdReady,
+        autoCastRequired: row.autoCastRequired
       });
     }
   }
@@ -160,6 +183,7 @@ export function buildSegmentedRealPreflight(
       totalEstimatedUsd: sumMoney([voiceEstimatedUsd, lipSyncEstimatedUsd]),
       profilesRequired: requiredProfiles.length,
       profilesReady: requiredProfiles.filter((profile) => profile.voiceIdReady).length,
+      profilesAutoCast: requiredProfiles.filter((profile) => profile.autoCastRequired).length,
       blockers: uniqueBlockers.length
     },
     requiredProfiles,
