@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { FilmProjectSchema, type FilmProject } from '../lib/domain/schemas';
+import { FilmShotSchema, type FilmProject } from '../lib/domain/schemas';
 import { ensureProjectFolders, projectAssetDir } from '../lib/storage/project-store';
 import { createSyntheticMotionVideo } from '../lib/media/synthetic-video';
 import { planSingleRenderTiming, renderSingleShotReal } from '../lib/engine/single-real-renderer-v4';
@@ -179,8 +179,9 @@ test('autoajuste E3/T2 respeta schema 4-8s y usa rescate off-camera mínimo', ()
   assert.ok(plan.speedFactor <= 1.25);
 
   const project = fixture('narrator');
-  project.plan!.scenes[0].shots[0].durationSeconds = plan.outputDurationSeconds;
-  assert.doesNotThrow(() => FilmProjectSchema.parse(project));
+  const shot = project.plan!.scenes[0].shots[0];
+  shot.durationSeconds = plan.outputDurationSeconds;
+  assert.doesNotThrow(() => FilmShotSchema.parse(shot));
 });
 
 test('autoajuste conserva duración si la voz ya cabe dentro de 1.2x', () => {
