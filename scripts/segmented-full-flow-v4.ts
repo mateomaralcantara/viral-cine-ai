@@ -258,6 +258,16 @@ if (rendered.durationAdjusted) {
     rendered.targetDurationSeconds.toFixed(3) + 's' +
     ' (media real ' + rendered.outputDurationSeconds.toFixed(3) + 's)'
   );
+  if (
+    !Number.isInteger(rendered.targetDurationSeconds) ||
+    rendered.targetDurationSeconds < 4 ||
+    rendered.targetDurationSeconds > 8
+  ) {
+    throw new Error(
+      'Duración segmentada objetivo incompatible con FilmShotSchema: ' +
+      rendered.targetDurationSeconds.toFixed(3) + 's.'
+    );
+  }
   located.shot.durationSeconds = rendered.targetDurationSeconds;
   for (let index = 0; index < located.shot.dialogueLines.length; index += 1) {
     const renderedTurn = rendered.turns[index];
