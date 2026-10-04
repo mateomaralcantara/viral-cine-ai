@@ -6,7 +6,7 @@ import path from 'node:path';
 import type { FilmProject } from '../lib/domain/schemas';
 import { ensureProjectFolders, projectAssetDir } from '../lib/storage/project-store';
 import { createSyntheticMotionVideo } from '../lib/media/synthetic-video';
-import { renderSingleShotReal } from '../lib/engine/single-real-renderer-v4';
+import { planSingleRenderTiming, renderSingleShotReal } from '../lib/engine/single-real-renderer-v4';
 
 const PROJECT_ID = '77777777-8888-4999-8aaa-bbbbbbbbbbbb';
 
@@ -166,4 +166,27 @@ test('single personaje visible entra a lip-sync y versiona la salida', async () 
     assert.match(result.outputAsset, /final-real-lipsync\.mp4$/);
     assert.equal(result.sourcePreserved, true);
   });
+});
+
+
+test('autoajuste de duración resuelve el caso E3/T2 sin superar 1.2x', () => {
+  const plan = planSingleRenderTiming(9.799, 7);
+  assert.equal(plan.durationAdjusted, true);
+  assert.equal(plan.outputDurationSeconds, 8.2);
+  assert.ok(plan.speedFactor <= 1.2);
+  assert.ok(plan.speedFactor > 1.19);
+});
+
+test('autoajuste conserva duración si la voz ya cabe dentro de 1.2x', () => {
+  const plan = planSingleRenderTiming(8.0, 7);
+  assert.equal(plan.durationAdjusted, false);
+  assert.equal(plan.outputDurationSeconds, 7);
+  assert.ok(plan.speedFactor < 1.2);
+});
+
+test('autoajuste bloquea una extensión excesiva en vez de deformar la voz', () => {
+  assert.throws(
+    () => planSingleRenderTiming(14, 7),
+    /máximo automático seguro/
+  );
 });
