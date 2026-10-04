@@ -6,6 +6,7 @@ import { buildSingleVisualPlan, buildSingleVeoFallbackPrompt } from '@/lib/engin
 import { appendSpend, assertSpendRetrySafe, estimateOperationCost } from '@/lib/engine/spend-ledger';
 import { assertPaidGenerationAllowed, hasUsableCredential, safeErrorMessage } from '@/lib/engine/production-safety';
 import { generateImageWithReferences } from '@/lib/providers/openai-media';
+import { buildProviderSafeImagePrompt } from '@/lib/engine/openai-image-safety-v4';
 import { generateVeoVideo, isVeoNoChargeFailure, isVeoQuotaFailure } from '@/lib/providers/veo';
 import { assertCinematicVideoTrack } from '@/lib/media/probe';
 import { renderCinematicStillVideo } from '@/lib/media/ffmpeg';
@@ -88,7 +89,7 @@ export async function generateSingleReferenceReal(
     .filter((character): character is NonNullable<typeof character> => Boolean(character?.referenceAsset))
     .map((character) => assetAbsolutePath(project.id, character.referenceAsset!));
 
-  const idempotencyKey = 'single-visual-image:' + shot.id + ':v3';
+  const idempotencyKey = 'single-visual-image:' + shot.id + ':v4-safe';
   const estimatedUsd = estimateOperationCost('image', 1);
   await assertSpendRetrySafe(project.id, idempotencyKey, 'referencia visual única');
 
@@ -104,9 +105,13 @@ export async function generateSingleReferenceReal(
   });
 
   try {
+    const providerPrompt = buildProviderSafeImagePrompt(
+      plan.prompt + ' Negative constraints: ' + plan.negativePrompt
+    );
+    console.log('OpenAI reference prompt: PROVIDER-SAFE');
     await generateImageWithReferences(
       references,
-      plan.prompt + ' Negative constraints: ' + plan.negativePrompt,
+      providerPrompt,
       paths.referencePath
     );
     await appendSpend(project.id, {
