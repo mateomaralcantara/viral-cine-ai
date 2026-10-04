@@ -83,7 +83,7 @@ export async function inspectSegmentedTurnVisualSources(
       videoPrompt: turn.videoPrompt,
       negativePrompt: turn.negativePrompt,
       estimatedReferenceUsd: referenceReady ? 0 : estimateOperationCost('image', 1),
-      estimatedVideoUsd: videoReady ? 0 : estimateOperationCost('video', turn.providerDurationSeconds)
+      estimatedVideoUsd: videoReady || localVideoOnly() ? 0 : estimateOperationCost('video', turn.providerDurationSeconds)
     });
   }
 
@@ -187,9 +187,6 @@ export async function generateSegmentedTurnVideosReal(
   shot: FilmShot
 ) {
   assertPaidGenerationAllowed('generar videos visuales por turno');
-  if (!hasUsableCredential('GEMINI_API_KEY')) {
-    throw new Error('Falta GEMINI_API_KEY para generar los videos por turno con Veo.');
-  }
 
   const plan = buildSegmentedVisualPlan(project, scene, shot);
   const before = await inspectSegmentedTurnVisualSources(project, scene, shot);
@@ -209,6 +206,38 @@ export async function generateSegmentedTurnVideosReal(
 
     await mkdir(path.dirname(status.videoPath), { recursive: true });
     const idempotencyKey = 'visual-turn-video:' + shot.id + ':' + turn.index + ':v3';
+
+    if (localVideoOnly()) {
+      console.warn(
+        'VIRALCINE_LOCAL_VIDEO_ONLY=1: turno ' + turn.index +
+        ' usa video cinematográfico local de costo US$0.'
+      );
+      await renderCinematicStillVideo(
+        status.referencePath,
+        turn.slotDurationSeconds,
+        status.videoPath,
+        project.input.aspectRatio
+      );
+      await assertCinematicVideoTrack(status.videoPath, turn.slotDurationSeconds);
+      await appendSpend(project.id, {
+        operation: 'video',
+        provider: 'local-ffmpeg',
+        model: 'cinematic-still-motion-v1-finish-mode',
+        state: 'reconciled',
+        estimatedUsd: 0,
+        actualUsd: 0,
+        sceneId: scene.id,
+        shotId: shot.id,
+        idempotencyKey,
+        outputAsset: status.videoAsset
+      });
+      continue;
+    }
+
+    if (!hasUsableCredential('GEMINI_API_KEY')) {
+      throw new Error('Falta GEMINI_API_KEY para generar los videos por turno con Veo.');
+    }
+
     const estimatedUsd = estimateOperationCost('video', turn.providerDurationSeconds);
     const attempts = [
       { label: 'primary', prompt: turn.videoPrompt },
@@ -407,4 +436,11 @@ function roundMoney(value: number) {
 
 function pad(value: number) {
   return String(value).padStart(2, '0');
+}
+
+
+function localVideoOnly() {
+  return /^(?:1|true|yes|on)$/i.test(
+    String(process.env.VIRALCINE_LOCAL_VIDEO_ONLY || '').trim()
+  );
 }
