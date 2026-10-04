@@ -1,0 +1,169 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import type { FilmProject } from '../lib/domain/schemas';
+import { ensureProjectFolders, projectAssetDir } from '../lib/storage/project-store';
+import { createSyntheticMotionVideo } from '../lib/media/synthetic-video';
+import { renderSingleShotReal } from '../lib/engine/single-real-renderer-v4';
+
+const PROJECT_ID = '77777777-8888-4999-8aaa-bbbbbbbbbbbb';
+
+function fixture(speakerId: 'narrator' | 'pilato'): FilmProject {
+  return {
+    id: PROJECT_ID,
+    createdAt: '2026-10-04T00:00:00.000Z',
+    updatedAt: '2026-10-04T00:00:00.000Z',
+    status: 'ready',
+    input: {
+      title: 'Single real lip-sync test',
+      premise: 'Prueba offline de narración y de personaje individual con sincronización facial.',
+      durationMinutes: 5,
+      genre: 'Test',
+      audience: 'Equipo',
+      visualStyle: 'Cine',
+      language: 'es',
+      aspectRatio: '16:9',
+      budgetUsd: 5,
+      burnSubtitles: false,
+      generateMusic: false
+    },
+    plan: {
+      logline: 'Test',
+      synopsis: 'Test',
+      creativeDirection: 'Test',
+      musicPrompt: 'Test',
+      characters: [{
+        id: 'pilato',
+        name: 'Pilato',
+        role: 'Gobernador',
+        age: 50,
+        appearance: 'Rostro firme',
+        wardrobe: 'Túnica romana',
+        personality: 'Contenido',
+        voiceInstructions: 'Voz masculina firme',
+        voiceProvider: 'elevenlabs',
+        imagePrompt: 'Pilato'
+      }],
+      scenes: [{
+        id: 'scene-1',
+        order: 1,
+        act: 1,
+        title: 'Escena',
+        durationSeconds: 4,
+        summary: 'Test',
+        narration: '',
+        dialogue: '',
+        dialogueTurns: [],
+        visualPrompt: 'Patio de piedra del siglo I.',
+        negativePrompt: '',
+        camera: 'Primer plano estable.',
+        soundDesign: '',
+        transition: '',
+        mode: 'ai-video',
+        characterIds: speakerId === 'pilato' ? ['pilato'] : [],
+        shots: [{
+          id: 'single-shot',
+          order: 1,
+          title: 'Single',
+          durationSeconds: 4,
+          visualPrompt: 'Plano estable.',
+          camera: 'Primer plano.',
+          spokenText: speakerId === 'pilato' ? 'No encuentro motivo para condenarlo.' : 'La mañana avanzaba sobre Jerusalén.',
+          speakerId,
+          dialogueLines: [{
+            id: 'line-1',
+            speakerId,
+            text: speakerId === 'pilato' ? 'No encuentro motivo para condenarlo.' : 'La mañana avanzaba sobre Jerusalén.',
+            startSeconds: 0,
+            endSeconds: 4
+          }],
+          mode: 'video',
+          characterIds: speakerId === 'pilato' ? ['pilato'] : [],
+          status: 'ready'
+        }],
+        status: 'ready'
+      }]
+    },
+    progress: {
+      phase: 'ready',
+      percent: 100,
+      message: 'Test',
+      updatedAt: '2026-10-04T00:00:00.000Z'
+    },
+    productionLog: []
+  } as FilmProject;
+}
+
+async function prepareVisual(project: FilmProject) {
+  await ensureProjectFolders(project.id);
+  const scene = project.plan!.scenes[0];
+  const shot = scene.shots[0];
+  const folder = 'scene-01-shot-01-' + shot.id;
+  const refPath = path.join(
+    projectAssetDir(project.id, 'images'),
+    'single-v4-sources',
+    folder,
+    'reference.png'
+  );
+  const videoPath = path.join(
+    projectAssetDir(project.id, 'video'),
+    'single-v4-sources',
+    folder,
+    'base-real.mp4'
+  );
+  await mkdir(path.dirname(refPath), { recursive: true });
+  await mkdir(path.dirname(videoPath), { recursive: true });
+  await writeFile(refPath, Buffer.from('offline-reference'));
+  await createSyntheticMotionVideo(4, videoPath, '16:9');
+}
+
+async function withTempData(run: (root: string) => Promise<void>) {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'viralcine-single-real-'));
+  const previousDataDir = process.env.VIRALCINE_DATA_DIR;
+  const previousMode = process.env.PRODUCTION_MODE;
+  const previousExternal = process.env.ALLOW_EXTERNAL_API_CALLS;
+  const previousPaid = process.env.ALLOW_PAID_GENERATION;
+  try {
+    process.env.VIRALCINE_DATA_DIR = tempRoot;
+    process.env.PRODUCTION_MODE = 'demo';
+    process.env.ALLOW_EXTERNAL_API_CALLS = 'false';
+    process.env.ALLOW_PAID_GENERATION = 'false';
+    await run(tempRoot);
+  } finally {
+    if (previousDataDir === undefined) delete process.env.VIRALCINE_DATA_DIR;
+    else process.env.VIRALCINE_DATA_DIR = previousDataDir;
+    if (previousMode === undefined) delete process.env.PRODUCTION_MODE;
+    else process.env.PRODUCTION_MODE = previousMode;
+    if (previousExternal === undefined) delete process.env.ALLOW_EXTERNAL_API_CALLS;
+    else process.env.ALLOW_EXTERNAL_API_CALLS = previousExternal;
+    if (previousPaid === undefined) delete process.env.ALLOW_PAID_GENERATION;
+    else process.env.ALLOW_PAID_GENERATION = previousPaid;
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+}
+
+test('single narrador mantiene ruta sin lip-sync', async () => {
+  await withTempData(async () => {
+    const project = fixture('narrator');
+    await prepareVisual(project);
+    const scene = project.plan!.scenes[0];
+    const result = await renderSingleShotReal(project, scene, scene.shots[0]);
+    assert.equal(result.lipSyncRequired, false);
+    assert.match(result.outputAsset, /final-real\.mp4$/);
+    assert.equal(result.sourcePreserved, true);
+  });
+});
+
+test('single personaje visible entra a lip-sync y versiona la salida', async () => {
+  await withTempData(async () => {
+    const project = fixture('pilato');
+    await prepareVisual(project);
+    const scene = project.plan!.scenes[0];
+    const result = await renderSingleShotReal(project, scene, scene.shots[0]);
+    assert.equal(result.lipSyncRequired, true);
+    assert.match(result.outputAsset, /final-real-lipsync\.mp4$/);
+    assert.equal(result.sourcePreserved, true);
+  });
+});
