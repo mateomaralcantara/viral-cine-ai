@@ -251,6 +251,21 @@ console.log('Audio maestro: ' + rendered.masterAudioAsset);
 console.log('Turnos con lip-sync: ' + rendered.lipSyncTurns);
 console.log('Render segmentado: ' + rendered.outputAsset);
 
+if (rendered.durationAdjusted) {
+  console.log(
+    'Duración segmentada autoajustada compatible con schema: ' +
+    rendered.scheduledDurationSeconds.toFixed(3) + 's -> ' +
+    rendered.outputDurationSeconds.toFixed(3) + 's'
+  );
+  located.shot.durationSeconds = rendered.outputDurationSeconds;
+  for (let index = 0; index < located.shot.dialogueLines.length; index += 1) {
+    const renderedTurn = rendered.turns[index];
+    if (!renderedTurn) continue;
+    located.shot.dialogueLines[index].startSeconds = renderedTurn.startSeconds;
+    located.shot.dialogueLines[index].endSeconds = renderedTurn.endSeconds;
+  }
+}
+
 console.log('\n[4/5] Preparando música de fondo...');
 const readyMusic = await ensureProjectMusicReal(project);
 let finalAsset = rendered.outputAsset;
@@ -273,7 +288,7 @@ if (readyMusic.enabled) {
     await mixBackgroundMusic(rendered.outputPath, readyMusic.path, musicOutput, musicOffset);
   }
 
-  await assertCinematicSceneVideo(musicOutput, located.shot.durationSeconds, {
+  await assertCinematicSceneVideo(musicOutput, rendered.outputDurationSeconds, {
     requireMotion: true,
     requireAudibleAudio: true
   });
@@ -322,6 +337,11 @@ project.productionLog.push(
   now +
   ' E' + located.scene.order + '/T' + located.shot.order +
   ' completada por Full Flow segmentado 4.2. Video=' + finalAsset +
+  (rendered.durationAdjusted
+    ? ' | duración autoajustada=' +
+      rendered.scheduledDurationSeconds.toFixed(3) + 's->' +
+      rendered.outputDurationSeconds.toFixed(3) + 's'
+    : '') +
   (readyMusic.enabled ? ' | música=' + readyMusic.asset : '')
 );
 project = await saveProject(project);
