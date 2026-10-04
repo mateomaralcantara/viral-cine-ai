@@ -64,10 +64,28 @@ console.log('\nCOBERTURA DE PRUEBAS DE PRODUCCION');
 const narrator42 = completed42.some((row) => row.kind === 'single-narrator');
 const lip42 = completed42.some((row) => row.kind === 'single-lipsync');
 const segmented42 = completed42.some((row) => row.kind === 'segmented');
+const narratorAvailable = rows.some((row) => row.kind === 'single-narrator');
+const lipAvailable = rows.some((row) => row.kind === 'single-lipsync');
+const segmentedAvailable = rows.some((row) => row.kind === 'segmented');
 
-console.log('  Single narrador + música: ' + (narrator42 ? 'CUBIERTA' : 'PENDIENTE'));
-console.log('  Single hablante visible + lip-sync: ' + (lip42 ? 'CUBIERTA' : 'PENDIENTE'));
-console.log('  Multihablante segmentada + lip-sync: ' + (segmented42 ? 'CUBIERTA' : 'PENDIENTE'));
+console.log(
+  '  Single narrador + música: ' +
+  (narrator42 ? 'CUBIERTA' : narratorAvailable ? 'PENDIENTE' : 'NO APLICA')
+);
+console.log(
+  '  Single hablante visible + lip-sync: ' +
+  (lip42 ? 'CUBIERTA' : lipAvailable ? 'PENDIENTE' : 'NO APLICA (0 tomas de esta clase)')
+);
+console.log(
+  '  Multihablante segmentada + lip-sync: ' +
+  (segmented42 ? 'CUBIERTA' : segmentedAvailable ? 'PENDIENTE' : 'NO APLICA')
+);
+
+console.log('\nCLASES DE TOMAS EN EL PROYECTO');
+console.log('  Single narrador: ' + rows.filter((row) => row.kind === 'single-narrator').length);
+console.log('  Single hablante visible + lip-sync: ' + rows.filter((row) => row.kind === 'single-lipsync').length);
+console.log('  Single otros: ' + rows.filter((row) => row.kind === 'single-other').length);
+console.log('  Segmentadas/multihablante: ' + rows.filter((row) => row.kind === 'segmented').length);
 
 const candidates = [
   {
