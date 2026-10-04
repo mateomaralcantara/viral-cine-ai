@@ -9,6 +9,7 @@ import { assertPaidGenerationAllowed, hasUsableCredential, safeErrorMessage } fr
 import { generateImageWithReferences } from '@/lib/providers/openai-media';
 import { generateVeoVideo, isVeoNoChargeFailure } from '@/lib/providers/veo';
 import { assertCinematicVideoTrack } from '@/lib/media/probe';
+import { renderCinematicStillVideo } from '@/lib/media/ffmpeg';
 
 export type SegmentedTurnVisualSourceStatus = {
   index: number;
@@ -269,8 +270,37 @@ export async function generateSegmentedTurnVideosReal(
             safeErrorMessage(error)
         });
 
-        if (!noCharge || attempt === attempts.length - 1) {
+        if (!noCharge) {
           throw error;
+        }
+
+        if (attempt === attempts.length - 1) {
+          console.warn(
+            'Veo volvió a terminar sin video y sin cobro en el turno ' +
+            turn.index +
+            '; usando fallback cinematográfico local de costo US$0.'
+          );
+          await renderCinematicStillVideo(
+            status.referencePath,
+            turn.slotDurationSeconds,
+            status.videoPath,
+            project.input.aspectRatio
+          );
+          await assertCinematicVideoTrack(status.videoPath, turn.slotDurationSeconds);
+          await appendSpend(project.id, {
+            operation: 'video',
+            provider: 'local-ffmpeg',
+            model: 'cinematic-still-motion-v1',
+            state: 'reconciled',
+            estimatedUsd: 0,
+            actualUsd: 0,
+            sceneId: scene.id,
+            shotId: shot.id,
+            idempotencyKey,
+            outputAsset: status.videoAsset
+          });
+          lastError = undefined;
+          break;
         }
 
         console.warn(
