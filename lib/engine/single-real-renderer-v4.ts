@@ -29,9 +29,11 @@ export type SingleRealRenderResult = {
   masterAudioAsset: string;
   outputAsset: string;
   outputDurationSeconds: number;
+  targetDurationSeconds: number;
   scheduledDurationSeconds: number;
   durationAdjusted: boolean;
   rescueSpeedUsed: boolean;
+  emergencyNarrationRescueUsed: boolean;
   lipSyncRequired: boolean;
 };
 
@@ -89,10 +91,16 @@ export async function renderSingleShotReal(
     project,
     voiceShot.speakerId || voiceShot.dialogueLines[0]?.speakerId
   );
+  const speakerId =
+    voiceShot.speakerId || voiceShot.dialogueLines[0]?.speakerId || '';
   const timing = planSingleRenderTiming(
     rawAudioDurationSeconds,
     shot.durationSeconds,
-    { allowNarrationRescue: !lipSyncRequired }
+    {
+      allowNarrationRescue: !lipSyncRequired,
+      allowEmergencyNarrationRescue:
+        !lipSyncRequired && speakerId === 'narrator'
+    }
   );
   const renderDurationSeconds = timing.outputDurationSeconds;
   const speedFactor = timing.speedFactor;
@@ -200,9 +208,11 @@ export async function renderSingleShotReal(
     masterAudioAsset: assetRelativePath(project.id, masterAudioPath),
     outputAsset: assetRelativePath(project.id, outputPath),
     outputDurationSeconds,
+    targetDurationSeconds: renderDurationSeconds,
     scheduledDurationSeconds: shot.durationSeconds,
     durationAdjusted: timing.durationAdjusted,
     rescueSpeedUsed: timing.rescueSpeedUsed,
+    emergencyNarrationRescueUsed: timing.emergencyNarrationRescueUsed,
     lipSyncRequired
   };
 }
@@ -213,16 +223,21 @@ export type SingleRenderTimingPlan = {
   speedFactor: number;
   durationAdjusted: boolean;
   rescueSpeedUsed: boolean;
+  emergencyNarrationRescueUsed: boolean;
 };
 
 const NORMAL_SINGLE_SPEED_LIMIT = 1.2;
 const NARRATION_RESCUE_SPEED_LIMIT = 1.25;
+const EMERGENCY_NARRATION_RESCUE_SPEED_LIMIT = 1.33;
 const MAX_SINGLE_SHOT_SECONDS = 8;
 
 export function planSingleRenderTiming(
   rawAudioDurationSeconds: number,
   scheduledDurationSeconds: number,
-  options: { allowNarrationRescue?: boolean } = {}
+  options: {
+    allowNarrationRescue?: boolean;
+    allowEmergencyNarrationRescue?: boolean;
+  } = {}
 ): SingleRenderTimingPlan {
   if (!Number.isFinite(rawAudioDurationSeconds) || rawAudioDurationSeconds <= 0) {
     throw new Error('Duración de audio inválida para planificar el render single.');
@@ -247,7 +262,8 @@ export function planSingleRenderTiming(
       outputDurationSeconds: scheduledDurationSeconds,
       speedFactor: Math.max(1, directSpeed),
       durationAdjusted: false,
-      rescueSpeedUsed: false
+      rescueSpeedUsed: false,
+      emergencyNarrationRescueUsed: false
     };
   }
 
@@ -270,7 +286,8 @@ export function planSingleRenderTiming(
       outputDurationSeconds,
       speedFactor: Math.max(1, speedFactor),
       durationAdjusted: outputDurationSeconds !== scheduledDurationSeconds,
-      rescueSpeedUsed: false
+      rescueSpeedUsed: false,
+      emergencyNarrationRescueUsed: false
     };
   }
 
@@ -286,7 +303,25 @@ export function planSingleRenderTiming(
       outputDurationSeconds,
       speedFactor,
       durationAdjusted: outputDurationSeconds !== scheduledDurationSeconds,
-      rescueSpeedUsed: true
+      rescueSpeedUsed: true,
+      emergencyNarrationRescueUsed: false
+    };
+  }
+
+  // Rescate excepcional exclusivo del narrador. Conserva todo el texto,
+  // mantiene el schema en 8s y evita regenerar imagen/video por unas décimas.
+  // 1.33x sigue usando atempo (preserva tono) y no se permite para diálogo visible.
+  if (
+    options.allowEmergencyNarrationRescue &&
+    speedFactor <= EMERGENCY_NARRATION_RESCUE_SPEED_LIMIT
+  ) {
+    return {
+      scheduledDurationSeconds,
+      outputDurationSeconds,
+      speedFactor,
+      durationAdjusted: outputDurationSeconds !== scheduledDurationSeconds,
+      rescueSpeedUsed: true,
+      emergencyNarrationRescueUsed: true
     };
   }
 
@@ -295,9 +330,11 @@ export function planSingleRenderTiming(
     's. Con el máximo permitido de ' + outputDurationSeconds.toFixed(3) +
     's necesitaría ' + speedFactor.toFixed(3) +
     'x. El límite normal es 1.2x' +
-    (options.allowNarrationRescue
-      ? ' y el rescate seguro de narración llega a 1.25x.'
-      : '; el diálogo visible no permite rescate por encima de 1.2x.')
+    (options.allowEmergencyNarrationRescue
+      ? ' y el rescate excepcional del narrador llega a 1.33x.'
+      : options.allowNarrationRescue
+        ? ' y el rescate seguro de narración llega a 1.25x.'
+        : '; el diálogo visible no permite rescate por encima de 1.2x.')
   );
 }
 
