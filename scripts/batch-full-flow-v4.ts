@@ -177,18 +177,37 @@ console.log('Journal: ' + journalPath);
 let reservedUsd = 0;
 let completed = 0;
 let skipped = 0;
+const failedShots: Array<{
+  shotId: string;
+  sceneOrder: number;
+  shotOrder: number;
+  state: string;
+  reason: string;
+}> = [];
 
 for (const item of queue) {
   const currentProject = await getProject(projectId);
   const currentShot = findShot(currentProject, item.shotId);
 
   if (!currentShot) {
+    const reason = 'shot-not-found';
     await journal(journalPath, {
       state: 'failed',
       shotId: item.shotId,
-      reason: 'shot-not-found'
+      reason
     });
-    throw new Error('La toma desapareció del proyecto: ' + item.shotId);
+    failedShots.push({
+      shotId: item.shotId,
+      sceneOrder: item.sceneOrder,
+      shotOrder: item.shotOrder,
+      state: 'failed',
+      reason
+    });
+    console.warn(
+      'BATCH: E' + item.sceneOrder + '/T' + item.shotOrder +
+      ' no pudo localizarse; se marca RETRY_PENDING y el lote continúa.'
+    );
+    continue;
   }
 
   if (isFullFlow42Complete(currentShot)) {
@@ -207,16 +226,24 @@ for (const item of queue) {
 
   const fresh = await previewShot(projectId, item.shotId);
   if (!fresh.pass) {
+    const reason = fresh.reason || 'preview-failed';
     await journal(journalPath, {
       state: 'blocked',
       shotId: item.shotId,
-      reason: fresh.reason || 'preview-failed'
+      reason
     });
-    throw new Error(
-      'BATCH detenido antes del gasto en E' +
-      item.sceneOrder + '/T' + item.shotOrder +
-      ': ' + (fresh.reason || 'preflight bloqueado')
+    failedShots.push({
+      shotId: item.shotId,
+      sceneOrder: item.sceneOrder,
+      shotOrder: item.shotOrder,
+      state: 'blocked',
+      reason
+    });
+    console.warn(
+      'BATCH: E' + item.sceneOrder + '/T' + item.shotOrder +
+      ' queda RETRY_PENDING por preflight: ' + reason
     );
+    continue;
   }
 
   let shotCost = fresh.estimatedUsd;
@@ -265,29 +292,49 @@ for (const item of queue) {
   const code = await runShot(projectId, item.shotId);
 
   if (code !== 0) {
+    const reason = 'shot-run-exit-' + code;
     await journal(journalPath, {
       state: 'failed',
       shotId: item.shotId,
-      exitCode: code
+      exitCode: code,
+      retryPending: true
     });
-    throw new Error(
-      'BATCH detenido: falló E' + item.sceneOrder + '/T' + item.shotOrder +
-      '. No se continuará con las siguientes tomas.'
+    failedShots.push({
+      shotId: item.shotId,
+      sceneOrder: item.sceneOrder,
+      shotOrder: item.shotOrder,
+      state: 'failed',
+      reason
+    });
+    console.warn(
+      'BATCH: falló E' + item.sceneOrder + '/T' + item.shotOrder +
+      '; se marca RETRY_PENDING y se continúa con la siguiente toma.'
     );
+    continue;
   }
 
   const verifiedProject = await getProject(projectId);
   const verifiedShot = findShot(verifiedProject, item.shotId);
 
   if (!verifiedShot || !isFullFlow42Complete(verifiedShot)) {
+    const reason = 'failed-validation';
     await journal(journalPath, {
       state: 'failed-validation',
-      shotId: item.shotId
+      shotId: item.shotId,
+      retryPending: true
     });
-    throw new Error(
-      'BATCH detenido: E' + item.sceneOrder + '/T' + item.shotOrder +
-      ' terminó pero no quedó oficialmente completa en 4.2.'
+    failedShots.push({
+      shotId: item.shotId,
+      sceneOrder: item.sceneOrder,
+      shotOrder: item.shotOrder,
+      state: 'failed-validation',
+      reason
+    });
+    console.warn(
+      'BATCH: E' + item.sceneOrder + '/T' + item.shotOrder +
+      ' no quedó validada; se marca RETRY_PENDING y el lote continúa.'
     );
+    continue;
   }
 
   completed += 1;
@@ -308,14 +355,206 @@ const finalProject = await getProject(projectId);
 const remaining = buildBatchQueue(finalProject).length;
 
 console.log('\n==================================================');
-console.log(' BATCH 4.2 — PASS');
+console.log(failedShots.length ? ' BATCH 4.2 — PARTIAL/RESILIENT' : ' BATCH 4.2 — PASS');
 console.log('==================================================');
 console.log('Completadas en este lote: ' + completed);
 console.log('Saltadas por ya estar listas: ' + skipped);
-console.log('Estimado conservador autorizado/usado: US$' + reservedUsd.toFixed(4));
+console.log('RETRY_PENDING: ' + failedShots.length);
+console.log('Estimado conservador autorizado/usado: US
+
+function parseOptions(tokens: string[]) {
+  let maxUsd: number | undefined;
+  let maxShots: number | undefined;
+  let sceneOrder: number | undefined;
+  let fromShotId: string | undefined;
+  let confirmPaid = false;
+
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i];
+
+    if (
+      token === '--confirm-paid' &&
+      tokens[i + 1] === 'SI' &&
+      tokens[i + 2] === 'BATCH' &&
+      tokens[i + 3] === 'FULL'
+    ) {
+      confirmPaid = true;
+      i += 3;
+      continue;
+    }
+
+    if (token === '--max-usd') {
+      maxUsd = Number(tokens[++i]);
+      continue;
+    }
+
+    if (token === '--max-shots') {
+      maxShots = Number.parseInt(tokens[++i] || '', 10);
+      continue;
+    }
+
+    if (token === '--scene') {
+      sceneOrder = Number.parseInt(tokens[++i] || '', 10);
+      continue;
+    }
+
+    if (token === '--from-shot') {
+      fromShotId = tokens[++i];
+      continue;
+    }
+
+    throw new Error('Argumento BATCH no reconocido: ' + token);
+  }
+
+  if (maxUsd !== undefined && (!Number.isFinite(maxUsd) || maxUsd < 0)) {
+    throw new Error('--max-usd inválido.');
+  }
+  if (maxShots !== undefined && (!Number.isInteger(maxShots) || maxShots <= 0)) {
+    throw new Error('--max-shots inválido.');
+  }
+  if (sceneOrder !== undefined && (!Number.isInteger(sceneOrder) || sceneOrder <= 0)) {
+    throw new Error('--scene inválido.');
+  }
+
+  return { maxUsd, maxShots, sceneOrder, fromShotId, confirmPaid };
+}
+
+async function previewShot(id: string, shotId: string) {
+  const result = await captureNode([
+    shotScriptPath(),
+    'preview',
+    id,
+    shotId
+  ]);
+
+  const match = result.output.match(
+    /COSTO MAXIMO PENDIENTE ESTIMADO:\s*US\$(\d+(?:\.\d+)?)/i
+  );
+
+  if (!match) {
+    return {
+      pass: false,
+      estimatedUsd: 0,
+      reason: 'No se pudo leer el costo del preflight.'
+    };
+  }
+
+  const estimatedUsd = Number(match[1]);
+  const pass =
+    result.code === 0 &&
+    /(?:SINGLE|SEGMENTED)_FULL_FLOW_PREVIEW=PASS/.test(result.output);
+
+  return {
+    pass,
+    estimatedUsd: roundMoney(estimatedUsd),
+    reason: pass ? undefined : lastUsefulLine(result.output)
+  };
+}
+
+async function runShot(id: string, shotId: string) {
+  return runNodeInherited([
+    shotScriptPath(),
+    'run',
+    id,
+    shotId,
+    '--confirm-paid',
+    'SI',
+    'FULL',
+    'FLOW'
+  ]);
+}
+
+function shotScriptPath() {
+  return path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    'shot-full-flow-v4.ts'
+  );
+}
+
+async function captureNode(args: string[]) {
+  return new Promise<{ code: number; output: string }>((resolve, reject) => {
+    const child = spawn(
+      process.execPath,
+      ['--import', 'tsx', ...args],
+      {
+        windowsHide: true,
+        env: process.env
+      }
+    );
+
+    let output = '';
+    child.stdout.on('data', (chunk) => { output += String(chunk); });
+    child.stderr.on('data', (chunk) => { output += String(chunk); });
+    child.once('error', reject);
+    child.once('close', (code) => resolve({ code: code ?? 1, output }));
+  });
+}
+
+async function runNodeInherited(args: string[]) {
+  return new Promise<number>((resolve, reject) => {
+    const child = spawn(
+      process.execPath,
+      ['--import', 'tsx', ...args],
+      {
+        stdio: 'inherit',
+        windowsHide: true,
+        env: process.env
+      }
+    );
+    child.once('error', reject);
+    child.once('close', (code) => resolve(code ?? 1));
+  });
+}
+
+function findShot(project: Awaited<ReturnType<typeof getProject>>, shotId: string) {
+  for (const scene of project.plan?.scenes || []) {
+    const shot = scene.shots.find((item) => item.id === shotId);
+    if (shot) return shot;
+  }
+  return undefined;
+}
+
+function lastUsefulLine(output: string) {
+  const lines = output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return lines.slice(-3).join(' | ');
+}
+
+async function journal(filePath: string, value: Record<string, unknown>) {
+  await appendFile(
+    filePath,
+    JSON.stringify({
+      createdAt: new Date().toISOString(),
+      ...value
+    }) + '\n',
+    'utf8'
+  );
+}
+
+function usage() {
+  console.log('Uso:');
+  console.log('  npm run batch:full -- preview <projectId> [--max-shots N] [--scene N] [--from-shot ID]');
+  console.log('  npm run batch:full -- run <projectId> --confirm-paid SI BATCH FULL --max-usd N --max-shots N [--scene N] [--from-shot ID]');
+}
+ + reservedUsd.toFixed(4));
 console.log('Tomas 4.2 pendientes del proyecto: ' + remaining);
 console.log('Journal: ' + journalPath);
-console.log('BATCH_FULL_RUN=PASS');
+
+if (failedShots.length) {
+  console.log('\nTOMAS RETRY_PENDING');
+  for (const failure of failedShots) {
+    console.log(
+      '  E' + failure.sceneOrder + '/T' + failure.shotOrder +
+      ' | ' + failure.state + ' | ' + failure.reason
+    );
+  }
+  console.log('BATCH_FULL_RUN=PARTIAL');
+  process.exitCode = 2;
+} else {
+  console.log('BATCH_FULL_RUN=PASS');
+}
 
 function parseOptions(tokens: string[]) {
   let maxUsd: number | undefined;
