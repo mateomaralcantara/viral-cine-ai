@@ -45,8 +45,13 @@ if (command === 'preview') {
 }
 
 const confirmation = rest.join(' ').trim();
-if (confirmation !== '--confirm-paid SI VOICE') {
-  throw new Error('Ejecución pagada bloqueada. Debes usar exactamente: --confirm-paid SI VOICE');
+const requiredConfirmation = preflight.requiresLipSync
+  ? '--confirm-paid SI VOICE FAL'
+  : '--confirm-paid SI VOICE';
+if (confirmation !== requiredConfirmation) {
+  throw new Error(
+    'Ejecución pagada bloqueada. Debes usar exactamente: ' + requiredConfirmation
+  );
 }
 if (preflight.blockers.length) {
   throw new Error('Single real bloqueado por preflight: ' + preflight.blockers.join(' | '));
@@ -61,9 +66,9 @@ process.env.ALLOW_PAID_GENERATION = 'true';
 process.env.ALLOW_PAID_PROVIDER_FALLBACK = 'false';
 
 console.log('\nAUTORIZACION');
-console.log('  Confirmación exacta recibida: SI VOICE');
+console.log('  Confirmación exacta recibida: ' + (preflight.requiresLipSync ? 'SI VOICE FAL' : 'SI VOICE'));
 console.log('  Voz: HABILITADA SOLO PARA ESTE PROCESO');
-console.log('  OpenAI Images=NO | Veo=NO | Fal=NO');
+console.log('  OpenAI Images=NO | Veo=NO | Fal=' + (preflight.requiresLipSync ? 'SI, SOLO LIP-SYNC' : 'NO'));
 console.log('  Audio Veo será descartado; la salida usará solo la narración aprobada.');
 
 const result = await renderSingleShotReal(project, located.scene, located.shot);
@@ -80,7 +85,7 @@ console.log('Velocidad: ' + result.speedFactor.toFixed(3) + 'x');
 console.log('Audio maestro: ' + result.masterAudioAsset);
 console.log('Salida: ' + result.outputAsset);
 console.log('Duración final: ' + result.outputDurationSeconds.toFixed(3) + 's');
-console.log('Fal: NO');
+console.log('Fal: ' + (result.lipSyncRequired ? 'SI — LIP-SYNC' : 'NO'));
 console.log('Veo: NO');
 console.log('OpenAI Images: NO');
 console.log('SINGLE_REAL_RUN=PASS');
@@ -97,8 +102,29 @@ function printPreflight(value: Awaited<ReturnType<typeof buildSingleRealPrefligh
   console.log('Visual 4.1: ' + (value.visualReady ? 'LISTO' : 'PENDIENTE'));
   console.log('Checkpoint vocal 4.1: ' + (value.voiceCheckpointReady ? 'LISTO' : 'PENDIENTE'));
   console.log('Costo voz pendiente: US$' + value.voiceEstimatedUsd.toFixed(4));
-  console.log('Lip-sync: NO');
-  console.log('Fal estimado: US$0.0000');
+  console.log('Lip-sync: ' + (value.requiresLipSync ? 'SI' : 'NO'));
+  console.log('Fal estimado: US
+  console.log('Bloqueos: ' + value.blockers.length);
+  if (value.blockers.length) {
+    for (const blocker of value.blockers) console.log('  - ' + blocker);
+  } else {
+    console.log('  ninguno');
+  }
+  console.log('\nTEXTO');
+  console.log(value.text);
+  console.log('\nCORTAFUEGOS ACTUAL');
+  console.log('  PRODUCTION_MODE=' + safety.mode);
+  console.log('  APIs externas=' + (safety.externalCallsEnabled ? 'HABILITADAS' : 'BLOQUEADAS'));
+  console.log('  gasto pagado=' + (safety.paidGenerationEnabled ? 'HABILITADO' : 'BLOQUEADO'));
+}
+
+function usage() {
+  console.log('Uso:');
+  console.log('  npm run single:pilot -- preview <projectId> <shotId>');
+  console.log('  npm run single:pilot -- run <projectId> <shotId> --confirm-paid SI VOICE');
+  console.log('  Si la toma requiere lip-sync: --confirm-paid SI VOICE FAL');
+}
+ + value.lipSyncEstimatedUsd.toFixed(4));
   console.log('Bloqueos: ' + value.blockers.length);
   if (value.blockers.length) {
     for (const blocker of value.blockers) console.log('  - ' + blocker);
