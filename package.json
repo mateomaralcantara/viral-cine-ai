@@ -36,6 +36,7 @@
     "scene2:t3-duration": "node --import tsx scripts/scene2-t3-duration-fix-v4.ts",
     "scene2:t4-framing": "node --import tsx scripts/scene2-t4-framing-fix-v4.ts",
     "scene2:t5-fix": "node --import tsx scripts/scene2-t5-continuity-fix-v4.ts",
+    "scene2:t5-reference-fix": "node --import tsx scripts/scene2-t5-reference-fix-v4.ts",
     "fal:check": "node --import tsx scripts/fal-storage-check-v4.ts",
     "fal:reconcile-upload403": "node --import tsx scripts/reconcile-fal-upload403-v4.ts",
     "visual:audit": "node --import tsx scripts/visual-audit-v4.ts",
