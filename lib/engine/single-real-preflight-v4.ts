@@ -5,6 +5,7 @@ import { estimateOperationCost, voiceCostUnits } from '@/lib/engine/spend-ledger
 import { hasUsableCredential, isUsableCredentialValue } from '@/lib/engine/production-safety';
 import { inspectSingleVisualSource } from '@/lib/engine/single-visual-source-v4';
 import { singleVoiceCheckpointPath } from '@/lib/engine/single-real-renderer-v4';
+import { requiresLipSyncForSpeaker } from '@/lib/engine/lip-sync-policy-v4';
 
 export type SingleRealPreflight = {
   projectId: string;
@@ -21,6 +22,8 @@ export type SingleRealPreflight = {
   visualReady: boolean;
   voiceCheckpointReady: boolean;
   voiceEstimatedUsd: number;
+  requiresLipSync: boolean;
+  lipSyncEstimatedUsd: number;
   blockers: string[];
 };
 
@@ -68,6 +71,18 @@ export async function buildSingleRealPreflight(
     ? 0
     : estimateOperationCost('voice', voiceCostUnits(text));
 
+  const requiresLipSync = requiresLipSyncForSpeaker(project, speakerId);
+  const lipSyncEstimatedUsd = requiresLipSync
+    ? estimateOperationCost('lip-sync', shot.durationSeconds)
+    : 0;
+
+  if (requiresLipSync && process.env.ENABLE_LIPSYNC === 'false') {
+    blockers.push(speakerLabel + ': ENABLE_LIPSYNC=false.');
+  }
+  if (requiresLipSync && !hasUsableCredential('FAL_KEY')) {
+    blockers.push(speakerLabel + ': falta FAL_KEY para lip-sync.');
+  }
+
   return {
     projectId: project.id,
     title: project.input.title,
@@ -83,6 +98,8 @@ export async function buildSingleRealPreflight(
     visualReady,
     voiceCheckpointReady,
     voiceEstimatedUsd,
+    requiresLipSync,
+    lipSyncEstimatedUsd,
     blockers: [...new Set(blockers)]
   };
 }
