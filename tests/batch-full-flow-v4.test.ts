@@ -4,6 +4,7 @@ import type { FilmProject, FilmShot } from '../lib/domain/schemas';
 import {
   buildBatchQueue,
   canFitBatchBudget,
+  formatBatchMachineSummary,
   isFullFlow42Complete
 } from '../lib/engine/batch-full-flow-v4';
 
@@ -147,4 +148,23 @@ test('batch respeta escena, from-shot y maxShots', () => {
 test('budget cap incluye el siguiente costo antes de autorizarlo', () => {
   assert.equal(canFitBatchBudget(1.2, 0.8, 2), true);
   assert.equal(canFitBatchBudget(1.2, 0.8001, 2), false);
+});
+
+
+test('resumen batch machine-readable usa ASCII estable para PowerShell', () => {
+  const lines = formatBatchMachineSummary({
+    selectedShots: 9,
+    preflightPass: 9,
+    blocked: 0,
+    estimatedUsd: 9.7073
+  });
+
+  assert.deepEqual(lines, [
+    'BATCH_SELECTED_SHOTS=9',
+    'BATCH_PREFLIGHT_PASS=9',
+    'BATCH_BLOCKED=0',
+    'BATCH_ESTIMATED_USD=9.7073'
+  ]);
+
+  assert.equal(lines.every((line) => /^[\x20-\x7E]+$/.test(line)), true);
 });
