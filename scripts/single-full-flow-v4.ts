@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { FilmProject, FilmScene, FilmShot } from '@/lib/domain/schemas';
 import { access, copyFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { loadProjectLocalEnvOverride } from '@/lib/env/local-env';
@@ -249,8 +250,8 @@ console.log('Backup project.json: ' + backupPath);
 console.log('SINGLE_FULL_FLOW_RUN=PASS');
 
 function resolveVoiceReadiness(
-  value: typeof project,
-  shot: typeof located.shot,
+  value: FilmProject,
+  shot: FilmShot,
   checkpointReady: boolean
 ) {
   if (checkpointReady || !shot.spokenText.trim()) {
@@ -294,9 +295,9 @@ function resolveVoiceReadiness(
 }
 
 async function resolveAlignmentAsset(
-  value: typeof project,
+  value: FilmProject,
   sceneOrder: number,
-  shot: typeof located.shot
+  shot: FilmShot
 ) {
   const voiceHash = createHash('sha256')
     .update((shot.speakerId || 'narrator') + '\0' + shot.spokenText.trim())
@@ -314,7 +315,7 @@ async function resolveAlignmentAsset(
     : undefined;
 }
 
-function locateShot(value: typeof project, id: string) {
+function locateShot(value: FilmProject, id: string) {
   for (const scene of value.plan?.scenes || []) {
     const shot = scene.shots.find((item) => item.id === id);
     if (shot) return { scene, shot };
@@ -323,9 +324,9 @@ function locateShot(value: typeof project, id: string) {
 }
 
 function printPreview(value: {
-  project: typeof project;
-  scene: typeof located.scene;
-  shot: typeof located.shot;
+  project: FilmProject;
+  scene: FilmScene;
+  shot: FilmShot;
   visual: Awaited<ReturnType<typeof inspectSingleVisualSource>>;
   voiceCheckpointReady: boolean;
   voiceEstimatedUsd: number;
