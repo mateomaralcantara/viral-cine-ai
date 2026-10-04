@@ -38,6 +38,7 @@ import { mixBackgroundMusic } from '@/lib/media/ffmpeg';
 import { probeMediaDurationSeconds } from '@/lib/media/segmented-ffmpeg';
 import { assertCinematicSceneVideo } from '@/lib/media/probe';
 import { repairPersistentPillarboxInPlace } from '@/lib/media/pillarbox-repair';
+import { requiresLipSyncForSpeaker } from '@/lib/engine/lip-sync-policy-v4';
 
 loadProjectLocalEnvOverride();
 
@@ -63,6 +64,14 @@ const initialVisual = await inspectSingleVisualSource(project, located.scene, lo
 const voiceCheckpointPath = singleVoiceCheckpointPath(project, located.scene, located.shot);
 const voiceCheckpointReady = await fileExists(voiceCheckpointPath);
 const voiceInfo = resolveVoiceReadiness(project, located.shot, voiceCheckpointReady);
+const singleSpeakerId =
+  located.shot.speakerId ||
+  located.shot.dialogueLines[0]?.speakerId ||
+  '';
+const requiresLipSync = requiresLipSyncForSpeaker(project, singleSpeakerId);
+const lipSyncEstimatedUsd = requiresLipSync
+  ? estimateOperationCost('lip-sync', located.shot.durationSeconds)
+  : 0;
 const music = await inspectProjectMusic(project);
 
 const blockers = unique([
@@ -73,6 +82,12 @@ const blockers = unique([
     ? 'Falta GEMINI_API_KEY para Veo.'
     : '',
   ...voiceInfo.blockers,
+  requiresLipSync && process.env.ENABLE_LIPSYNC === 'false'
+    ? 'ENABLE_LIPSYNC=false para una toma con diálogo visible.'
+    : '',
+  requiresLipSync && !hasUsableCredential('FAL_KEY')
+    ? 'Falta FAL_KEY para lip-sync.'
+    : '',
   music.blocker || ''
 ].filter(Boolean));
 
@@ -84,6 +99,7 @@ const totalEstimatedUsd = money(
   initialVisual.estimatedReferenceUsd +
   initialVisual.estimatedVideoUsd +
   voiceEstimatedUsd +
+  lipSyncEstimatedUsd +
   music.estimatedUsd
 );
 
@@ -95,6 +111,8 @@ printPreview({
   voiceCheckpointReady,
   voiceEstimatedUsd,
   voiceProvider: voiceInfo.provider,
+  requiresLipSync,
+  lipSyncEstimatedUsd,
   music,
   blockers,
   totalEstimatedUsd
@@ -184,6 +202,7 @@ const rendered = await renderSingleShotReal(project, located.scene, located.shot
 console.log('Audio maestro: ' + rendered.masterAudioAsset);
 console.log('Render voz+video: ' + rendered.outputAsset);
 console.log('Velocidad voz: ' + rendered.speedFactor.toFixed(3) + 'x');
+console.log('Lip-sync: ' + (rendered.lipSyncRequired ? 'SI' : 'NO'));
 
 console.log('\n[4/5] Preparando música de fondo...');
 const readyMusic = await ensureProjectMusicReal(project);
@@ -239,14 +258,18 @@ located.shot.imageAsset = visual.referenceAsset;
 located.shot.baseVideoAsset = visual.videoAsset;
 located.shot.voiceAsset = rendered.masterAudioAsset;
 located.shot.alignmentAsset = alignmentAsset;
-located.shot.lipSyncAsset = undefined;
+located.shot.lipSyncAsset = rendered.lipSyncRequired ? rendered.outputAsset : undefined;
 located.shot.videoAsset = finalAsset;
 located.shot.pipelineVersion = readyMusic.enabled
   ? '4.2-single-full-flow-music'
   : '4.2-single-full-flow';
-located.shot.lastProvider = readyMusic.enabled
-  ? 'openai-veo-voice-fal-music'
-  : 'openai-veo-voice';
+located.shot.lastProvider = rendered.lipSyncRequired
+  ? (readyMusic.enabled
+      ? 'openai-veo-voice-fal-lipsync-music'
+      : 'openai-veo-voice-fal-lipsync')
+  : (readyMusic.enabled
+      ? 'openai-veo-voice-fal-music'
+      : 'openai-veo-voice');
 located.shot.lastGenerationState = 'succeeded';
 located.shot.lastGenerationAt = now;
 located.shot.status = 'ready';
@@ -361,6 +384,8 @@ function printPreview(value: {
   voiceCheckpointReady: boolean;
   voiceEstimatedUsd: number;
   voiceProvider: string;
+  requiresLipSync: boolean;
+  lipSyncEstimatedUsd: number;
   music: Awaited<ReturnType<typeof inspectProjectMusic>>;
   blockers: string[];
   totalEstimatedUsd: number;
@@ -378,7 +403,112 @@ function printPreview(value: {
   console.log('VOZ');
   console.log('  Provider: ' + value.voiceProvider);
   console.log('  Checkpoint: ' + (value.voiceCheckpointReady ? 'LISTO/REUTILIZABLE' : 'PENDIENTE'));
-  console.log('  Costo pendiente: US$' + value.voiceEstimatedUsd.toFixed(4));
+  console.log('  Costo pendiente: US
+  console.log('  Estado: ' + (
+    !value.music.enabled ? 'DESHABILITADA' :
+    value.music.ready ? 'LISTA/REUTILIZABLE' : 'PENDIENTE'
+  ));
+  console.log('  Duración soundtrack: ' + value.music.durationSeconds + 's');
+  console.log('  Costo pendiente: US$' + value.music.estimatedUsd.toFixed(4));
+  console.log('');
+  console.log('COSTO MAXIMO PENDIENTE ESTIMADO: US$' + value.totalEstimatedUsd.toFixed(4));
+  console.log('Bloqueos: ' + value.blockers.length);
+  if (value.blockers.length) {
+    for (const blocker of value.blockers) console.log('  - ' + blocker);
+  } else {
+    console.log('  ninguno');
+  }
+  console.log('');
+  console.log('TEXTO');
+  console.log(value.shot.spokenText.trim() || '(sin texto hablado)');
+  if (value.music.enabled) {
+    console.log('');
+    console.log('MUSIC-PROMPT');
+    console.log(value.music.prompt);
+  }
+}
+
+async function fileExists(filePath: string) {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function unique(values: string[]) {
+  return [...new Set(values)];
+}
+
+function money(value: number) {
+  return Math.round(value * 10000) / 10000;
+}
+
+function pad(value: number) {
+  return String(value).padStart(2, '0');
+}
+
+function usage() {
+  console.log('Uso:');
+  console.log('  npm run single:full -- preview <projectId> <shotId>');
+  console.log('  npm run single:full -- run <projectId> <shotId> --confirm-paid SI FULL FLOW');
+}
+ + value.voiceEstimatedUsd.toFixed(4));
+  console.log('LIP-SYNC');
+  console.log('  Requerido: ' + (value.requiresLipSync ? 'SI' : 'NO'));
+  console.log('  Costo pendiente: US
+  console.log('  Estado: ' + (
+    !value.music.enabled ? 'DESHABILITADA' :
+    value.music.ready ? 'LISTA/REUTILIZABLE' : 'PENDIENTE'
+  ));
+  console.log('  Duración soundtrack: ' + value.music.durationSeconds + 's');
+  console.log('  Costo pendiente: US$' + value.music.estimatedUsd.toFixed(4));
+  console.log('');
+  console.log('COSTO MAXIMO PENDIENTE ESTIMADO: US$' + value.totalEstimatedUsd.toFixed(4));
+  console.log('Bloqueos: ' + value.blockers.length);
+  if (value.blockers.length) {
+    for (const blocker of value.blockers) console.log('  - ' + blocker);
+  } else {
+    console.log('  ninguno');
+  }
+  console.log('');
+  console.log('TEXTO');
+  console.log(value.shot.spokenText.trim() || '(sin texto hablado)');
+  if (value.music.enabled) {
+    console.log('');
+    console.log('MUSIC-PROMPT');
+    console.log(value.music.prompt);
+  }
+}
+
+async function fileExists(filePath: string) {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function unique(values: string[]) {
+  return [...new Set(values)];
+}
+
+function money(value: number) {
+  return Math.round(value * 10000) / 10000;
+}
+
+function pad(value: number) {
+  return String(value).padStart(2, '0');
+}
+
+function usage() {
+  console.log('Uso:');
+  console.log('  npm run single:full -- preview <projectId> <shotId>');
+  console.log('  npm run single:full -- run <projectId> <shotId> --confirm-paid SI FULL FLOW');
+}
+ + value.lipSyncEstimatedUsd.toFixed(4));
   console.log('MUSICA');
   console.log('  Estado: ' + (
     !value.music.enabled ? 'DESHABILITADA' :
