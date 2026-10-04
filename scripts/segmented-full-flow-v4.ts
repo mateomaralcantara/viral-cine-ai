@@ -216,7 +216,7 @@ if (readyMusic.enabled) {
   const musicOffset = musicDuration > 0 ? timelineOffset % musicDuration : 0;
   const musicOutput = path.join(
     path.dirname(rendered.outputPath),
-    'recomposed-with-music-' + readyMusic.fingerprint + '.mp4'
+    'recomposed-with-music-v2-' + readyMusic.fingerprint + '.mp4'
   );
 
   if (!(await fileExists(musicOutput))) {
