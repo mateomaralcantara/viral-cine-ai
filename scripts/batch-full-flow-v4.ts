@@ -360,8 +360,23 @@ console.log('==================================================');
 console.log('Completadas en este lote: ' + completed);
 console.log('Saltadas por ya estar listas: ' + skipped);
 console.log('RETRY_PENDING: ' + failedShots.length);
-console.log('Estimado conservador autorizado/usado: US
+console.log('Estimado conservador autorizado/usado: US$' + reservedUsd.toFixed(4));
+console.log('Tomas 4.2 pendientes del proyecto: ' + remaining);
+console.log('Journal: ' + journalPath);
 
+if (failedShots.length) {
+  console.log('\nTOMAS RETRY_PENDING');
+  for (const failure of failedShots) {
+    console.log(
+      '  E' + failure.sceneOrder + '/T' + failure.shotOrder +
+      ' | ' + failure.state + ' | ' + failure.reason
+    );
+  }
+  console.log('BATCH_FULL_RUN=PARTIAL');
+  process.exitCode = 2;
+} else {
+  console.log('BATCH_FULL_RUN=PASS');
+}
 function parseOptions(tokens: string[]) {
   let maxUsd: number | undefined;
   let maxShots: number | undefined;
