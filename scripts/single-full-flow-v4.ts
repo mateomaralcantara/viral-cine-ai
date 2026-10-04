@@ -233,7 +233,7 @@ console.log('Render voz+video: ' + rendered.outputAsset);
 console.log('Velocidad voz: ' + rendered.speedFactor.toFixed(3) + 'x');
 if (rendered.durationAdjusted) {
   console.log(
-    'Duración autoajustada: ' +
+    'Duración autoajustada compatible con schema: ' +
     rendered.scheduledDurationSeconds.toFixed(3) + 's -> ' +
     rendered.outputDurationSeconds.toFixed(3) + 's'
   );
@@ -242,6 +242,9 @@ if (rendered.durationAdjusted) {
     located.shot.dialogueLines[0].startSeconds = 0;
     located.shot.dialogueLines[0].endSeconds = rendered.outputDurationSeconds;
   }
+}
+if (rendered.rescueSpeedUsed) {
+  console.log('Rescate de narración off-camera: SI — límite duro 1.25x');
 }
 console.log('Lip-sync: ' + (rendered.lipSyncRequired ? 'SI' : 'NO'));
 
@@ -263,7 +266,7 @@ if (readyMusic.enabled) {
     'final-with-music-v2-' + readyMusic.fingerprint + '.mp4'
   );
 
-  if (!(await fileExists(musicOutput))) {
+  if (!(await mediaDurationMatches(musicOutput, rendered.outputDurationSeconds))) {
     await mixBackgroundMusic(finalPath, readyMusic.path, musicOutput, musicOffset);
   }
 
@@ -475,6 +478,16 @@ function printPreview(value: {
     console.log('');
     console.log('MUSIC-PROMPT');
     console.log(value.music.prompt);
+  }
+}
+
+async function mediaDurationMatches(filePath: string, expectedSeconds: number) {
+  if (!(await fileExists(filePath))) return false;
+  try {
+    const duration = await probeMediaDurationSeconds(filePath);
+    return Math.abs(duration - expectedSeconds) <= 0.12;
+  } catch {
+    return false;
   }
 }
 
