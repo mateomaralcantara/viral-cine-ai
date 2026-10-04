@@ -30,6 +30,7 @@
     "segments:promote": "node --import tsx scripts/promote-segmented-pilot-v4.ts",
     "single:pilot": "node --import tsx scripts/single-real-pilot-v4.ts",
     "single:promote": "node --import tsx scripts/promote-single-pilot-v4.ts",
+    "single:rerender-cached": "node --import tsx scripts/single-rerender-cached-v4.ts",
     "scene2:continuity": "node --import tsx scripts/scene2-continuity-v4.ts",
     "scene2:narration": "node --import tsx scripts/scene2-narration-continuity-v4.ts",
     "scene2:t3-fix": "node --import tsx scripts/scene2-t3-continuity-fix-v4.ts",
