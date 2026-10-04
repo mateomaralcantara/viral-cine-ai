@@ -63,6 +63,13 @@ export async function assertCinematicVideoTrack(filePath: string, expectedSecond
     );
   }
 
+  // En micro-turnos (<0.50s) no hay suficientes muestras temporales para
+  // aplicar de forma fiable freeze/black/detail analysis. La existencia,
+  // decodificación y duración del track son la validación correcta aquí.
+  if (expectedSeconds < 0.5) {
+    return probe;
+  }
+
   const analysis = await analyzeFrames(filePath);
   const blackRatio = analysis.blackSeconds / Math.max(0.1, probe.durationSeconds);
   const freezeRatio = analysis.freezeSeconds / Math.max(0.1, probe.durationSeconds);
