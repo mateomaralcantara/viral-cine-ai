@@ -80,8 +80,8 @@ test('single visual acepta una idea visual explícita como beat dominante', () =
 
 test('single visual video bloquea luminarias modernas y deriva de identidad', () => {
   const shot: any = {
-    id: 'shot-5b',
-    order: 5,
+    id: 'shot-6b',
+    order: 6,
     durationSeconds: 7,
     visualPrompt:
       'Calle de Jerusalén del siglo I. ' +
