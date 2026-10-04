@@ -3,6 +3,7 @@ import path from 'node:path';
 import type { FilmProject, FilmScene, FilmShot } from '@/lib/domain/schemas';
 import { assetAbsolutePath, assetRelativePath, projectAssetDir } from '@/lib/storage/project-store';
 import { buildSegmentedVisualPlan, type SegmentedVisualTurnPlan } from '@/lib/engine/segmented-visual-plan-v4';
+import { buildSingleVeoFallbackPrompt } from '@/lib/engine/single-visual-plan-v4';
 import { appendSpend, assertSpendRetrySafe, estimateOperationCost } from '@/lib/engine/spend-ledger';
 import { assertPaidGenerationAllowed, hasUsableCredential, safeErrorMessage } from '@/lib/engine/production-safety';
 import { generateImageWithReferences } from '@/lib/providers/openai-media';
@@ -201,54 +202,85 @@ export async function generateSegmentedTurnVideosReal(
     await mkdir(path.dirname(status.videoPath), { recursive: true });
     const idempotencyKey = 'visual-turn-video:' + shot.id + ':' + turn.index + ':v3';
     const estimatedUsd = estimateOperationCost('video', turn.providerDurationSeconds);
-    await assertSpendRetrySafe(project.id, idempotencyKey, 'video visual por turno ' + turn.index);
-    await appendSpend(project.id, {
-      operation: 'video',
-      provider: 'Veo',
-      model: process.env.GEMINI_VIDEO_MODEL,
-      state: 'submitted',
-      estimatedUsd,
-      sceneId: scene.id,
-      shotId: shot.id,
-      idempotencyKey
-    });
+    const attempts = [
+      { label: 'primary', prompt: turn.videoPrompt },
+      { label: 'safe-fallback', prompt: buildSingleVeoFallbackPrompt() }
+    ];
 
-    try {
-      await generateVeoVideo(
-        status.referencePath,
-        turn.videoPrompt,
-        project.input,
-        status.videoPath,
-        turn.slotDurationSeconds
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt < attempts.length; attempt += 1) {
+      const current = attempts[attempt];
+
+      await assertSpendRetrySafe(
+        project.id,
+        idempotencyKey,
+        'video visual por turno ' + turn.index + ' (' + current.label + ')'
       );
-      await assertCinematicVideoTrack(status.videoPath, turn.slotDurationSeconds);
+
       await appendSpend(project.id, {
         operation: 'video',
         provider: 'Veo',
         model: process.env.GEMINI_VIDEO_MODEL,
-        state: 'succeeded',
+        state: 'submitted',
         estimatedUsd,
         sceneId: scene.id,
         shotId: shot.id,
-        idempotencyKey,
-        outputAsset: status.videoAsset
+        idempotencyKey
       });
-    } catch (error) {
-      const noCharge = isVeoNoChargeFailure(error);
-      await appendSpend(project.id, {
-        operation: 'video',
-        provider: 'Veo',
-        model: process.env.GEMINI_VIDEO_MODEL,
-        state: noCharge ? 'failed-no-charge' : 'failed-unknown',
-        estimatedUsd,
-        actualUsd: noCharge ? 0 : undefined,
-        sceneId: scene.id,
-        shotId: shot.id,
-        idempotencyKey,
-        error: safeErrorMessage(error)
-      });
-      throw error;
+
+      try {
+        await generateVeoVideo(
+          status.referencePath,
+          current.prompt,
+          project.input,
+          status.videoPath,
+          turn.slotDurationSeconds
+        );
+        await assertCinematicVideoTrack(status.videoPath, turn.slotDurationSeconds);
+        await appendSpend(project.id, {
+          operation: 'video',
+          provider: 'Veo',
+          model: process.env.GEMINI_VIDEO_MODEL,
+          state: 'succeeded',
+          estimatedUsd,
+          sceneId: scene.id,
+          shotId: shot.id,
+          idempotencyKey,
+          outputAsset: status.videoAsset
+        });
+        lastError = undefined;
+        break;
+      } catch (error) {
+        lastError = error;
+        const noCharge = isVeoNoChargeFailure(error);
+        await appendSpend(project.id, {
+          operation: 'video',
+          provider: 'Veo',
+          model: process.env.GEMINI_VIDEO_MODEL,
+          state: noCharge ? 'failed-no-charge' : 'failed-unknown',
+          estimatedUsd,
+          actualUsd: noCharge ? 0 : undefined,
+          sceneId: scene.id,
+          shotId: shot.id,
+          idempotencyKey,
+          error:
+            '[' + current.label + '] ' +
+            safeErrorMessage(error)
+        });
+
+        if (!noCharge || attempt === attempts.length - 1) {
+          throw error;
+        }
+
+        console.warn(
+          'Veo no devolvió video y reportó no-charge; reintentando el turno ' +
+          turn.index + ' una vez con motion prompt seguro.'
+        );
+      }
     }
+
+    if (lastError) throw lastError;
   }
 
   return inspectSegmentedTurnVisualSources(project, scene, shot);
