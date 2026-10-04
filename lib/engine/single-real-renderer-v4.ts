@@ -3,7 +3,8 @@ import { access, mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { FilmProject, FilmScene, FilmShot } from '@/lib/domain/schemas';
 import { assetRelativePath, projectAssetDir } from '@/lib/storage/project-store';
-import { prepareAudioFirstVoice } from '@/lib/engine/audio-first';
+import { prepareAudioFirstVoice, applyAudioFirstLipSync } from '@/lib/engine/audio-first';
+import { requiresLipSyncForSpeaker } from '@/lib/engine/lip-sync-policy-v4';
 import { inspectSingleVisualSource } from '@/lib/engine/single-visual-source-v4';
 import {
   extractVideoOnlySegment,
@@ -28,6 +29,7 @@ export type SingleRealRenderResult = {
   masterAudioAsset: string;
   outputAsset: string;
   outputDurationSeconds: number;
+  lipSyncRequired: boolean;
 };
 
 export async function renderSingleShotReal(
@@ -125,10 +127,31 @@ export async function renderSingleShotReal(
     );
   }
 
+  const lipSyncRequired = requiresLipSyncForSpeaker(
+    project,
+    voiceShot.speakerId || voiceShot.dialogueLines[0]?.speakerId
+  );
+  const lipSyncPath = path.join(videoDir, 'lip-sync.mp4');
+  let videoForMux = videoOnlyPath;
+
+  if (lipSyncRequired) {
+    if (!(await fileExists(lipSyncPath))) {
+      await applyAudioFirstLipSync(
+        project,
+        scene,
+        voiceShot,
+        videoOnlyPath,
+        masterAudioPath,
+        lipSyncPath
+      );
+    }
+    videoForMux = lipSyncPath;
+  }
+
   const outputPath = path.join(videoDir, 'final-real.mp4');
   if (!(await fileExists(outputPath))) {
     await muxSegmentAudio(
-      videoOnlyPath,
+      videoForMux,
       masterAudioPath,
       shot.durationSeconds,
       outputPath,
@@ -167,7 +190,8 @@ export async function renderSingleShotReal(
     speedFactor,
     masterAudioAsset: assetRelativePath(project.id, masterAudioPath),
     outputAsset: assetRelativePath(project.id, outputPath),
-    outputDurationSeconds
+    outputDurationSeconds,
+    lipSyncRequired
   };
 }
 
