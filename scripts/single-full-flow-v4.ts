@@ -231,6 +231,18 @@ const rendered = await renderSingleShotReal(project, located.scene, located.shot
 console.log('Audio maestro: ' + rendered.masterAudioAsset);
 console.log('Render voz+video: ' + rendered.outputAsset);
 console.log('Velocidad voz: ' + rendered.speedFactor.toFixed(3) + 'x');
+if (rendered.durationAdjusted) {
+  console.log(
+    'Duración autoajustada: ' +
+    rendered.scheduledDurationSeconds.toFixed(3) + 's -> ' +
+    rendered.outputDurationSeconds.toFixed(3) + 's'
+  );
+  located.shot.durationSeconds = rendered.outputDurationSeconds;
+  if (located.shot.dialogueLines.length === 1) {
+    located.shot.dialogueLines[0].startSeconds = 0;
+    located.shot.dialogueLines[0].endSeconds = rendered.outputDurationSeconds;
+  }
+}
 console.log('Lip-sync: ' + (rendered.lipSyncRequired ? 'SI' : 'NO'));
 
 console.log('\n[4/5] Preparando música de fondo...');
@@ -255,7 +267,7 @@ if (readyMusic.enabled) {
     await mixBackgroundMusic(finalPath, readyMusic.path, musicOutput, musicOffset);
   }
 
-  await assertCinematicSceneVideo(musicOutput, located.shot.durationSeconds, {
+  await assertCinematicSceneVideo(musicOutput, rendered.outputDurationSeconds, {
     requireMotion: true,
     requireAudibleAudio: true
   });
@@ -308,6 +320,11 @@ project.productionLog.push(
   now +
   ' E' + located.scene.order + '/T' + located.shot.order +
   ' completada por Full Flow 4.2. Video=' + finalAsset +
+  (rendered.durationAdjusted
+    ? ' | duración autoajustada=' +
+      rendered.scheduledDurationSeconds.toFixed(3) + 's->' +
+      rendered.outputDurationSeconds.toFixed(3) + 's'
+    : '') +
   (readyMusic.enabled ? ' | música=' + readyMusic.asset : '')
 );
 project = await saveProject(project);
