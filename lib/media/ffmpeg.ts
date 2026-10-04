@@ -111,7 +111,8 @@ export async function mixBackgroundMusic(
     '[0:a]volume=1.0[voice];' +
     '[1:a]volume=0.12[music];' +
     '[music][voice]sidechaincompress=threshold=0.025:ratio=8:attack=20:release=350[ducked];' +
-    '[voice][ducked]amix=inputs=2:duration=first:dropout_transition=2[a]',
+    '[voice][ducked]amix=inputs=2:duration=first:dropout_transition=2[mix];' +
+    '[mix]loudnorm=I=-16:TP=-1.5:LRA=11[a]',
     '-map', '0:v:0',
     '-map', '[a]',
     '-c:v', 'copy',
