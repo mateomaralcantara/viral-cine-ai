@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildSingleVisualPlan } from '../lib/engine/single-visual-plan-v4';
+import { buildSingleVisualPlan, buildSingleVeoFallbackPrompt } from '../lib/engine/single-visual-plan-v4';
 
 const project: any = {
   id: 'project-1',
@@ -121,4 +121,15 @@ test('E2 T5 usa provider-safe motion prompt para evitar bloqueos Veo', () => {
   assert.match(plan.videoPrompt, /central background traveler/i);
   assert.match(plan.videoPrompt, /same single long wooden beam/i);
   assert.doesNotMatch(plan.videoPrompt, /Jesús|María|Juan|soldados|corona de espinas/i);
+});
+
+
+test('fallback Veo evita contenido narrativo sensible y solo anima el frame aprobado', () => {
+  const prompt = buildSingleVeoFallbackPrompt();
+
+  assert.match(prompt, /Animate the approved reference image faithfully/i);
+  assert.match(prompt, /subtle natural motion/i);
+  assert.match(prompt, /Camera nearly locked/i);
+  assert.match(prompt, /No speaking/i);
+  assert.doesNotMatch(prompt, /Jesús|golpeado|sangre|soldado|condenar|crucif/i);
 });
