@@ -31,6 +31,7 @@ export type SingleRealRenderResult = {
   outputDurationSeconds: number;
   scheduledDurationSeconds: number;
   durationAdjusted: boolean;
+  rescueSpeedUsed: boolean;
   lipSyncRequired: boolean;
 };
 
@@ -84,9 +85,14 @@ export async function renderSingleShotReal(
 
   const prepared = await prepareAudioFirstVoice(project, scene, voiceShot, voiceKey);
   const rawAudioDurationSeconds = await probeMediaDurationSeconds(prepared.voicePath);
+  const lipSyncRequired = requiresLipSyncForSpeaker(
+    project,
+    voiceShot.speakerId || voiceShot.dialogueLines[0]?.speakerId
+  );
   const timing = planSingleRenderTiming(
     rawAudioDurationSeconds,
-    shot.durationSeconds
+    shot.durationSeconds,
+    { allowNarrationRescue: !lipSyncRequired }
   );
   const renderDurationSeconds = timing.outputDurationSeconds;
   const speedFactor = timing.speedFactor;
@@ -131,15 +137,11 @@ export async function renderSingleShotReal(
     );
   }
 
-  const lipSyncRequired = requiresLipSyncForSpeaker(
-    project,
-    voiceShot.speakerId || voiceShot.dialogueLines[0]?.speakerId
-  );
   const lipSyncPath = path.join(videoDir, 'lip-sync.mp4');
   let videoForMux = videoOnlyPath;
 
   if (lipSyncRequired) {
-    if (!(await fileExists(lipSyncPath))) {
+    if (!(await mediaDurationMatches(lipSyncPath, renderDurationSeconds))) {
       await applyAudioFirstLipSync(
         project,
         scene,
@@ -200,6 +202,7 @@ export async function renderSingleShotReal(
     outputDurationSeconds,
     scheduledDurationSeconds: shot.durationSeconds,
     durationAdjusted: timing.durationAdjusted,
+    rescueSpeedUsed: timing.rescueSpeedUsed,
     lipSyncRequired
   };
 }
@@ -209,11 +212,17 @@ export type SingleRenderTimingPlan = {
   outputDurationSeconds: number;
   speedFactor: number;
   durationAdjusted: boolean;
+  rescueSpeedUsed: boolean;
 };
+
+const NORMAL_SINGLE_SPEED_LIMIT = 1.2;
+const NARRATION_RESCUE_SPEED_LIMIT = 1.25;
+const MAX_SINGLE_SHOT_SECONDS = 8;
 
 export function planSingleRenderTiming(
   rawAudioDurationSeconds: number,
-  scheduledDurationSeconds: number
+  scheduledDurationSeconds: number,
+  options: { allowNarrationRescue?: boolean } = {}
 ): SingleRenderTimingPlan {
   if (!Number.isFinite(rawAudioDurationSeconds) || rawAudioDurationSeconds <= 0) {
     throw new Error('Duración de audio inválida para planificar el render single.');
@@ -221,51 +230,75 @@ export function planSingleRenderTiming(
   if (!Number.isFinite(scheduledDurationSeconds) || scheduledDurationSeconds <= 0) {
     throw new Error('Duración programada inválida para planificar el render single.');
   }
+  if (!Number.isInteger(scheduledDurationSeconds) || scheduledDurationSeconds > MAX_SINGLE_SHOT_SECONDS) {
+    throw new Error(
+      'La duración programada single debe ser un entero de hasta ' +
+      MAX_SINGLE_SHOT_SECONDS + 's.'
+    );
+  }
 
   const directSpeed = rawAudioDurationSeconds <= scheduledDurationSeconds
     ? 1
     : rawAudioDurationSeconds / scheduledDurationSeconds;
 
-  if (directSpeed <= 1.2) {
+  if (directSpeed <= NORMAL_SINGLE_SPEED_LIMIT) {
     return {
       scheduledDurationSeconds,
       outputDurationSeconds: scheduledDurationSeconds,
       speedFactor: Math.max(1, directSpeed),
-      durationAdjusted: false
+      durationAdjusted: false,
+      rescueSpeedUsed: false
     };
   }
 
-  // Alinear a frames de 25 fps evita duraciones fraccionarias inestables.
-  const minimumSafeDuration = rawAudioDurationSeconds / 1.2;
-  const outputDurationSeconds = Math.ceil(minimumSafeDuration * 25) / 25;
-  const maxAllowedDuration = Math.min(
-    scheduledDurationSeconds + 2.5,
-    scheduledDurationSeconds * 1.35
+  // FilmShotSchema exige segundos enteros y un máximo de 8s.
+  // Primero intentamos ampliar a otro entero válido sin superar 1.2x.
+  const durationNeededAtNormalSpeed = Math.ceil(
+    rawAudioDurationSeconds / NORMAL_SINGLE_SPEED_LIMIT
   );
+  const outputDurationSeconds = Math.min(
+    MAX_SINGLE_SHOT_SECONDS,
+    Math.max(scheduledDurationSeconds, durationNeededAtNormalSpeed)
+  );
+  const speedFactor = rawAudioDurationSeconds <= outputDurationSeconds
+    ? 1
+    : rawAudioDurationSeconds / outputDurationSeconds;
 
-  if (outputDurationSeconds > maxAllowedDuration + 0.0001) {
-    throw new Error(
-      'La narración dura ' + rawAudioDurationSeconds.toFixed(3) +
-      's. Incluso con ajuste automático necesitaría una toma de ' +
-      outputDurationSeconds.toFixed(3) + 's, por encima del máximo automático seguro de ' +
-      maxAllowedDuration.toFixed(3) + 's.'
-    );
+  if (speedFactor <= NORMAL_SINGLE_SPEED_LIMIT) {
+    return {
+      scheduledDurationSeconds,
+      outputDurationSeconds,
+      speedFactor: Math.max(1, speedFactor),
+      durationAdjusted: outputDurationSeconds !== scheduledDurationSeconds,
+      rescueSpeedUsed: false
+    };
   }
 
-  const speedFactor = rawAudioDurationSeconds / outputDurationSeconds;
-  if (speedFactor > 1.2005) {
-    throw new Error(
-      'Plan de duración inválido: velocidad ' + speedFactor.toFixed(3) +
-      'x supera el límite seguro de 1.2x.'
-    );
+  // Rescate exclusivo para narración/off-camera: una aceleración mínima
+  // adicional evita cortar texto o violar el schema 4-8s. Nunca se usa
+  // en diálogo visible/lip-sync.
+  if (
+    options.allowNarrationRescue &&
+    speedFactor <= NARRATION_RESCUE_SPEED_LIMIT
+  ) {
+    return {
+      scheduledDurationSeconds,
+      outputDurationSeconds,
+      speedFactor,
+      durationAdjusted: outputDurationSeconds !== scheduledDurationSeconds,
+      rescueSpeedUsed: true
+    };
   }
 
-  return {
-    scheduledDurationSeconds,
-    outputDurationSeconds,
-    speedFactor: Math.max(1, speedFactor),
-    durationAdjusted: true
-  };
+  throw new Error(
+    'La narración dura ' + rawAudioDurationSeconds.toFixed(3) +
+    's. Con el máximo permitido de ' + outputDurationSeconds.toFixed(3) +
+    's necesitaría ' + speedFactor.toFixed(3) +
+    'x. El límite normal es 1.2x' +
+    (options.allowNarrationRescue
+      ? ' y el rescate seguro de narración llega a 1.25x.'
+      : '; el diálogo visible no permite rescate por encima de 1.2x.')
+  );
 }
 
 export function singleVoiceCheckpointPath(
