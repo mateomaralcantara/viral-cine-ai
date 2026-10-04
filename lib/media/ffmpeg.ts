@@ -94,11 +94,33 @@ export async function concatenate(clips: string[], outputPath: string) {
   return outputPath;
 }
 
-export async function mixBackgroundMusic(videoPath: string, musicPath: string, outputPath: string) {
+export async function mixBackgroundMusic(
+  videoPath: string,
+  musicPath: string,
+  outputPath: string,
+  offsetSeconds = 0
+) {
+  const safeOffset = Math.max(0, Number.isFinite(offsetSeconds) ? offsetSeconds : 0);
   await run([
-    '-y', '-i', videoPath, '-stream_loop', '-1', '-i', musicPath,
-    '-filter_complex', '[0:a]volume=1.0[voice];[1:a]volume=0.11[music];[voice][music]amix=inputs=2:duration=first:dropout_transition=2[a]',
-    '-map', '0:v:0', '-map', '[a]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-shortest', outputPath
+    '-y',
+    '-i', videoPath,
+    '-stream_loop', '-1',
+    '-ss', safeOffset.toFixed(3),
+    '-i', musicPath,
+    '-filter_complex',
+    '[0:a]volume=1.0[voice];' +
+    '[1:a]volume=0.12[music];' +
+    '[music][voice]sidechaincompress=threshold=0.025:ratio=8:attack=20:release=350[ducked];' +
+    '[voice][ducked]amix=inputs=2:duration=first:dropout_transition=2[a]',
+    '-map', '0:v:0',
+    '-map', '[a]',
+    '-c:v', 'copy',
+    '-c:a', 'aac',
+    '-b:a', '192k',
+    '-ar', '48000',
+    '-ac', '2',
+    '-shortest',
+    outputPath
   ]);
   return outputPath;
 }
