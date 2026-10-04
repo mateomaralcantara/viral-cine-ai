@@ -7,7 +7,7 @@ import { prepareAudioFirstVoice, applyAudioFirstLipSync } from '@/lib/engine/aud
 import { requiresLipSyncForSpeaker } from '@/lib/engine/lip-sync-policy-v4';
 import { inspectSingleVisualSource } from '@/lib/engine/single-visual-source-v4';
 import {
-  extractVideoOnlySegment,
+  extractVideoOnlySegmentWithTailHold,
   fitAudioToSlot,
   muxSegmentAudio,
   probeMediaDurationSeconds
@@ -29,6 +29,8 @@ export type SingleRealRenderResult = {
   masterAudioAsset: string;
   outputAsset: string;
   outputDurationSeconds: number;
+  scheduledDurationSeconds: number;
+  durationAdjusted: boolean;
   lipSyncRequired: boolean;
 };
 
@@ -82,17 +84,19 @@ export async function renderSingleShotReal(
 
   const prepared = await prepareAudioFirstVoice(project, scene, voiceShot, voiceKey);
   const rawAudioDurationSeconds = await probeMediaDurationSeconds(prepared.voicePath);
-  const speedFactor = rawAudioDurationSeconds <= shot.durationSeconds
-    ? 1
-    : rawAudioDurationSeconds / shot.durationSeconds;
+  const timing = planSingleRenderTiming(
+    rawAudioDurationSeconds,
+    shot.durationSeconds
+  );
+  const renderDurationSeconds = timing.outputDurationSeconds;
+  const speedFactor = timing.speedFactor;
 
-  if (speedFactor > 1.2) {
-    throw new Error(
-      'La narración dura ' + rawAudioDurationSeconds.toFixed(3) +
-      's y necesitaría ' + speedFactor.toFixed(3) +
-      'x para caber en ' + shot.durationSeconds.toFixed(3) +
-      's; supera el límite seguro de 1.2x.'
-    );
+  // El voiceShot es efímero: ajustar aquí permite que lip-sync, si aplica,
+  // use la misma duración final sin alterar todavía project.json.
+  voiceShot.durationSeconds = renderDurationSeconds;
+  if (voiceShot.dialogueLines.length === 1) {
+    voiceShot.dialogueLines[0].startSeconds = 0;
+    voiceShot.dialogueLines[0].endSeconds = renderDurationSeconds;
   }
 
   const folder =
@@ -111,17 +115,17 @@ export async function renderSingleShotReal(
     await fitAudioToSlot(
       prepared.voicePath,
       speedFactor,
-      shot.durationSeconds,
+      renderDurationSeconds,
       masterAudioPath
     );
   }
 
   const videoOnlyPath = path.join(videoDir, 'video-only.mp4');
   if (!(await fileExists(videoOnlyPath))) {
-    await extractVideoOnlySegment(
+    await extractVideoOnlySegmentWithTailHold(
       visual.videoPath,
       0,
-      shot.durationSeconds,
+      renderDurationSeconds,
       videoOnlyPath,
       project.input.aspectRatio
     );
@@ -156,22 +160,22 @@ export async function renderSingleShotReal(
     await muxSegmentAudio(
       videoForMux,
       masterAudioPath,
-      shot.durationSeconds,
+      renderDurationSeconds,
       outputPath,
       project.input.aspectRatio
     );
   }
 
-  await assertCinematicSceneVideo(outputPath, shot.durationSeconds, {
+  await assertCinematicSceneVideo(outputPath, renderDurationSeconds, {
     requireMotion: true,
     requireAudibleAudio: true
   });
 
   const outputDurationSeconds = await probeMediaDurationSeconds(outputPath);
-  if (Math.abs(outputDurationSeconds - shot.durationSeconds) > OUTPUT_TOLERANCE_SECONDS) {
+  if (Math.abs(outputDurationSeconds - renderDurationSeconds) > OUTPUT_TOLERANCE_SECONDS) {
     throw new Error(
       'La salida single real dura ' + outputDurationSeconds.toFixed(3) +
-      's; debía durar ' + shot.durationSeconds.toFixed(3) + 's.'
+      's; debía durar ' + renderDurationSeconds.toFixed(3) + 's.'
     );
   }
 
@@ -194,7 +198,73 @@ export async function renderSingleShotReal(
     masterAudioAsset: assetRelativePath(project.id, masterAudioPath),
     outputAsset: assetRelativePath(project.id, outputPath),
     outputDurationSeconds,
+    scheduledDurationSeconds: shot.durationSeconds,
+    durationAdjusted: timing.durationAdjusted,
     lipSyncRequired
+  };
+}
+
+export type SingleRenderTimingPlan = {
+  scheduledDurationSeconds: number;
+  outputDurationSeconds: number;
+  speedFactor: number;
+  durationAdjusted: boolean;
+};
+
+export function planSingleRenderTiming(
+  rawAudioDurationSeconds: number,
+  scheduledDurationSeconds: number
+): SingleRenderTimingPlan {
+  if (!Number.isFinite(rawAudioDurationSeconds) || rawAudioDurationSeconds <= 0) {
+    throw new Error('Duración de audio inválida para planificar el render single.');
+  }
+  if (!Number.isFinite(scheduledDurationSeconds) || scheduledDurationSeconds <= 0) {
+    throw new Error('Duración programada inválida para planificar el render single.');
+  }
+
+  const directSpeed = rawAudioDurationSeconds <= scheduledDurationSeconds
+    ? 1
+    : rawAudioDurationSeconds / scheduledDurationSeconds;
+
+  if (directSpeed <= 1.2) {
+    return {
+      scheduledDurationSeconds,
+      outputDurationSeconds: scheduledDurationSeconds,
+      speedFactor: Math.max(1, directSpeed),
+      durationAdjusted: false
+    };
+  }
+
+  // Alinear a frames de 25 fps evita duraciones fraccionarias inestables.
+  const minimumSafeDuration = rawAudioDurationSeconds / 1.2;
+  const outputDurationSeconds = Math.ceil(minimumSafeDuration * 25) / 25;
+  const maxAllowedDuration = Math.min(
+    scheduledDurationSeconds + 2.5,
+    scheduledDurationSeconds * 1.35
+  );
+
+  if (outputDurationSeconds > maxAllowedDuration + 0.0001) {
+    throw new Error(
+      'La narración dura ' + rawAudioDurationSeconds.toFixed(3) +
+      's. Incluso con ajuste automático necesitaría una toma de ' +
+      outputDurationSeconds.toFixed(3) + 's, por encima del máximo automático seguro de ' +
+      maxAllowedDuration.toFixed(3) + 's.'
+    );
+  }
+
+  const speedFactor = rawAudioDurationSeconds / outputDurationSeconds;
+  if (speedFactor > 1.2005) {
+    throw new Error(
+      'Plan de duración inválido: velocidad ' + speedFactor.toFixed(3) +
+      'x supera el límite seguro de 1.2x.'
+    );
+  }
+
+  return {
+    scheduledDurationSeconds,
+    outputDurationSeconds,
+    speedFactor: Math.max(1, speedFactor),
+    durationAdjusted: true
   };
 }
 
