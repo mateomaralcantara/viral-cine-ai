@@ -7,7 +7,7 @@ import { buildSingleVeoFallbackPrompt } from '@/lib/engine/single-visual-plan-v4
 import { appendSpend, assertSpendRetrySafe, estimateOperationCost } from '@/lib/engine/spend-ledger';
 import { assertPaidGenerationAllowed, hasUsableCredential, safeErrorMessage } from '@/lib/engine/production-safety';
 import { generateImageWithReferences } from '@/lib/providers/openai-media';
-import { generateVeoVideo, isVeoNoChargeFailure } from '@/lib/providers/veo';
+import { generateVeoVideo, isVeoNoChargeFailure, isVeoQuotaFailure } from '@/lib/providers/veo';
 import { assertCinematicVideoTrack } from '@/lib/media/probe';
 import { renderCinematicStillVideo } from '@/lib/media/ffmpeg';
 
@@ -254,7 +254,8 @@ export async function generateSegmentedTurnVideosReal(
         break;
       } catch (error) {
         lastError = error;
-        const noCharge = isVeoNoChargeFailure(error);
+        const quotaFailure = isVeoQuotaFailure(error);
+        const noCharge = isVeoNoChargeFailure(error) || quotaFailure;
         await appendSpend(project.id, {
           operation: 'video',
           provider: 'Veo',
@@ -272,6 +273,35 @@ export async function generateSegmentedTurnVideosReal(
 
         if (!noCharge) {
           throw error;
+        }
+
+        if (quotaFailure) {
+          console.warn(
+            'Veo respondió RESOURCE_EXHAUSTED/429 en el turno ' +
+            turn.index +
+            ' antes de generar video; usando fallback cinematográfico local de costo US$0.'
+          );
+          await renderCinematicStillVideo(
+            status.referencePath,
+            turn.slotDurationSeconds,
+            status.videoPath,
+            project.input.aspectRatio
+          );
+          await assertCinematicVideoTrack(status.videoPath, turn.slotDurationSeconds);
+          await appendSpend(project.id, {
+            operation: 'video',
+            provider: 'local-ffmpeg',
+            model: 'cinematic-still-motion-v1-quota-fallback',
+            state: 'reconciled',
+            estimatedUsd: 0,
+            actualUsd: 0,
+            sceneId: scene.id,
+            shotId: shot.id,
+            idempotencyKey,
+            outputAsset: status.videoAsset
+          });
+          lastError = undefined;
+          break;
         }
 
         if (attempt === attempts.length - 1) {
