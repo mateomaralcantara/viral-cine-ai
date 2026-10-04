@@ -99,3 +99,26 @@ test('single visual video bloquea luminarias modernas y deriva de identidad', ()
   assert.match(plan.videoPrompt, /wall lamps/i);
   assert.match(plan.videoPrompt, /Do not change established age, facial hair or recognizable identity/i);
 });
+
+
+test('E2 T5 usa provider-safe motion prompt para evitar bloqueos Veo', () => {
+  const shot: any = {
+    id: 'shot-t5-safe',
+    order: 5,
+    durationSeconds: 8,
+    visualPrompt:
+      'Una sola acción dominante: María y Juan permanecen en primer término mientras Jesús carga VISIBLAMENTE UN SOLO madero largo y rugoso.',
+    camera: 'Contraplano continuo desde detrás.',
+    spokenText: 'Narración.',
+    speakerId: 'narrator',
+    dialogueLines: [{ id: 'l1', speakerId: 'narrator', text: 'Narración.', startSeconds: 0 }],
+    characterIds: ['jesus']
+  };
+  const scene2: any = { ...scene, order: 2 };
+  const plan = buildSingleVisualPlan(project, scene2, shot);
+
+  assert.match(plan.videoPrompt, /Quiet historical street movement only/i);
+  assert.match(plan.videoPrompt, /central background traveler/i);
+  assert.match(plan.videoPrompt, /same single long wooden beam/i);
+  assert.doesNotMatch(plan.videoPrompt, /Jesús|María|Juan|soldados|corona de espinas/i);
+});
