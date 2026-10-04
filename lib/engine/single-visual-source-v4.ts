@@ -166,7 +166,7 @@ export async function generateSingleVideoReal(
 
   await mkdir(path.dirname(before.videoPath), { recursive: true });
 
-  const idempotencyKey = 'single-visual-video:' + shot.id + ':v4';
+  const idempotencyKey = 'single-visual-video:' + shot.id + ':v5';
   const estimatedUsd = estimateOperationCost('video', plan.providerDurationSeconds);
   await assertSpendRetrySafe(project.id, idempotencyKey, 'video visual único');
 
