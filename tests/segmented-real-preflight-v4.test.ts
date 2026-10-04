@@ -95,12 +95,14 @@ function fixture(): FilmProject {
   } as FilmProject;
 }
 
-test('preflight real calcula voz + lip-sync y bloquea perfiles ElevenLabs sin voiceId', () => {
+test('preflight real marca autocasting pendiente y no bloquea perfiles ElevenLabs sin voiceId', () => {
   const previousEleven = process.env.ELEVENLABS_API_KEY;
+  const previousNarrator = process.env.ELEVENLABS_NARRATOR_VOICE_ID;
   const previousFal = process.env.FAL_KEY;
   const previousLip = process.env.ENABLE_LIPSYNC;
   try {
     process.env.ELEVENLABS_API_KEY = 'eleven-test-secret-123';
+    delete process.env.ELEVENLABS_NARRATOR_VOICE_ID;
     process.env.FAL_KEY = 'fal-test-secret-123';
     process.env.ENABLE_LIPSYNC = 'true';
 
@@ -115,13 +117,15 @@ test('preflight real calcula voz + lip-sync y bloquea perfiles ElevenLabs sin vo
     assert.equal(result.totals.lipSyncSeconds, 4.667);
     assert.equal(result.totals.profilesRequired, 3);
     assert.equal(result.totals.profilesReady, 0);
-    assert.equal(result.blockers.length, 3);
+    assert.equal(result.totals.profilesAutoCast, 3);
+    assert.equal(result.blockers.length, 0);
     assert.ok(result.totals.voiceEstimatedUsd > 0);
     assert.ok(result.totals.lipSyncEstimatedUsd > 0);
     assert.equal(result.totals.totalEstimatedUsd, Number((result.totals.voiceEstimatedUsd + result.totals.lipSyncEstimatedUsd).toFixed(4)));
     assert.equal(JSON.stringify(project), before);
   } finally {
     restore('ELEVENLABS_API_KEY', previousEleven);
+    restore('ELEVENLABS_NARRATOR_VOICE_ID', previousNarrator);
     restore('FAL_KEY', previousFal);
     restore('ENABLE_LIPSYNC', previousLip);
   }
@@ -144,6 +148,7 @@ test('preflight real queda sin bloqueos cuando los tres perfiles y credenciales 
     const scene = project.plan!.scenes[0];
     const result = buildSegmentedRealPreflight(project, scene, scene.shots[0]);
     assert.equal(result.totals.profilesReady, 3);
+    assert.equal(result.totals.profilesAutoCast, 0);
     assert.equal(result.totals.blockers, 0);
     assert.deepEqual(result.blockers, []);
   } finally {
