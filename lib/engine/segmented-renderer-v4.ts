@@ -252,12 +252,12 @@ export async function renderSegmentedShotOffline(
   await concatenate(renderedTurns, outputPath);
 
   await assertVideoStream(outputPath, 'Salida recompuesta');
-  await assertCinematicSceneVideo(outputPath, renderDurationSeconds, {
+  await assertCinematicSceneVideo(outputPath, plan.shotDurationSeconds, {
     requireMotion: true,
     requireAudibleAudio: true
   });
   const outputDurationSeconds = await probeMediaDurationSeconds(outputPath);
-  const durationDeltaSeconds = Math.abs(outputDurationSeconds - renderDurationSeconds);
+  const durationDeltaSeconds = Math.abs(outputDurationSeconds - plan.shotDurationSeconds);
   if (durationDeltaSeconds > OUTPUT_DURATION_TOLERANCE_SECONDS) {
     throw new Error(
       `La recomposición dura ${outputDurationSeconds.toFixed(3)}s; debía durar ${plan.shotDurationSeconds.toFixed(3)}s ` +
