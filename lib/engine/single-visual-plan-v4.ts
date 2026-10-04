@@ -116,7 +116,23 @@ function extractActionAnchor(value: string, settingAnchor: string) {
   const explicitBeat = compact.match(
     /Una sola (?:acción dominante|idea visual)\s*:\s*([^.!?]+[.!?]?)/i
   )?.[1]?.trim();
-  if (explicitBeat) return explicitBeat.slice(0, 520).trim();
+  if (explicitBeat) {
+    const criticalConstraints = compact
+      .split(/(?<=[.!?])\s+/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .filter((item) =>
+        /\b(mano|antebrazo|dedos|muñec|agarre|manos fusionadas)\b/i.test(item)
+      )
+      .filter((item) => !item.includes(explicitBeat))
+      .slice(0, 2)
+      .join(' ');
+    return [explicitBeat, criticalConstraints]
+      .filter(Boolean)
+      .join(' ')
+      .slice(0, 520)
+      .trim();
+  }
 
   const normalizedSetting = normalizeSentence(settingAnchor);
   const sentences = compact
