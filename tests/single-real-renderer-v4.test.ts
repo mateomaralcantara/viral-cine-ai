@@ -199,9 +199,41 @@ test('diálogo visible no usa rescate por encima de 1.2x', () => {
   );
 });
 
-test('autoajuste bloquea narración que excede incluso el rescate 1.25x', () => {
+test('E6/T5 usa rescate excepcional del narrador sin romper el schema', () => {
+  const plan = planSingleRenderTiming(10.542, 7, {
+    allowNarrationRescue: true,
+    allowEmergencyNarrationRescue: true
+  });
+
+  assert.equal(plan.outputDurationSeconds, 8);
+  assert.equal(plan.durationAdjusted, true);
+  assert.equal(plan.rescueSpeedUsed, true);
+  assert.equal(plan.emergencyNarrationRescueUsed, true);
+  assert.ok(plan.speedFactor > 1.25);
+  assert.ok(plan.speedFactor <= 1.33);
+
+  const project = fixture('narrator');
+  const shot = project.plan!.scenes[0].shots[0];
+  shot.durationSeconds = plan.outputDurationSeconds;
+  assert.doesNotThrow(() => FilmShotSchema.parse(shot));
+});
+
+test('el rescate excepcional no se activa si no se autoriza explícitamente', () => {
   assert.throws(
-    () => planSingleRenderTiming(14, 7, { allowNarrationRescue: true }),
+    () => planSingleRenderTiming(10.542, 7, {
+      allowNarrationRescue: true,
+      allowEmergencyNarrationRescue: false
+    }),
     /rescate seguro de narración llega a 1.25x/
+  );
+});
+
+test('autoajuste bloquea narración que excede incluso el rescate excepcional 1.33x', () => {
+  assert.throws(
+    () => planSingleRenderTiming(14, 7, {
+      allowNarrationRescue: true,
+      allowEmergencyNarrationRescue: true
+    }),
+    /rescate excepcional del narrador llega a 1.33x/
   );
 });
