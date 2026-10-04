@@ -73,6 +73,8 @@ export function buildSingleVisualPlan(
     'Use restrained natural body movement, believable weight, cloth motion and light atmospheric dust.',
     'Keep faces stable and hands anatomically plausible.',
     'Do not introduce new characters, props or later story beats.',
+    'Do not add anachronistic or modern street furniture, electric lighting, wall lamps, street lamps, metal sconces, brackets, cables or signage.',
+    'Do not change established age, facial hair or recognizable identity of foreground characters.',
     'Nobody speaks on camera; narrator remains off camera.',
     'Keep the action non-graphic. No text, subtitles, logos or watermarks.'
   ].filter(Boolean).join(' ');
