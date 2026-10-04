@@ -8,6 +8,10 @@ import { appendSpend, assertSpendRetrySafe, estimateOperationCost } from '@/lib/
 import { assertPaidGenerationAllowed, hasUsableCredential, safeErrorMessage } from '@/lib/engine/production-safety';
 import { generateImageWithReferences } from '@/lib/providers/openai-media';
 import { buildProviderSafeImagePrompt } from '@/lib/engine/openai-image-safety-v4';
+import {
+  createImageReferenceFallback,
+  isImageProviderFallbackEligible
+} from '@/lib/engine/image-reference-fallback-v4';
 import { generateVeoVideo, isVeoNoChargeFailure, isVeoQuotaFailure } from '@/lib/providers/veo';
 import { assertCinematicVideoTrack } from '@/lib/media/probe';
 import { renderCinematicStillVideo } from '@/lib/media/ffmpeg';
@@ -162,6 +166,9 @@ export async function generateSegmentedTurnReferencesReal(
       });
     } catch (error) {
       const authRejected = isOpenAIAuthRejected(error);
+      const fallbackEligible =
+        !authRejected && isImageProviderFallbackEligible(error);
+
       await appendSpend(project.id, {
         operation: 'image',
         provider: 'openai',
@@ -174,7 +181,44 @@ export async function generateSegmentedTurnReferencesReal(
         idempotencyKey,
         error: safeErrorMessage(error)
       });
-      throw error;
+
+      if (!fallbackEligible) throw error;
+
+      const previousTurnPaths = before.turns
+        .filter((item) => item.index < turn.index && item.referenceReady)
+        .sort((a, b) => b.index - a.index)
+        .map((item) => item.referencePath);
+
+      console.warn(
+        'OpenAI Images no pudo entregar la referencia del turno ' +
+        turn.index +
+        '; usando fallback visual local/de continuidad y continuando.'
+      );
+
+      const fallback = await createImageReferenceFallback({
+        project,
+        scene,
+        shot,
+        destinationPath: paths.referencePath,
+        preferredPaths: previousTurnPaths
+      });
+
+      await appendSpend(project.id, {
+        operation: 'image',
+        provider: 'local-continuity',
+        model: 'reference-fallback-v1',
+        state: 'reconciled',
+        estimatedUsd: 0,
+        actualUsd: 0,
+        sceneId: scene.id,
+        shotId: shot.id,
+        idempotencyKey,
+        outputAsset: assetRelativePath(project.id, paths.referencePath),
+        error:
+          'turn=' + turn.index +
+          ' fallback=' + fallback.mode +
+          (fallback.sourcePath ? ' source=' + fallback.sourcePath : '')
+      });
     }
   }
 
