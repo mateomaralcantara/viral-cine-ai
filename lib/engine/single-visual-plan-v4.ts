@@ -61,7 +61,9 @@ export function buildSingleVisualPlan(
     'No text, subtitles, captions, logos or watermarks.'
   ].filter(Boolean).join(' ');
 
-  const videoPrompt = [
+  const providerSafeMotionOverride = buildProviderSafeMotionOverride(scene, shot);
+
+  const videoPrompt = providerSafeMotionOverride || [
     setting ? 'Historical setting: ' + setting + '.' : '',
     'Animate the approved first-frame reference faithfully instead of redesigning it.',
     'ONE continuous cinematic take for the full clip; no cuts, no montage, no POV insert, no angle change.',
@@ -102,6 +104,30 @@ export function buildSingleVisualPlan(
     videoPrompt,
     negativePrompt
   };
+}
+
+
+function buildProviderSafeMotionOverride(scene: FilmScene, shot: FilmShot) {
+  const isScene2Shot5 =
+    scene.order === 2 &&
+    shot.order === 5 &&
+    /UN SOLO madero/i.test(shot.visualPrompt || '');
+
+  if (!isScene2Shot5) return '';
+
+  return [
+    'Animate the approved first-frame reference faithfully; do not redesign the scene.',
+    'Quiet historical street movement only.',
+    'Keep the two foreground observers facing away or three-quarters away for the entire shot; they do not turn toward camera or toward each other.',
+    'The central background traveler continues walking away at a slow steady pace while carrying the same single long wooden beam over one shoulder with one hand.',
+    'Keep the beam shape, size, diagonal orientation and single-piece construction unchanged for the whole clip.',
+    'No hand-to-hand contact with nearby people.',
+    'Preserve the exact identities, apparent age, clean-shaven state, hair, clothing, body proportions, architecture, lighting direction and framing from the approved reference.',
+    'Do not add any new object or street fixture: no lamps, wall fixtures, posts, brackets, cables, signs or modern street furniture.',
+    'Camera nearly locked with only a very slow forward drift; no cuts, no angle changes, no reframing and no new characters.',
+    'Restrained natural walking, cloth motion and subtle atmospheric dust only.',
+    'No speaking, no text, subtitles, logos or watermarks.'
+  ].join(' ');
 }
 
 function extractSettingAnchor(value: string) {
