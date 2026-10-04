@@ -133,6 +133,35 @@ if (confirmation !== '--confirm-paid SI FULL FLOW') {
     'Ejecución pagada bloqueada. Debes usar exactamente: --confirm-paid SI FULL FLOW'
   );
 }
+
+const alreadyComplete =
+  located.shot.status === 'ready' &&
+  Boolean(located.shot.videoAsset) &&
+  Boolean(located.shot.pipelineVersion?.startsWith('4.2-single-full-flow'));
+
+if (alreadyComplete) {
+  const existingPath = assetAbsolutePath(project.id, located.shot.videoAsset!);
+  if (await fileExists(existingPath)) {
+    await assertCinematicSceneVideo(existingPath, located.shot.durationSeconds, {
+      requireMotion: true,
+      requireAudibleAudio: true
+    });
+
+    console.log('\n==============================================');
+    console.log(' SINGLE FULL FLOW 4.2 — IDEMPOTENT NO-OP');
+    console.log('==============================================');
+    console.log('Toma: E' + located.scene.order + '/T' + located.shot.order);
+    console.log('Pipeline existente: ' + located.shot.pipelineVersion);
+    console.log('Video oficial existente: ' + located.shot.videoAsset);
+    console.log('OpenAI: NO');
+    console.log('Veo: NO');
+    console.log('ElevenLabs: NO');
+    console.log('Fal: NO');
+    console.log('Gasto nuevo: US$0');
+    console.log('SINGLE_FULL_FLOW_IDEMPOTENT=PASS');
+    process.exit(0);
+  }
+}
 if (blockers.length) {
   throw new Error('Full flow bloqueado: ' + blockers.join(' | '));
 }
