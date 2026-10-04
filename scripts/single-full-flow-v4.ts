@@ -235,16 +235,32 @@ if (rendered.durationAdjusted) {
   console.log(
     'Duración autoajustada compatible con schema: ' +
     rendered.scheduledDurationSeconds.toFixed(3) + 's -> ' +
-    rendered.outputDurationSeconds.toFixed(3) + 's'
+    rendered.targetDurationSeconds.toFixed(3) + 's' +
+    ' (media real ' + rendered.outputDurationSeconds.toFixed(3) + 's)'
   );
-  located.shot.durationSeconds = rendered.outputDurationSeconds;
+  if (
+    !Number.isInteger(rendered.targetDurationSeconds) ||
+    rendered.targetDurationSeconds < 4 ||
+    rendered.targetDurationSeconds > 8
+  ) {
+    throw new Error(
+      'Duración single objetivo incompatible con FilmShotSchema: ' +
+      rendered.targetDurationSeconds.toFixed(3) + 's.'
+    );
+  }
+  located.shot.durationSeconds = rendered.targetDurationSeconds;
   if (located.shot.dialogueLines.length === 1) {
     located.shot.dialogueLines[0].startSeconds = 0;
-    located.shot.dialogueLines[0].endSeconds = rendered.outputDurationSeconds;
+    located.shot.dialogueLines[0].endSeconds = rendered.targetDurationSeconds;
   }
 }
-if (rendered.rescueSpeedUsed) {
-  console.log('Rescate de narración off-camera: SI — límite duro 1.25x');
+if (rendered.emergencyNarrationRescueUsed) {
+  console.log(
+    'Rescate excepcional de narración: SI — atempo ' +
+    rendered.speedFactor.toFixed(3) + 'x (máximo 1.33x)'
+  );
+} else if (rendered.rescueSpeedUsed) {
+  console.log('Rescate de narración off-camera: SI — límite 1.25x');
 }
 console.log('Lip-sync: ' + (rendered.lipSyncRequired ? 'SI' : 'NO'));
 
@@ -326,7 +342,8 @@ project.productionLog.push(
   (rendered.durationAdjusted
     ? ' | duración autoajustada=' +
       rendered.scheduledDurationSeconds.toFixed(3) + 's->' +
-      rendered.outputDurationSeconds.toFixed(3) + 's'
+      rendered.targetDurationSeconds.toFixed(3) + 's' +
+      ' | media=' + rendered.outputDurationSeconds.toFixed(3) + 's'
     : '') +
   (readyMusic.enabled ? ' | música=' + readyMusic.asset : '')
 );
