@@ -37,6 +37,7 @@ import {
 import { mixBackgroundMusic } from '@/lib/media/ffmpeg';
 import { probeMediaDurationSeconds } from '@/lib/media/segmented-ffmpeg';
 import { assertCinematicSceneVideo } from '@/lib/media/probe';
+import { repairPersistentPillarboxInPlace } from '@/lib/media/pillarbox-repair';
 
 loadProjectLocalEnvOverride();
 
@@ -147,6 +148,35 @@ if (!visual.videoReady) {
   console.log('Video Veo: LISTO');
 } else {
   console.log('\n[2/5] Video Veo: REUTILIZADO');
+}
+
+if (project.input.aspectRatio === '16:9') {
+  const pillarboxArchive = path.join(
+    projectRoot(project.id),
+    'checkpoints',
+    'auto-pillarbox',
+    'scene-' + pad(located.scene.order) +
+    '-shot-' + pad(located.shot.order) +
+    '-' + located.shot.id,
+    'base-real-original.mp4'
+  );
+  const pillarbox = await repairPersistentPillarboxInPlace(
+    visual.videoPath,
+    pillarboxArchive,
+    1280,
+    720,
+    0.35
+  );
+  if (pillarbox.repaired) {
+    console.log(
+      'Pillarbox detectado y corregido automáticamente: ' +
+      pillarbox.before.bars?.left + 'px/' +
+      pillarbox.before.bars?.right + 'px.'
+    );
+    visual = await inspectSingleVisualSource(project, located.scene, located.shot);
+  } else {
+    console.log('Pillarbox: NO DETECTADO');
+  }
 }
 
 console.log('\n[3/5] Preparando voz y render principal...');
