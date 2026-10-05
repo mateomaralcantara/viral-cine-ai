@@ -97,12 +97,13 @@ export function assertProductionCanQueue(project?: ProductionProjectContext) {
   const plan = project?.plan;
   if (!plan) return;
 
-  const scopedScenes = project?.pilot?.enabled
+  const pilot = project?.pilot;
+  const scopedScenes = pilot?.enabled
     ? plan.scenes
-        .slice(0, project.pilot.maxScenes)
+        .slice(0, pilot.maxScenes)
         .map((scene) => ({
           ...scene,
-          shots: scene.shots.slice(0, project.pilot?.maxShotsPerScene || 1)
+          shots: scene.shots.slice(0, pilot.maxShotsPerScene)
         }))
     : plan.scenes;
 
