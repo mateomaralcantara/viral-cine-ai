@@ -210,8 +210,7 @@ export default function RealMotionDashboard({
                 ))}
               </div>
             </article>
-            );
-          })}
+          ))}
         </div>
       </section>
 
@@ -314,7 +313,8 @@ export default function RealMotionDashboard({
                 </div>
               </div>
             </article>
-          ))}
+            );
+          })}
         </div>
       </section>
     </div>
