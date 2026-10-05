@@ -70,7 +70,18 @@ export async function produceProjectV4(projectId: string) {
   if (!['queued', 'planned', 'failed', 'ready'].includes(project.status)) return project;
 
   try {
-    const preflight = preflightPlan(project.plan);
+    const preflightPlanInput = project.pilot?.enabled
+      ? {
+          ...project.plan,
+          scenes: project.plan.scenes
+            .slice(0, project.pilot.maxScenes)
+            .map((scene) => ({
+              ...scene,
+              shots: scene.shots.slice(0, project.pilot?.maxShotsPerScene || 1)
+            }))
+        }
+      : project.plan;
+    const preflight = preflightPlan(preflightPlanInput);
     if (!preflight.passed) {
       throw new Error(`Preproduccion 4.0 bloqueada: ${preflight.issues.slice(0, 8).join(' | ')}`);
     }
