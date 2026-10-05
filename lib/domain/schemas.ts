@@ -108,6 +108,11 @@ export const CharacterBibleEntrySchema = z.object({
   immutableTraits: z.array(z.string().trim().min(2).max(220)).min(3).max(20),
   forbiddenDrift: z.array(z.string().trim().min(2).max(220)).min(1).max(20),
   masterReferenceAsset: z.string().optional(),
+  bodyReferenceAsset: z.string().optional(),
+  faceApproved: z.boolean().optional(),
+  faceApprovedAt: z.string().optional(),
+  bodyApproved: z.boolean().optional(),
+  bodyApprovedAt: z.string().optional(),
   identityApproved: z.boolean().optional(),
   identityApprovedAt: z.string().optional(),
   states: z.array(CharacterEvolutionStateSchema).min(1).max(8)
