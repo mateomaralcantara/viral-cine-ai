@@ -715,7 +715,7 @@ export function buildFifteenDaysPilotPlanV5(): FilmPlan {
     musicPlan: FIFTEEN_DAYS_SCORE_V5,
     realMotion: FIFTEEN_DAYS_REAL_MOTION_V5,
     characters: FIFTEEN_DAYS_CHARACTERS_V5,
-    scenes: sceneDefs.map(scene)
+    scenes: sceneDefs.map((def, index) => scene(index, def))
   };
 }
 
