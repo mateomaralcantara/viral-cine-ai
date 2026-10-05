@@ -6,6 +6,7 @@ import type { FilmShot } from '@/lib/domain/schemas';
 import { updateProject } from '@/lib/storage/project-store';
 import { assertProductionCanQueue, ProductionSafetyError, safeErrorMessage } from '@/lib/engine/production-safety';
 import { assertIdentityLocksReady } from '@/lib/engine/preflight-identity-check';
+import { assertPilotStateLocksReady } from '@/lib/engine/pilot-state-lock-v5';
 
 export const runtime = 'nodejs';
 
@@ -51,6 +52,7 @@ export async function POST(request: Request, context: Context) {
         }
       }
       assertIdentityLocksReady(current);
+      assertPilotStateLocksReady(current);
 
       try {
         assertProductionCanQueue(current);
