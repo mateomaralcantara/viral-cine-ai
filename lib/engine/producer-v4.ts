@@ -1,4 +1,4 @@
-import { access, mkdir, rm } from 'node:fs/promises';
+import { access, copyFile, mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import type { Character, FilmPlan, FilmProject, FilmScene, FilmShot } from '@/lib/domain/schemas';
 import {
@@ -285,13 +285,14 @@ async function produceShotV4(project: FilmProject, sceneIndex: number, shotIndex
 
     if (strictSceneQualityEnabled()) {
       const estimatedUsd = estimateOperationCost('audit', 1);
-      const idempotencyKey = `audit:${shot.id}:1`;
+      const auditAttempt = Math.max(1, shot.generationCount || 1);
+      const idempotencyKey = `audit:${shot.id}:${auditAttempt}`;
       await appendSpend(project.id, {
         operation: 'audit', provider: 'openai', model: process.env.OPENAI_QUALITY_MODEL,
         state: 'submitted', estimatedUsd, sceneId: scene.id, shotId: shot.id, idempotencyKey
       });
       try {
-        const reviewed = await reviewSceneQuality(project, scene, rendered, 1, shot);
+        const reviewed = await reviewSceneQuality(project, scene, rendered, auditAttempt, shot);
         applyQualityReport(shot, reviewed.report, reviewed.reportAsset);
         await appendSpend(project.id, {
           operation: 'audit', provider: 'openai', model: process.env.OPENAI_QUALITY_MODEL,
@@ -324,6 +325,7 @@ async function produceShotV4(project: FilmProject, sceneIndex: number, shotIndex
 
     shot.status = 'ready';
     shot.error = undefined;
+    shot.qualityForceRegenerate = false;
     shot.pipelineVersion = hasMultipleDialogueSpeakers(shot) ? '4.1-segmented-visual-turns' : '4.0-audio-first';
     scene.status = 'rendering';
     project.productionLog.push(`${new Date().toISOString()} Escena ${scene.order}, segmento ${shot.order} terminado con Real Cinema 4.0`);
@@ -360,11 +362,42 @@ async function renderShotV4(project: FilmProject, scene: FilmScene, shot: FilmSh
   if (preparedVoice.alignmentPath) shot.alignmentAsset = assetRelativePath(project.id, preparedVoice.alignmentPath);
 
   const imagePath = path.join(projectAssetDir(project.id, 'images'), `${key}.png`);
-  await prepareShotReferenceFrame(project, scene, shot, characters, imagePath);
-  shot.imageAsset = assetRelativePath(project.id, imagePath);
-
   const rawBasePath = path.join(projectAssetDir(project.id, 'video'), `${key}-base-raw.mp4`);
   const normalizedBasePath = path.join(projectAssetDir(project.id, 'video'), `${key}-base.mp4`);
+  const lipSyncRawPath = path.join(projectAssetDir(project.id, 'video'), `${key}-lipsync-raw.mp4`);
+  const normalizedPath = path.join(projectAssetDir(project.id, 'video'), `${key}.mp4`);
+
+  if (shot.qualityForceRegenerate) {
+    const archiveDir = path.join(projectAssetDir(project.id, 'video'), 'rejected');
+    await mkdir(archiveDir, { recursive: true });
+
+    if (await fileExists(normalizedPath)) {
+      const archivePath = path.join(
+        archiveDir,
+        `${key}-attempt-${Math.max(1, shot.generationCount || 1)}.mp4`
+      );
+      await copyFile(normalizedPath, archivePath);
+      project.productionLog.push(
+        `${new Date().toISOString()} Intento rechazado archivado: ${assetRelativePath(project.id, archivePath)}`
+      );
+    }
+
+    await Promise.all([
+      rm(imagePath, { force: true }),
+      rm(rawBasePath, { force: true }),
+      rm(normalizedBasePath, { force: true }),
+      rm(lipSyncRawPath, { force: true }),
+      rm(normalizedPath, { force: true })
+    ]);
+
+    shot.imageAsset = undefined;
+    shot.baseVideoAsset = undefined;
+    shot.lipSyncAsset = undefined;
+    shot.videoAsset = undefined;
+  }
+
+  await prepareShotReferenceFrame(project, scene, shot, characters, imagePath);
+  shot.imageAsset = assetRelativePath(project.id, imagePath);
   if (!(await fileExists(normalizedBasePath))) {
     if (process.env.PRODUCTION_MODE === 'real') {
       if (!(shot.lastGenerationState === 'succeeded' && await fileExists(rawBasePath))) {
@@ -381,7 +414,6 @@ async function renderShotV4(project: FilmProject, scene: FilmScene, shot: FilmSh
   }
   shot.baseVideoAsset = assetRelativePath(project.id, normalizedBasePath);
 
-  const lipSyncRawPath = path.join(projectAssetDir(project.id, 'video'), `${key}-lipsync-raw.mp4`);
   let sourceForFinal = normalizedBasePath;
   if (shot.spokenText.trim()) {
     if (!(await fileExists(lipSyncRawPath))) await applyAudioFirstLipSync(project, scene, shot, normalizedBasePath, voicePath, lipSyncRawPath);
@@ -389,7 +421,6 @@ async function renderShotV4(project: FilmProject, scene: FilmScene, shot: FilmSh
     shot.lipSyncAsset = assetRelativePath(project.id, lipSyncRawPath);
   }
 
-  const normalizedPath = path.join(projectAssetDir(project.id, 'video'), `${key}.mp4`);
   const partialPath = temporarySceneVideoPath(normalizedPath);
   try {
     await normalizeGeneratedVideo(sourceForFinal, voicePath, shot.durationSeconds, partialPath, project.input.aspectRatio);
@@ -671,7 +702,8 @@ async function prepareShotReferenceFrame(
 
   if (process.env.PRODUCTION_MODE === 'real' && hasUsableCredential('OPENAI_API_KEY')) {
     const estimatedUsd = estimateOperationCost('image', 1);
-    const idempotencyKey = `image:${shot.id}`;
+    const imageAttempt = Math.max(1, (shot.generationCount || 0) + 1);
+    const idempotencyKey = `image:${shot.id}:${imageAttempt}`;
     await assertSpendRetrySafe(project.id, idempotencyKey, 'imagen de referencia OpenAI');
     await appendSpend(project.id, {
       operation: 'image', provider: 'openai', model: process.env.OPENAI_IMAGE_MODEL,
