@@ -38,7 +38,15 @@ export function releaseNoChargeGenerationReservation(
 }
 
 export function assertShotGenerationAllowed(project: FilmProject, scene: FilmScene, shot: FilmShot) {
-  const maximumGenerations = integerEnv('SHOT_MAX_TOTAL_GENERATIONS', 1, 1, 10);
+  const configuredMaximumGenerations = integerEnv('SHOT_MAX_TOTAL_GENERATIONS', 1, 1, 10);
+  const controlledPilotRetry =
+    project.pilot?.enabled === true &&
+    Boolean(project.plan?.realMotion) &&
+    shot.id === 'pilot-15d-01' &&
+    shot.qualityForceRegenerate === true;
+  const maximumGenerations = controlledPilotRetry
+    ? Math.max(2, configuredMaximumGenerations)
+    : configuredMaximumGenerations;
   const generationCount = shot.generationCount || 0;
   if (generationCount >= maximumGenerations) {
     throw new ProductionSafetyError(
