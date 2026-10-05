@@ -8,6 +8,7 @@ export type ProductionPauseKind = 'billing' | 'safety' | 'technical';
 
 type ProductionProjectContext = {
   plan?: FilmProject['plan'];
+  pilot?: FilmProject['pilot'];
   narratorVoice?: FilmProject['narratorVoice'];
   supportVoices?: FilmProject['supportVoices'];
 };
@@ -96,7 +97,16 @@ export function assertProductionCanQueue(project?: ProductionProjectContext) {
   const plan = project?.plan;
   if (!plan) return;
 
-  const multiSpeakerSpoken = plan.scenes.flatMap((scene) =>
+  const scopedScenes = project?.pilot?.enabled
+    ? plan.scenes
+        .slice(0, project.pilot.maxScenes)
+        .map((scene) => ({
+          ...scene,
+          shots: scene.shots.slice(0, project.pilot?.maxShotsPerScene || 1)
+        }))
+    : plan.scenes;
+
+  const multiSpeakerSpoken = scopedScenes.flatMap((scene) =>
     scene.shots
       .filter((shot) => Boolean(shot.spokenText.trim()) && hasMultipleDialogueSpeakers(shot))
       .map((shot) => `escena ${scene.order}/segmento ${shot.order}`)
@@ -108,7 +118,7 @@ export function assertProductionCanQueue(project?: ProductionProjectContext) {
     );
   }
 
-  const unresolvedSpoken = plan.scenes.flatMap((scene) =>
+  const unresolvedSpoken = scopedScenes.flatMap((scene) =>
     scene.shots
       .filter((shot) => Boolean(shot.spokenText.trim()) && !resolveSingleSpeakerId(shot))
       .map((shot) => `escena ${scene.order}/segmento ${shot.order}`)
@@ -121,11 +131,11 @@ export function assertProductionCanQueue(project?: ProductionProjectContext) {
   }
 
   const speakingIds = new Set(
-    plan.scenes.flatMap((scene) => scene.shots)
+    scopedScenes.flatMap((scene) => scene.shots)
       .map((shot) => resolveSingleSpeakerId(shot))
       .filter((speakerId): speakerId is string => Boolean(speakerId && speakerId !== 'narrator'))
   );
-  const hasNarration = plan.scenes.some((scene) =>
+  const hasNarration = scopedScenes.some((scene) =>
     scene.shots.some((shot) => resolveSingleSpeakerId(shot) === 'narrator' && Boolean(shot.spokenText.trim()))
   );
 
