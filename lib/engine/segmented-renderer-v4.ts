@@ -76,6 +76,8 @@ export type RealSegmentedRenderTurn = {
   rawAudioDurationSeconds: number;
   speedFactor: number;
   requiresLipSync: boolean;
+  lipSyncApplied: boolean;
+  lipSyncProvider?: string;
   voicePath: string;
   alignedAudioPath: string;
   renderedPath: string;
@@ -106,6 +108,7 @@ export type RealSegmentedRenderResult = {
   durationAdjusted: boolean;
   durationDeltaSeconds: number;
   lipSyncTurns: number;
+  lipSyncFallbackTurns: number;
   turns: RealSegmentedRenderTurn[];
   externalCalls: true;
 };
@@ -449,6 +452,9 @@ export async function renderSegmentedShotReal(
     }
 
     let videoForMux = videoOnlyPath;
+    let lipSyncApplied = false;
+    let lipSyncProvider: string | undefined;
+
     if (prepared.turn.requiresLipSync) {
       if (!(await fileExists(lipSyncPath))) {
         const adjustedTurnShot = makeTurnShot(
@@ -458,7 +464,7 @@ export async function renderSegmentedShotReal(
           prepared.hash,
           sourceFingerprint
         );
-        await applyAudioFirstLipSync(
+        const lipSyncResult = await applyAudioFirstLipSync(
           project,
           scene,
           adjustedTurnShot,
@@ -466,6 +472,13 @@ export async function renderSegmentedShotReal(
           alignedAudioPath,
           lipSyncPath
         );
+        lipSyncProvider = lipSyncResult.provider;
+        lipSyncApplied =
+          lipSyncResult.provider !== 'local-no-lipsync' &&
+          lipSyncResult.provider !== 'none';
+      } else {
+        lipSyncProvider = 'checkpoint';
+        lipSyncApplied = true;
       }
       videoForMux = lipSyncPath;
     }
@@ -491,6 +504,8 @@ export async function renderSegmentedShotReal(
       rawAudioDurationSeconds: prepared.rawAudioDurationSeconds,
       speedFactor: allocation.speedFactor,
       requiresLipSync: prepared.turn.requiresLipSync,
+      lipSyncApplied,
+      lipSyncProvider,
       voicePath: prepared.voicePath,
       alignedAudioPath,
       renderedPath
@@ -558,7 +573,10 @@ export async function renderSegmentedShotReal(
     scheduledDurationSeconds: plan.shotDurationSeconds,
     durationAdjusted: timing.durationAdjusted,
     durationDeltaSeconds,
-    lipSyncTurns: realTurns.filter((turn) => turn.requiresLipSync).length,
+    lipSyncTurns: realTurns.filter((turn) => turn.lipSyncApplied).length,
+    lipSyncFallbackTurns: realTurns.filter(
+      (turn) => turn.requiresLipSync && !turn.lipSyncApplied
+    ).length,
     turns: realTurns,
     externalCalls: true
   };
