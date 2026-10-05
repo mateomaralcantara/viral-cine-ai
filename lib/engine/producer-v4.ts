@@ -77,7 +77,7 @@ export async function produceProjectV4(projectId: string) {
     assertProductionCanQueue(project);
     project.budget = estimateBudget(project.input, project.plan);
     assertEstimatedBudgetAllowed(project);
-    const pilot = pilotModeEnabled();
+    const pilot = pilotModeEnabled(project);
     project = await persist(project, {
       status: 'producing',
       error: undefined,
@@ -94,7 +94,7 @@ export async function produceProjectV4(projectId: string) {
     await removePartialSceneFiles(project.id);
 
     const scenes = requirePlan(project).scenes;
-    const sceneCount = pilot ? Math.min(pilotSceneLimit(), scenes.length) : scenes.length;
+    const sceneCount = pilot ? Math.min(pilotSceneLimit(project), scenes.length) : scenes.length;
     const clips: string[] = [];
 
     for (let sceneIndex = 0; sceneIndex < sceneCount; sceneIndex += 1) {
@@ -128,7 +128,7 @@ export async function produceProjectV4(projectId: string) {
       project = await saveProject(project);
 
       const fullShotCount = scene.shots.length;
-      const shotCount = pilot ? Math.min(pilotShotLimit(), fullShotCount) : fullShotCount;
+      const shotCount = pilot ? Math.min(pilotShotLimit(project), fullShotCount) : fullShotCount;
       const shotClips: string[] = [];
 
       for (let shotIndex = 0; shotIndex < shotCount; shotIndex += 1) {
@@ -243,7 +243,7 @@ async function produceShotV4(project: FilmProject, sceneIndex: number, shotIndex
     return saveProject(project);
   }
 
-  if (pilotModeEnabled()) await assertPilotShotBudget(project, shot);
+  if (pilotModeEnabled(project)) await assertPilotShotBudget(project, shot);
   shot.status = 'rendering';
   shot.error = undefined;
   scene.status = 'rendering';
