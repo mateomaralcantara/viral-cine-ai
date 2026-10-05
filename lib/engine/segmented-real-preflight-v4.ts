@@ -110,11 +110,16 @@ export function buildSegmentedRealPreflight(
 
     const requiresLipSync = requiresLipSyncForSpeaker(project, turn.speakerId);
     const voiceEstimatedUsd = estimateOperationCost('voice', voiceCostUnits(turn.text));
-    const lipSyncEstimatedUsd = requiresLipSync
-      ? estimateOperationCost('lip-sync', turn.durationSeconds)
-      : 0;
+    const lipSyncEstimatedUsd =
+      requiresLipSync && !localLipSyncOnly()
+        ? estimateOperationCost('lip-sync', turn.durationSeconds)
+        : 0;
 
-    if (requiresLipSync && process.env.ENABLE_LIPSYNC === 'false') {
+    if (
+      requiresLipSync &&
+      !localLipSyncOnly() &&
+      process.env.ENABLE_LIPSYNC === 'false'
+    ) {
       blockers.push(`${label}: ENABLE_LIPSYNC=false.`);
     }
 
@@ -152,7 +157,11 @@ export function buildSegmentedRealPreflight(
   }
 
   const blockers = rows.flatMap((row) => row.blockers);
-  if (rows.some((row) => row.requiresLipSync) && !hasUsableCredential('FAL_KEY')) {
+  if (
+    rows.some((row) => row.requiresLipSync) &&
+    !localLipSyncOnly() &&
+    !hasUsableCredential('FAL_KEY')
+  ) {
     blockers.push('Lip-sync: falta FAL_KEY.');
   }
 
@@ -201,4 +210,11 @@ function round(value: number) {
 
 function unique(values: string[]) {
   return [...new Set(values)];
+}
+
+
+function localLipSyncOnly() {
+  return /^(?:1|true|yes|on)$/i.test(
+    String(process.env.VIRALCINE_LOCAL_LIPSYNC_ONLY || '').trim()
+  );
 }
