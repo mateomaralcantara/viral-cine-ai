@@ -26,6 +26,17 @@ export function reserveShotGeneration(
   };
 }
 
+export function releaseNoChargeGenerationReservation(
+  shot: FilmShot,
+  reservedUsd: number
+) {
+  shot.generationCount = Math.max(0, (shot.generationCount || 0) - 1);
+  shot.estimatedSpendUsd = round(
+    Math.max(0, (shot.estimatedSpendUsd || 0) - reservedUsd)
+  );
+  shot.lastGenerationState = undefined;
+}
+
 export function assertShotGenerationAllowed(project: FilmProject, scene: FilmScene, shot: FilmShot) {
   const maximumGenerations = integerEnv('SHOT_MAX_TOTAL_GENERATIONS', 1, 1, 10);
   const generationCount = shot.generationCount || 0;
