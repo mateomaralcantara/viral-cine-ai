@@ -14,6 +14,25 @@ import {
 
 export const PILOT_SHOT_ONE_ID = 'pilot-15d-01';
 
+export const PILOT_SHOT_ONE_CORRECTION_V2 = {
+  visualPrompt:
+    'Amanecer urbano realista después de lluvia. Elena, exactamente la misma mujer del FACE MASTER y BODY MASTER, está ya agachada junto al bordillo mojado en estado Calle. Una sola moneda metálica es claramente visible en primer término, separada del fondo. Elena NO camina y NO tiene las manos en los bolsillos. Su mano derecha entra en cuadro, pinza la moneda entre pulgar e índice y la levanta; la moneda permanece visible durante la acción. Elena viste la chaqueta gris desgastada y ropa de calle definida en su estado, sin maquillaje glamuroso, sin pose de moda y sin embellecimiento. Mientras guarda la moneda en la palma, se incorpora lentamente con cansancio real. Mantener exactamente rostro, edad aparente, tono de piel, cabello y proporciones del Identity Lock.',
+  camera:
+    'Comenzar muy bajo con la moneda nítida en primer término y Elena agachada parcialmente visible detrás. Seguir la mano al recogerla y realizar un único tilt/dolly ascendente lento hasta un plano medio parcial de Elena al incorporarse. Sin cortes, sin travelling frontal, sin zoom artificial y sin cambiar de eje.',
+  intention:
+    'Hacer inequívoca la acción narrativa de encontrar y recoger la moneda, preservando exactamente la identidad de Elena.',
+  startState:
+    'Fotograma inicial: moneda grande y claramente legible junto al bordillo mojado; Elena ya está agachada detrás, rostro parcialmente visible en tres cuartos y coherente con FACE MASTER.',
+  endState:
+    'Elena queda medio incorporada con la moneda visible en la palma durante un instante antes de cerrar la mano; su identidad sigue siendo exactamente la referencia maestra.',
+  bodyMotion:
+    'Una sola acción física: mano derecha alcanza la moneda, pulgar e índice la pinzan, codo y hombro acompañan, Elena transfiere peso de piernas y torso y se incorpora lentamente. Prohibido caminar, meter ambas manos en bolsillos o hacer gestos de pasarela.',
+  environmentMotion:
+    'Gotas residuales y reflejos de tráfico distante muy sutiles; el entorno nunca compite con la moneda ni con la mano.',
+  cameraMotion:
+    'Seguimiento corto de la mano y ascenso vertical suave sincronizado con la incorporación de Elena; movimiento físico continuo y estable, sin cortes.'
+} as const;
+
 export type PilotShotOneCheck = {
   id: string;
   label: string;
@@ -201,6 +220,69 @@ export function getPilotShotOnePreflight(
     primaryProvider,
     fallbackProvider
   };
+}
+
+export function preparePilotShotOneRetry(
+  project: FilmProject,
+  maxSpendUsd: number
+) {
+  const { scene, shot } = getPilotShotOne(project);
+
+  if (
+    project.status !== 'quality-review' ||
+    scene.status !== 'review-required' ||
+    shot.status !== 'review-required'
+  ) {
+    throw new Error(
+      'La Toma 1 solo puede preparar un segundo intento desde Revisión de calidad.'
+    );
+  }
+
+  if ((shot.generationCount || 0) !== 1) {
+    throw new Error(
+      `Segundo intento bloqueado: la Toma 1 registra ${shot.generationCount || 0} generaciones. Se permite preparar exactamente un reintento controlado.`
+    );
+  }
+
+  shot.visualPrompt = PILOT_SHOT_ONE_CORRECTION_V2.visualPrompt;
+  shot.camera = PILOT_SHOT_ONE_CORRECTION_V2.camera;
+  shot.qualityForceRegenerate = true;
+
+  if (!shot.motionSpec) {
+    throw new Error('La Toma 1 perdió su especificación Real Motion.');
+  }
+
+  shot.motionSpec = {
+    ...shot.motionSpec,
+    intention: PILOT_SHOT_ONE_CORRECTION_V2.intention,
+    startState: PILOT_SHOT_ONE_CORRECTION_V2.startState,
+    endState: PILOT_SHOT_ONE_CORRECTION_V2.endState,
+    bodyMotion: PILOT_SHOT_ONE_CORRECTION_V2.bodyMotion,
+    environmentMotion: PILOT_SHOT_ONE_CORRECTION_V2.environmentMotion,
+    cameraMotion: PILOT_SHOT_ONE_CORRECTION_V2.cameraMotion,
+    preferredProviders: ['veo', 'fal-video'],
+    minMotionScore: 8,
+    minIdentityScore: 9,
+    minContinuityScore: 9,
+    minAnatomyScore: 9,
+    minCameraScore: 9,
+    allowStillFallbackFinal: false
+  };
+
+  project.pilot = {
+    enabled: true,
+    maxScenes: 1,
+    maxShotsPerScene: 1,
+    maxSpendUsd,
+    approvedForFullProduction: false
+  };
+
+  project.productionLog = [
+    ...project.productionLog,
+    `${new Date().toISOString()} Corrección V2 preparada para E1/T1 “La moneda”: identidad maestra reforzada, moneda visible, acción mano-moneda obligatoria y cámara baja→media; segundo intento aún NO ejecutado.`
+  ];
+
+  return { scene, shot };
 }
 
 export function armPilotShotOne(project: FilmProject) {
