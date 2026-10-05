@@ -1,6 +1,6 @@
 {
   "name": "viralcine-studio-pro",
-  "version": "4.0.0",
+  "version": "4.2.0",
   "private": true,
   "type": "module",
   "description": "Estudio privado de producción audiovisual larga con pipeline audio-first, voces persistentes, video IA real, lip-sync y montaje FFmpeg.",
@@ -37,15 +37,6 @@
     "full:status": "node --import tsx scripts/full-flow-status-v4.ts",
     "batch:full": "node --import tsx scripts/batch-full-flow-v4.ts",
     "spend:report": "node --import tsx scripts/spend-report-v4.ts",
-    "scene2:continuity": "node --import tsx scripts/scene2-continuity-v4.ts",
-    "scene2:narration": "node --import tsx scripts/scene2-narration-continuity-v4.ts",
-    "scene2:t3-fix": "node --import tsx scripts/scene2-t3-continuity-fix-v4.ts",
-    "scene2:t3-duration": "node --import tsx scripts/scene2-t3-duration-fix-v4.ts",
-    "scene2:t4-framing": "node --import tsx scripts/scene2-t4-framing-fix-v4.ts",
-    "scene2:t5-fix": "node --import tsx scripts/scene2-t5-continuity-fix-v4.ts",
-    "scene2:t5-reference-fix": "node --import tsx scripts/scene2-t5-reference-fix-v4.ts",
-    "scene2:t5-video-fix": "node --import tsx scripts/scene2-t5-video-fix-v4.ts",
-    "scene2:t5-pillarbox": "node --import tsx scripts/scene2-t5-pillarbox-fix-v4.ts",
     "fal:check": "node --import tsx scripts/fal-storage-check-v4.ts",
     "fal:reconcile-upload403": "node --import tsx scripts/reconcile-fal-upload403-v4.ts",
     "visual:audit": "node --import tsx scripts/visual-audit-v4.ts",
@@ -56,7 +47,8 @@
     "openai:reconcile-auth401": "node --import tsx scripts/reconcile-openai-auth401-v4.ts",
     "support:voices": "node --import tsx scripts/support-voices-v4.ts",
     "verify:4": "npm run typecheck && npm test",
-    "movie:master": "node --import tsx scripts/master-export-v4.ts"
+    "movie:master": "node --import tsx scripts/master-export-v4.ts",
+    "cleanup:workspace": "node --import tsx scripts/cleanup-workspace-v4.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",
