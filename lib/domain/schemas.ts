@@ -81,6 +81,66 @@ export const MusicPlanSchema = z.object({
   cues: z.array(MusicCueSchema).min(1).max(64)
 });
 
+
+export const RealMotionProviderIdSchema = z.enum([
+  'veo',
+  'fal-video',
+  'runway',
+  'seedance',
+  'wan'
+]);
+
+export const CharacterEvolutionStateSchema = z.object({
+  id: z.string(),
+  label: z.string().trim().min(1).max(80),
+  narrativeStage: z.string().trim().min(2).max(180),
+  appearance: z.string().trim().min(10).max(1200),
+  wardrobe: z.string().trim().min(5).max(800),
+  physicalCondition: z.string().trim().min(2).max(500),
+  performanceNotes: z.string().trim().min(2).max(600)
+});
+
+export const CharacterBibleEntrySchema = z.object({
+  characterId: z.string(),
+  name: z.string().trim().min(1).max(100),
+  identityLock: z.string().trim().min(20).max(1800),
+  immutableTraits: z.array(z.string().trim().min(2).max(220)).min(3).max(20),
+  forbiddenDrift: z.array(z.string().trim().min(2).max(220)).min(1).max(20),
+  states: z.array(CharacterEvolutionStateSchema).min(1).max(8)
+});
+
+export const RealMotionShotSpecSchema = z.object({
+  version: z.literal('5.0-real-motion-v1').default('5.0-real-motion-v1'),
+  intention: z.string().trim().min(5).max(600),
+  startState: z.string().trim().min(5).max(800),
+  endState: z.string().trim().min(5).max(800),
+  bodyMotion: z.string().trim().min(5).max(1000),
+  environmentMotion: z.string().trim().min(5).max(1000),
+  cameraMotion: z.string().trim().min(5).max(800),
+  shotClass: z.enum(['hero', 'standard', 'dialogue', 'transition', 'micro']),
+  preferredProviders: z.array(RealMotionProviderIdSchema).min(1).max(5),
+  minMotionScore: z.number().min(0).max(10).default(8),
+  minIdentityScore: z.number().min(0).max(10).default(9),
+  minContinuityScore: z.number().min(0).max(10).default(8),
+  minAnatomyScore: z.number().min(0).max(10).default(8),
+  minCameraScore: z.number().min(0).max(10).default(8),
+  allowStillFallbackFinal: z.literal(false).default(false)
+});
+
+export const RealMotionPlanSchema = z.object({
+  version: z.literal('5.0-real-motion-v1').default('5.0-real-motion-v1'),
+  finalMode: z.literal('real-motion').default('real-motion'),
+  allowStillFallbackFinal: z.literal(false).default(false),
+  providerOrder: z.array(RealMotionProviderIdSchema).min(2).max(5),
+  circuitBreaker: z.object({
+    failureThreshold: z.number().int().min(1).max(10).default(3),
+    cooldownSeconds: z.number().int().min(30).max(3600).default(900)
+  }),
+  pilotShotIds: z.array(z.string()).min(1).max(24),
+  characterBible: z.array(CharacterBibleEntrySchema).min(1).max(12),
+  qualityRule: z.string().trim().min(10).max(1000)
+});
+
 export const FilmShotSchema = z.object({
   id: z.string(),
   order: z.number().int().positive(),
@@ -91,6 +151,7 @@ export const FilmShotSchema = z.object({
   spokenText: z.string(),
   speakerId: z.string().optional(),
   dialogueLines: z.array(DialogueLineSchema).max(4).default([]),
+  motionSpec: RealMotionShotSpecSchema.optional(),
   mode: ShotModeSchema,
   characterIds: z.array(z.string()).max(3).default([]),
   preflightVersion: z.number().int().positive().optional(),
@@ -196,6 +257,7 @@ export const FilmPlanSchema = z.object({
   creativeDirection: z.string(),
   musicPrompt: z.string(),
   musicPlan: MusicPlanSchema.optional(),
+  realMotion: RealMotionPlanSchema.optional(),
   characters: z.array(CharacterSchema).min(1).max(8),
   scenes: z.array(SceneSchema).min(12).max(120)
 });
@@ -261,6 +323,11 @@ export type DialogueLine = z.infer<typeof DialogueLineSchema>;
 export type SceneDialogueTurn = z.infer<typeof SceneDialogueTurnSchema>;
 export type MusicCue = z.infer<typeof MusicCueSchema>;
 export type MusicPlan = z.infer<typeof MusicPlanSchema>;
+export type RealMotionProviderId = z.infer<typeof RealMotionProviderIdSchema>;
+export type CharacterEvolutionState = z.infer<typeof CharacterEvolutionStateSchema>;
+export type CharacterBibleEntry = z.infer<typeof CharacterBibleEntrySchema>;
+export type RealMotionShotSpec = z.infer<typeof RealMotionShotSpecSchema>;
+export type RealMotionPlan = z.infer<typeof RealMotionPlanSchema>;
 export type FilmScene = z.infer<typeof SceneSchema>;
 export type FilmShot = z.infer<typeof FilmShotSchema>;
 export type FilmPlan = z.infer<typeof FilmPlanSchema>;
