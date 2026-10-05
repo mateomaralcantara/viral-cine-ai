@@ -200,6 +200,32 @@ export async function applyAudioFirstLipSync(
     });
     return { outputPath, provider: 'offline' };
   }
+
+  if (localLipSyncOnly()) {
+    console.warn(
+      'VIRALCINE_LOCAL_LIPSYNC_ONLY=1: omitiendo Fal y conservando el video base; ' +
+      'el audio se mezcla normalmente pero este turno queda sin animación labial externa.'
+    );
+    await copyFile(baseVideoPath, outputPath);
+    await appendSpend(project.id, {
+      operation: 'lip-sync',
+      provider: 'local-copy',
+      model: 'no-external-lipsync-finish-mode',
+      state: 'reconciled',
+      estimatedUsd: 0,
+      actualUsd: 0,
+      sceneId: scene.id,
+      shotId: shot.id,
+      idempotencyKey: `local-lip-sync:${shot.id}:${shot.durationSeconds}`,
+      outputAsset: outputPath
+    });
+    return {
+      outputPath,
+      provider: 'local-no-lipsync',
+      lipSyncReason: 'finish-mode-local-fallback'
+    };
+  }
+
   if (process.env.ENABLE_LIPSYNC === 'false') {
     throw new Error('Hay diálogo visible pero ENABLE_LIPSYNC=false. ViralCine 4.0 no publicará diálogo desincronizado.');
   }
@@ -267,4 +293,11 @@ async function exists(filePath: string) {
   } catch {
     return false;
   }
+}
+
+
+function localLipSyncOnly() {
+  return /^(?:1|true|yes|on)$/i.test(
+    String(process.env.VIRALCINE_LOCAL_LIPSYNC_ONLY || '').trim()
+  );
 }
