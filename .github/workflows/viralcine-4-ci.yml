@@ -1,4 +1,4 @@
-name: ViralCine 4.0 CI
+name: ViralCine 4.2 CI
 
 on:
   push:
