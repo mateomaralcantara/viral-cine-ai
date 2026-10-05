@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { ShieldCheck, Users, Video, Music2, Activity, LockKeyhole, LoaderCircle } from 'lucide-react';
 import type { FilmProject } from '@/lib/domain/schemas';
 import CharacterIdentityLockPanel from '@/components/CharacterIdentityLockPanel';
+import PilotShotOnePanel from '@/components/PilotShotOnePanel';
 import { getIdentityLockStatus } from '@/lib/engine/preflight-identity-check';
 import { getPilotStateLockStatus } from '@/lib/engine/pilot-state-lock-v5';
 import { getPilotRoutingLockStatus } from '@/lib/engine/pilot-routing-lock-v5';
@@ -20,6 +21,10 @@ type RoutingPreflight = {
 };
 
 type SystemLike = {
+  mode?: 'demo' | 'real';
+  paidGenerationEnabled?: boolean;
+  safetyReason?: string;
+  ffmpeg?: boolean;
   veo?: boolean;
   fal?: boolean;
 };
@@ -250,6 +255,13 @@ export default function RealMotionDashboard({
 
       <CharacterIdentityLockPanel
         project={project}
+        locked={locked}
+        onProjectChange={onProjectChange}
+      />
+
+      <PilotShotOnePanel
+        project={project}
+        system={system}
         locked={locked}
         onProjectChange={onProjectChange}
       />
