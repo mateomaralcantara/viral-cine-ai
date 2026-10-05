@@ -608,12 +608,45 @@ async function prepareShotReferenceFrame(
   imagePath: string
 ) {
   if (await fileExists(imagePath)) return imagePath;
-  const characterReferences = characters
-    .map((character) => character.referenceAsset)
-    .filter((asset): asset is string => Boolean(asset))
+  const realMotionBible = project.plan?.realMotion?.characterBible || [];
+  const referenceAssets = characters.flatMap((character) => {
+    const bible = realMotionBible.find(
+      (entry) => entry.characterId === character.id
+    );
+    const stateId = shot.characterStateIds?.[character.id];
+    const state = bible?.states.find((item) => item.id === stateId);
+
+    return [
+      character.referenceAsset,
+      bible?.masterReferenceAsset,
+      bible?.bodyReferenceAsset,
+      state?.referenceAsset
+    ].filter((asset): asset is string => Boolean(asset));
+  });
+  const characterReferences = [...new Set(referenceAssets)]
     .map((asset) => assetAbsolutePath(project.id, asset));
+
   const continuity = characters
-    .map((character) => `${character.name}: ${character.appearance}; wardrobe: ${character.wardrobe}`)
+    .map((character) => {
+      const bible = realMotionBible.find(
+        (entry) => entry.characterId === character.id
+      );
+      const stateId = shot.characterStateIds?.[character.id];
+      const state = bible?.states.find((item) => item.id === stateId);
+
+      if (!bible) {
+        return `${character.name}: ${character.appearance}; wardrobe: ${character.wardrobe}`;
+      }
+
+      return [
+        `${character.name}: ${bible.identityLock}`,
+        state ? `Estado obligatorio: ${state.label}.` : '',
+        state ? `Apariencia: ${state.appearance}.` : '',
+        state ? `Vestuario: ${state.wardrobe}.` : '',
+        state ? `Condición física: ${state.physicalCondition}.` : '',
+        state ? `Actuación: ${state.performanceNotes}.` : ''
+      ].filter(Boolean).join(' ');
+    })
     .join(' | ');
 
   if (process.env.PRODUCTION_MODE === 'real' && hasUsableCredential('OPENAI_API_KEY')) {
