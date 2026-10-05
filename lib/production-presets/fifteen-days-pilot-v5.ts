@@ -312,6 +312,7 @@ export const FIFTEEN_DAYS_PILOT_SHOTS_V5: FilmShot[] = [
     }),
     mode: 'video',
     characterIds: [IDS.elena],
+    characterStateIds: { [IDS.elena]: 'elena-b-street' },
     status: 'pending',
     pipelineVersion: '5.0-real-motion-pilot'
   },
@@ -348,6 +349,7 @@ export const FIFTEEN_DAYS_PILOT_SHOTS_V5: FilmShot[] = [
     }),
     mode: 'video',
     characterIds: [IDS.elena],
+    characterStateIds: { [IDS.elena]: 'elena-b-street' },
     status: 'pending',
     pipelineVersion: '5.0-real-motion-pilot'
   },
@@ -377,6 +379,7 @@ export const FIFTEEN_DAYS_PILOT_SHOTS_V5: FilmShot[] = [
     }),
     mode: 'video',
     characterIds: [IDS.elena],
+    characterStateIds: { [IDS.elena]: 'elena-a-home' },
     status: 'pending',
     pipelineVersion: '5.0-real-motion-pilot'
   },
@@ -413,6 +416,7 @@ export const FIFTEEN_DAYS_PILOT_SHOTS_V5: FilmShot[] = [
     }),
     mode: 'video',
     characterIds: [IDS.elena, IDS.raul],
+    characterStateIds: { [IDS.elena]: 'elena-a-home', [IDS.raul]: 'raul-a-control' },
     status: 'pending',
     pipelineVersion: '5.0-real-motion-pilot'
   },
@@ -449,6 +453,7 @@ export const FIFTEEN_DAYS_PILOT_SHOTS_V5: FilmShot[] = [
     }),
     mode: 'video',
     characterIds: [IDS.raul, IDS.elena],
+    characterStateIds: { [IDS.raul]: 'raul-a-control', [IDS.elena]: 'elena-a-home' },
     status: 'pending',
     pipelineVersion: '5.0-real-motion-pilot'
   },
@@ -478,6 +483,7 @@ export const FIFTEEN_DAYS_PILOT_SHOTS_V5: FilmShot[] = [
     }),
     mode: 'video',
     characterIds: [IDS.elena, IDS.raul],
+    characterStateIds: { [IDS.elena]: 'elena-a-home', [IDS.raul]: 'raul-a-control' },
     status: 'pending',
     pipelineVersion: '5.0-real-motion-pilot'
   },
@@ -514,6 +520,7 @@ export const FIFTEEN_DAYS_PILOT_SHOTS_V5: FilmShot[] = [
     }),
     mode: 'video',
     characterIds: [IDS.elena],
+    characterStateIds: { [IDS.elena]: 'elena-a-home' },
     status: 'pending',
     pipelineVersion: '5.0-real-motion-pilot'
   },
@@ -543,6 +550,7 @@ export const FIFTEEN_DAYS_PILOT_SHOTS_V5: FilmShot[] = [
     }),
     mode: 'video',
     characterIds: [IDS.elena],
+    characterStateIds: { [IDS.elena]: 'elena-a-home' },
     status: 'pending',
     pipelineVersion: '5.0-real-motion-pilot'
   }
