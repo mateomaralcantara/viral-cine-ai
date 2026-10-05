@@ -235,6 +235,40 @@ test('E2/T7-like Narrador + María + Juan queda sin bloqueo con autocasting para
   }
 });
 
+
+test('finish mode local de lip-sync elimina dependencia y costo Fal sin quitar las voces', () => {
+  const previousEleven = process.env.ELEVENLABS_API_KEY;
+  const previousFal = process.env.FAL_KEY;
+  const previousLip = process.env.ENABLE_LIPSYNC;
+  const previousLocal = process.env.VIRALCINE_LOCAL_LIPSYNC_ONLY;
+
+  try {
+    process.env.ELEVENLABS_API_KEY = 'eleven-test-secret-123';
+    delete process.env.FAL_KEY;
+    process.env.ENABLE_LIPSYNC = 'true';
+    process.env.VIRALCINE_LOCAL_LIPSYNC_ONLY = '1';
+
+    const project = fixture();
+    project.narratorVoice!.voiceId = 'voice-narrator-123';
+    project.plan!.characters[0].voiceId = 'voice-character-123';
+    project.supportVoices![0].voiceId = 'voice-support-123';
+
+    const scene = project.plan!.scenes[0];
+    const result = buildSegmentedRealPreflight(project, scene, scene.shots[0]);
+
+    assert.equal(result.totals.lipSyncTurns, 2);
+    assert.equal(result.totals.lipSyncEstimatedUsd, 0);
+    assert.equal(result.blockers.some((blocker) => blocker.includes('FAL_KEY')), false);
+    assert.equal(result.totals.blockers, 0);
+    assert.ok(result.totals.voiceEstimatedUsd > 0);
+  } finally {
+    restore('ELEVENLABS_API_KEY', previousEleven);
+    restore('FAL_KEY', previousFal);
+    restore('ENABLE_LIPSYNC', previousLip);
+    restore('VIRALCINE_LOCAL_LIPSYNC_ONLY', previousLocal);
+  }
+});
+
 function restore(name: string, value: string | undefined) {
   if (value === undefined) delete process.env[name];
   else process.env[name] = value;
