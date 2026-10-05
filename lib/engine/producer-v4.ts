@@ -70,14 +70,15 @@ export async function produceProjectV4(projectId: string) {
   if (!['queued', 'planned', 'failed', 'ready'].includes(project.status)) return project;
 
   try {
-    const preflightPlanInput = project.pilot?.enabled
+    const projectPilot = project.pilot;
+    const preflightPlanInput = projectPilot?.enabled
       ? {
           ...project.plan,
           scenes: project.plan.scenes
-            .slice(0, project.pilot.maxScenes)
+            .slice(0, projectPilot.maxScenes)
             .map((scene) => ({
               ...scene,
-              shots: scene.shots.slice(0, project.pilot?.maxShotsPerScene || 1)
+              shots: scene.shots.slice(0, projectPilot.maxShotsPerScene)
             }))
         }
       : project.plan;
@@ -86,7 +87,7 @@ export async function produceProjectV4(projectId: string) {
       throw new Error(`Preproduccion 4.0 bloqueada: ${preflight.issues.slice(0, 8).join(' | ')}`);
     }
     assertProductionCanQueue(project);
-    project.budget = estimateBudget(project.input, project.plan);
+    project.budget = estimateBudget(project.input, preflightPlanInput);
     assertEstimatedBudgetAllowed(project);
     const pilot = pilotModeEnabled(project);
     project = await persist(project, {
