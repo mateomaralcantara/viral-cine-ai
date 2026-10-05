@@ -163,7 +163,7 @@ export const FilmShotSchema = z.object({
   motionSpec: RealMotionShotSpecSchema.optional(),
   mode: ShotModeSchema,
   characterIds: z.array(z.string()).max(3).default([]),
-  characterStateIds: z.record(z.string()).default({}),
+  characterStateIds: z.record(z.string()).optional(),
   preflightVersion: z.number().int().positive().optional(),
   preflightScore: z.number().min(0).max(10).optional(),
   preflightIssues: z.array(z.string()).optional(),
