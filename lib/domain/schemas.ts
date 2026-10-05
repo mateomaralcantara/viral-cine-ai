@@ -46,6 +46,41 @@ export const SceneDialogueTurnSchema = z.object({
   emotion: z.string().optional()
 });
 
+
+export const MusicCueSchema = z.object({
+  id: z.string(),
+  title: z.string().trim().min(1).max(120),
+  startSeconds: z.number().nonnegative(),
+  endSeconds: z.number().positive(),
+  emotion: z.string().trim().min(2).max(120),
+  intensity: z.number().min(0).max(1),
+  tempoBpm: z.number().int().min(30).max(180).optional(),
+  instrumentation: z.array(z.string().trim().min(1).max(80)).min(1).max(12),
+  motif: z.string().trim().min(2).max(240),
+  prompt: z.string().trim().min(20).max(3000),
+  dialogueDuckDb: z.number().min(-24).max(0).default(-8),
+  allowSilenceBeforeSeconds: z.number().min(0).max(20).default(0),
+  emotionalPeak: z.boolean().default(false),
+  noVocals: z.boolean().default(true)
+}).superRefine((cue, ctx) => {
+  if (cue.endSeconds <= cue.startSeconds) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['endSeconds'],
+      message: 'endSeconds debe ser mayor que startSeconds.'
+    });
+  }
+});
+
+export const MusicPlanSchema = z.object({
+  version: z.literal('5.0-emotional-score-v1').default('5.0-emotional-score-v1'),
+  title: z.string().trim().min(1).max(120),
+  objective: z.string().trim().min(20).max(1000),
+  masterMotif: z.string().trim().min(10).max(600),
+  rules: z.array(z.string().trim().min(3).max(300)).min(1).max(24),
+  cues: z.array(MusicCueSchema).min(1).max(64)
+});
+
 export const FilmShotSchema = z.object({
   id: z.string(),
   order: z.number().int().positive(),
@@ -160,6 +195,7 @@ export const FilmPlanSchema = z.object({
   synopsis: z.string(),
   creativeDirection: z.string(),
   musicPrompt: z.string(),
+  musicPlan: MusicPlanSchema.optional(),
   characters: z.array(CharacterSchema).min(1).max(8),
   scenes: z.array(SceneSchema).min(12).max(120)
 });
@@ -223,6 +259,8 @@ export type SupportVoice = z.infer<typeof SupportVoiceSchema>;
 export type NarratorVoice = z.infer<typeof NarratorVoiceSchema>;
 export type DialogueLine = z.infer<typeof DialogueLineSchema>;
 export type SceneDialogueTurn = z.infer<typeof SceneDialogueTurnSchema>;
+export type MusicCue = z.infer<typeof MusicCueSchema>;
+export type MusicPlan = z.infer<typeof MusicPlanSchema>;
 export type FilmScene = z.infer<typeof SceneSchema>;
 export type FilmShot = z.infer<typeof FilmShotSchema>;
 export type FilmPlan = z.infer<typeof FilmPlanSchema>;
