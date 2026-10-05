@@ -108,6 +108,15 @@ export function preflightPlan(plan: FilmPlan) {
 }
 
 function prepareShot(plan: FilmPlan | undefined, scene: FilmScene, shot: FilmShot, index: number) {
+  if (shot.motionSpec?.version === '5.0-real-motion-v1') {
+    const issues = validateRealMotionShot(plan, shot);
+    shot.preflightVersion = PREFLIGHT_VERSION;
+    shot.preflightIssues = issues;
+    shot.preflightScore = issues.length === 0 ? 10 : Math.max(0, 10 - issues.length);
+    shot.promptLocked = issues.length === 0;
+    return;
+  }
+
   const direction = shotDirections[index % shotDirections.length];
   const featured = selectShotCharacters(plan, scene, shot, index);
   const narrativeBeat = shot.spokenText.trim() || scene.summary.trim();
@@ -200,6 +209,39 @@ function chooseShotMode(scene: FilmScene, shot: FilmShot, featuredIds: string[],
   return scene.mode === 'avatar' && Boolean(scene.dialogue.trim()) && featuredIds.length === 1 && closeUp
     ? 'avatar-video'
     : 'video';
+}
+
+function validateRealMotionShot(plan: FilmPlan | undefined, shot: FilmShot) {
+  const issues: string[] = [];
+
+  if (shot.motionSpec?.allowStillFallbackFinal !== false) {
+    issues.push('Real Motion FINAL no puede permitir still fallback.');
+  }
+  if (!shot.motionSpec?.preferredProviders?.length) {
+    issues.push('Real Motion no tiene proveedor preferido.');
+  }
+  if (!shot.characterIds.length) {
+    issues.push('Real Motion no tiene personaje principal asociado.');
+  }
+  if (shot.characterIds.length > MAX_FEATURED_CHARACTERS) {
+    issues.push('Hay mas de dos personajes principales.');
+  }
+  if (shot.spokenText.trim() && !shot.speakerId) {
+    issues.push('Existe texto hablado pero falta speakerId.');
+  }
+  if (
+    shot.speakerId &&
+    shot.speakerId !== 'narrator' &&
+    plan &&
+    !plan.characters.some((character) => character.id === shot.speakerId)
+  ) {
+    issues.push('speakerId no corresponde a un personaje de la biblia.');
+  }
+  if (!/sin cortes?/i.test(shot.camera)) {
+    issues.push('La camara Real Motion no declara continuidad sin cortes.');
+  }
+
+  return issues;
 }
 
 function validateShot(plan: FilmPlan | undefined, shot: FilmShot) {
