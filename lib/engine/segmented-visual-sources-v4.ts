@@ -4,7 +4,7 @@ import type { FilmProject, FilmScene, FilmShot } from '@/lib/domain/schemas';
 import { assetAbsolutePath, assetRelativePath, projectAssetDir } from '@/lib/storage/project-store';
 import { buildSegmentedVisualPlan, type SegmentedVisualTurnPlan } from '@/lib/engine/segmented-visual-plan-v4';
 import { buildSingleVeoFallbackPrompt } from '@/lib/engine/single-visual-plan-v4';
-import { appendSpend, assertSpendRetrySafe, estimateOperationCost } from '@/lib/engine/spend-ledger';
+import { appendSpend, assertSpendRetrySafe, estimateOperationCost, latestSpendForKey } from '@/lib/engine/spend-ledger';
 import { assertPaidGenerationAllowed, hasUsableCredential, safeErrorMessage } from '@/lib/engine/production-safety';
 import { generateImageWithReferences } from '@/lib/providers/openai-media';
 import { buildProviderSafeImagePrompt } from '@/lib/engine/openai-image-safety-v4';
@@ -129,6 +129,54 @@ export async function generateSegmentedTurnReferencesReal(
 
     const idempotencyKey = 'visual-turn-image:' + shot.id + ':' + turn.index + ':v3-safe';
     const estimatedUsd = estimateOperationCost('image', 1);
+
+    const previousSpend = await latestSpendForKey(project.id, idempotencyKey);
+    if (
+      previousSpend?.operation === 'image' &&
+      previousSpend.provider.toLowerCase() === 'openai' &&
+      previousSpend.state === 'failed-unknown'
+    ) {
+      const preferredPaths = plan.turns
+        .filter((candidate) => candidate.index < turn.index)
+        .sort((a, b) => b.index - a.index)
+        .map((candidate) =>
+          visualTurnPaths(project, scene, shot, candidate.index).referencePath
+        );
+
+      console.warn(
+        'Referencia OpenAI previa del turno ' + turn.index +
+        ' quedó failed-unknown; no se repetirá el cobro. ' +
+        'Se usará fallback visual local/de continuidad.'
+      );
+
+      const fallback = await createImageReferenceFallback({
+        project,
+        scene,
+        shot,
+        destinationPath: paths.referencePath,
+        preferredPaths
+      });
+
+      await appendSpend(project.id, {
+        operation: 'image',
+        provider: 'local-continuity',
+        model: 'reference-fallback-v1-recovery',
+        state: 'reconciled',
+        estimatedUsd: 0,
+        actualUsd: 0,
+        sceneId: scene.id,
+        shotId: shot.id,
+        idempotencyKey: 'local-fallback:' + idempotencyKey,
+        outputAsset: assetRelativePath(project.id, paths.referencePath),
+        error:
+          'turn=' + turn.index +
+          ' recovered-from=' + previousSpend.state +
+          ' fallback=' + fallback.mode +
+          (fallback.sourcePath ? ' source=' + fallback.sourcePath : '')
+      });
+      continue;
+    }
+
     await assertSpendRetrySafe(project.id, idempotencyKey, 'referencia visual por turno ' + turn.index);
     await appendSpend(project.id, {
       operation: 'image',
