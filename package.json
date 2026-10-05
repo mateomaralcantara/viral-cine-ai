@@ -55,7 +55,8 @@
     "openai:check": "node --import tsx scripts/openai-auth-check-v4.ts",
     "openai:reconcile-auth401": "node --import tsx scripts/reconcile-openai-auth401-v4.ts",
     "support:voices": "node --import tsx scripts/support-voices-v4.ts",
-    "verify:4": "npm run typecheck && npm test"
+    "verify:4": "npm run typecheck && npm test",
+    "movie:master": "node --import tsx scripts/master-export-v4.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",
