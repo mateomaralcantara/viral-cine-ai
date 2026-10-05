@@ -76,6 +76,12 @@ export function assertPaidGenerationAllowed(operation: string, credentialName?: 
 
 export function assertProductionCanQueue(project?: ProductionProjectContext) {
   if (productionMode() !== 'real') {
+    if (project?.plan?.realMotion) {
+      throw new ProductionSafetyError(
+        'Bloqueo de seguridad: un proyecto Real Motion 5.0 no puede producirse en modo demo. Activa producción real explícitamente para evitar generar un sustituto sintético.'
+      );
+    }
+
     const hasPaidHistory = project?.plan?.scenes.some((scene) =>
       scene.shots.some((shot) => (shot.generationCount || 0) > 0)
     );
