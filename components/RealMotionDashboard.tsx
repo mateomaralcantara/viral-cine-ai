@@ -1,11 +1,23 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ShieldCheck, Users, Video, Music2, Activity, LockKeyhole, LoaderCircle } from 'lucide-react';
 import type { FilmProject } from '@/lib/domain/schemas';
 import CharacterIdentityLockPanel from '@/components/CharacterIdentityLockPanel';
 import { getIdentityLockStatus } from '@/lib/engine/preflight-identity-check';
 import { getPilotStateLockStatus } from '@/lib/engine/pilot-state-lock-v5';
+import { getPilotRoutingLockStatus } from '@/lib/engine/pilot-routing-lock-v5';
+
+type RoutingPreflight = {
+  total: number;
+  readyCount: number;
+  ready: boolean;
+  estimatedPilotUsd: number;
+  reservedMovieUsd: number;
+  movieLimitUsd: number;
+  estimatedAfterPilotUsd: number;
+  withinMovieLimit: boolean;
+};
 
 type SystemLike = {
   veo?: boolean;
@@ -26,8 +38,36 @@ export default function RealMotionDashboard({
   const plan = project.plan?.realMotion;
   const identityStatus = getIdentityLockStatus(project);
   const stateLockStatus = getPilotStateLockStatus(project);
+  const routingLockStatus = getPilotRoutingLockStatus(project);
   const [stateLockBusy, setStateLockBusy] = useState(false);
   const [stateLockError, setStateLockError] = useState('');
+  const [routingBusy, setRoutingBusy] = useState(false);
+  const [routingError, setRoutingError] = useState('');
+  const [routingPreflight, setRoutingPreflight] =
+    useState<RoutingPreflight | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    fetch(
+      `/api/projects/${project.id}/pilot-routing-lock`,
+      { cache: 'no-store' }
+    )
+      .then((response) => response.json())
+      .then((data: {
+        ok: boolean;
+        routing?: RoutingPreflight;
+      }) => {
+        if (active && data.ok && data.routing) {
+          setRoutingPreflight(data.routing);
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+    };
+  }, [project.id, project.updatedAt]);
 
   async function applyStateLocks() {
     setStateLockBusy(true);
@@ -55,6 +95,42 @@ export default function RealMotionDashboard({
       );
     } finally {
       setStateLockBusy(false);
+    }
+  }
+
+  async function applyRoutingLocks() {
+    setRoutingBusy(true);
+    setRoutingError('');
+
+    try {
+      const response = await fetch(
+        `/api/projects/${project.id}/pilot-routing-lock`,
+        { method: 'POST', cache: 'no-store' }
+      );
+
+      const data = await response.json() as {
+        ok: boolean;
+        error?: string;
+        project?: FilmProject;
+        routing?: RoutingPreflight;
+      };
+
+      if (!response.ok || !data.ok || !data.project) {
+        throw new Error(
+          data.error || 'No se pudo bloquear el routing del piloto.'
+        );
+      }
+
+      if (data.routing) {
+        setRoutingPreflight(data.routing);
+      }
+      onProjectChange(data.project);
+    } catch (reason) {
+      setRoutingError(
+        reason instanceof Error ? reason.message : 'Error desconocido'
+      );
+    } finally {
+      setRoutingBusy(false);
     }
   }
 
@@ -103,7 +179,7 @@ export default function RealMotionDashboard({
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
           <MetricBox
             icon={<Users />}
             label="Character Bible"
@@ -118,6 +194,11 @@ export default function RealMotionDashboard({
             icon={<LockKeyhole />}
             label="State Lock"
             value={stateLockStatus.readyCount + '/' + stateLockStatus.total}
+          />
+          <MetricBox
+            icon={<Activity />}
+            label="Routing Lock"
+            value={routingLockStatus.readyCount + '/' + routingLockStatus.total}
           />
           <MetricBox
             icon={<Video />}
@@ -230,6 +311,15 @@ export default function RealMotionDashboard({
             }`}>
               State Lock {stateLockStatus.readyCount}/{stateLockStatus.total}
             </span>
+
+            <span className={`w-fit rounded-full px-3 py-1.5 text-xs font-black ${
+              routingLockStatus.ready
+                ? 'bg-emerald-500/10 text-emerald-300'
+                : 'bg-amber-500/10 text-amber-300'
+            }`}>
+              Routing Lock {routingLockStatus.readyCount}/{routingLockStatus.total}
+            </span>
+
             {!stateLockStatus.ready && (
               <button
                 type="button"
@@ -243,12 +333,45 @@ export default function RealMotionDashboard({
                 Bloquear estados
               </button>
             )}
+
+            {!routingLockStatus.ready && (
+              <button
+                type="button"
+                className="button-secondary"
+                disabled={locked || routingBusy}
+                onClick={applyRoutingLocks}
+              >
+                {routingBusy
+                  ? <LoaderCircle className="h-4 w-4 animate-spin" />
+                  : <Activity className="h-4 w-4" />}
+                Bloquear routing
+              </button>
+            )}
           </div>
         </div>
 
         {stateLockError && (
           <div className="mt-4 rounded-2xl border border-red-400/20 bg-red-500/10 p-4 text-sm text-red-200">
             {stateLockError}
+          </div>
+        )}
+
+        {routingError && (
+          <div className="mt-4 rounded-2xl border border-red-400/20 bg-red-500/10 p-4 text-sm text-red-200">
+            {routingError}
+          </div>
+        )}
+
+        {routingPreflight && (
+          <div className={`mt-4 rounded-2xl border p-4 text-sm ${
+            routingPreflight.withinMovieLimit
+              ? 'border-emerald-400/20 bg-emerald-500/[.05] text-emerald-100/80'
+              : 'border-red-400/20 bg-red-500/[.06] text-red-200'
+          }`}>
+            Costo preventivo de las 8 tomas: <strong>US${routingPreflight.estimatedPilotUsd.toFixed(2)}</strong>
+            {' · '}Reservado previamente: US${routingPreflight.reservedMovieUsd.toFixed(2)}
+            {' · '}Proyección: US${routingPreflight.estimatedAfterPilotUsd.toFixed(2)}
+            {' · '}Límite de película: US${routingPreflight.movieLimitUsd.toFixed(2)}
           </div>
         )}
 
@@ -297,6 +420,18 @@ export default function RealMotionDashboard({
                         }`}
                       >
                         {binding.characterName} · {binding.stateLabel}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[10px] font-bold">
+                    <span className="text-slate-600">Routing:</span>
+                    {(shot.motionSpec?.preferredProviders || []).map((provider, index) => (
+                      <span
+                        key={provider}
+                        className="rounded-full bg-cyan-500/10 px-2 py-1 text-cyan-300"
+                      >
+                        {index + 1}. {providerLabel[provider] || provider}
                       </span>
                     ))}
                   </div>
