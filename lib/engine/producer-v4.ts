@@ -661,23 +661,79 @@ async function generateBaseVideo(
 ): Promise<{ outputPath: string; provider: string }> {
   const provider = (process.env.VIDEO_PROVIDER || 'auto').toLowerCase();
   const prompt = `${shot.visualPrompt} Camera: ${shot.camera}. Duration exactly ${shot.durationSeconds} seconds. Generate natural motion only; do not generate dialogue or subtitles.`.trim();
-  const attempts: Array<{ name: string; family: 'google' | 'fal'; enabled: boolean; model?: string; run: () => Promise<unknown> }> = [
+  type VideoAttempt = {
+    id: 'omni' | 'veo' | 'fal-video';
+    name: string;
+    family: 'google' | 'fal';
+    enabled: boolean;
+    model?: string;
+    run: () => Promise<unknown>;
+  };
+
+  const allAttempts: VideoAttempt[] = [
     {
-      name: 'Gemini Omni', family: 'google', model: process.env.GEMINI_OMNI_VIDEO_MODEL,
-      enabled: hasUsableCredential('GEMINI_API_KEY') && (provider === 'auto' || provider === 'omni'),
-      run: () => generateGeminiOmniVideo(referencePaths, prompt, project.input, outputPath)
+      id: 'omni',
+      name: 'Gemini Omni',
+      family: 'google',
+      model: process.env.GEMINI_OMNI_VIDEO_MODEL,
+      enabled:
+        hasUsableCredential('GEMINI_API_KEY') &&
+        (provider === 'auto' || provider === 'omni'),
+      run: () =>
+        generateGeminiOmniVideo(
+          referencePaths,
+          prompt,
+          project.input,
+          outputPath
+        )
     },
     {
-      name: 'Veo', family: 'google', model: process.env.GEMINI_VIDEO_MODEL,
-      enabled: hasUsableCredential('GEMINI_API_KEY') && (provider === 'auto' || provider === 'veo'),
-      run: () => generateVeoVideo(referencePaths[0], prompt, project.input, outputPath, shot.durationSeconds)
+      id: 'veo',
+      name: 'Veo',
+      family: 'google',
+      model: process.env.GEMINI_VIDEO_MODEL,
+      enabled:
+        hasUsableCredential('GEMINI_API_KEY') &&
+        (provider === 'auto' || provider === 'veo'),
+      run: () =>
+        generateVeoVideo(
+          referencePaths[0],
+          prompt,
+          project.input,
+          outputPath,
+          shot.durationSeconds
+        )
     },
     {
-      name: 'Fal.ai video general', family: 'fal', model: process.env.FAL_VIDEO_MODEL,
-      enabled: hasUsableCredential('FAL_KEY') && (provider === 'auto' || provider === 'fal'),
-      run: () => generateFalVideo(referencePaths[0], prompt, outputPath, shot.durationSeconds)
+      id: 'fal-video',
+      name: 'Fal.ai video general',
+      family: 'fal',
+      model: process.env.FAL_VIDEO_MODEL,
+      enabled:
+        hasUsableCredential('FAL_KEY') &&
+        (provider === 'auto' || provider === 'fal'),
+      run: () =>
+        generateFalVideo(
+          referencePaths[0],
+          prompt,
+          outputPath,
+          shot.durationSeconds
+        )
     }
   ];
+
+  const preferredProviders =
+    shot.motionSpec?.preferredProviders?.filter(
+      (providerId) =>
+        providerId === 'veo' || providerId === 'fal-video'
+    ) || [];
+
+  const attempts =
+    preferredProviders.length > 0
+      ? preferredProviders.flatMap((providerId) =>
+          allAttempts.filter((attempt) => attempt.id === providerId)
+        )
+      : allAttempts;
   const errors: string[] = [];
   const allowFallback = process.env.ALLOW_PAID_PROVIDER_FALLBACK === 'true';
 
