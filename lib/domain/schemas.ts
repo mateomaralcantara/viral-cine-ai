@@ -97,7 +97,8 @@ export const CharacterEvolutionStateSchema = z.object({
   appearance: z.string().trim().min(10).max(1200),
   wardrobe: z.string().trim().min(5).max(800),
   physicalCondition: z.string().trim().min(2).max(500),
-  performanceNotes: z.string().trim().min(2).max(600)
+  performanceNotes: z.string().trim().min(2).max(600),
+  referenceAsset: z.string().optional()
 });
 
 export const CharacterBibleEntrySchema = z.object({
@@ -106,6 +107,9 @@ export const CharacterBibleEntrySchema = z.object({
   identityLock: z.string().trim().min(20).max(1800),
   immutableTraits: z.array(z.string().trim().min(2).max(220)).min(3).max(20),
   forbiddenDrift: z.array(z.string().trim().min(2).max(220)).min(1).max(20),
+  masterReferenceAsset: z.string().optional(),
+  identityApproved: z.boolean().optional(),
+  identityApprovedAt: z.string().optional(),
   states: z.array(CharacterEvolutionStateSchema).min(1).max(8)
 });
 

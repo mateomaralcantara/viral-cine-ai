@@ -2,6 +2,8 @@
 
 import { ShieldCheck, Users, Video, Music2, Activity } from 'lucide-react';
 import type { FilmProject } from '@/lib/domain/schemas';
+import CharacterIdentityLockPanel from '@/components/CharacterIdentityLockPanel';
+import { getIdentityLockStatus } from '@/lib/engine/preflight-identity-check';
 
 type SystemLike = {
   veo?: boolean;
@@ -10,12 +12,17 @@ type SystemLike = {
 
 export default function RealMotionDashboard({
   project,
-  system
+  system,
+  locked,
+  onProjectChange
 }: {
   project: FilmProject;
   system: SystemLike | null;
+  locked: boolean;
+  onProjectChange: (project: FilmProject) => void;
 }) {
   const plan = project.plan?.realMotion;
+  const identityStatus = getIdentityLockStatus(project);
 
   if (!plan) {
     return (
@@ -62,11 +69,16 @@ export default function RealMotionDashboard({
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <MetricBox
             icon={<Users />}
             label="Character Bible"
             value={plan.characterBible.length + '/5'}
+          />
+          <MetricBox
+            icon={<ShieldCheck />}
+            label="Identity Lock"
+            value={identityStatus.approved + '/' + identityStatus.required}
           />
           <MetricBox
             icon={<Video />}
@@ -115,6 +127,12 @@ export default function RealMotionDashboard({
           </p>
         </div>
       </section>
+
+      <CharacterIdentityLockPanel
+        project={project}
+        locked={locked}
+        onProjectChange={onProjectChange}
+      />
 
       <section className="panel rounded-3xl p-5 md:p-6">
         <div className="flex items-center gap-3">

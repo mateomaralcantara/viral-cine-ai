@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import type { FilmProject, FilmScene, ProjectInput } from '@/lib/domain/schemas';
 import RealMotionDashboard from '@/components/RealMotionDashboard';
+import { getIdentityLockStatus } from '@/lib/engine/preflight-identity-check';
 
 type SystemStatus = {
   mode: 'demo' | 'real';
@@ -271,6 +272,8 @@ function ProjectStudio(props: {
   const safeToProduce = Boolean(system?.ffmpeg) && (
     Boolean(system?.paidGenerationEnabled) || (system?.mode === 'demo' && !hasPaidHistory)
   );
+  const identityStatus = getIdentityLockStatus(project);
+  const identityReady = !project.plan?.realMotion || identityStatus.ready;
 
   function updateScene(index: number, changes: Partial<FilmScene>) {
     setProject((current) => {
@@ -296,19 +299,20 @@ function ProjectStudio(props: {
               {!project.plan && <button className="button-primary" onClick={onPlan} disabled={Boolean(busy) || locked || (system?.mode === 'real' && !system.paidGenerationEnabled)}>{busy === 'plan' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <WandSparkles className="h-4 w-4" />} Crear guion completo</button>}
               {project.plan && !locked && <button className="button-secondary" onClick={onSave} disabled={Boolean(busy)}>{busy === 'save' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Guardar cambios</button>}
               {project.plan && !locked && project.status === 'quality-review' && <button className="button-secondary" onClick={() => onProduce('approve')} disabled={Boolean(busy) || !safeToProduce}><Check className="h-4 w-4" /> Usar esta toma y continuar sin cobrar</button>}
-              {project.plan && !locked && project.status !== 'ready' && project.status !== 'quality-review' && <button className="button-primary" onClick={() => onProduce('start')} disabled={Boolean(busy) || !safeToProduce} title={!safeToProduce ? system?.safetyReason : undefined}>{busy === 'produce' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} Iniciar producción</button>}
+              {project.plan && !locked && project.status !== 'ready' && project.status !== 'quality-review' && <button className="button-primary" onClick={() => onProduce('start')} disabled={Boolean(busy) || !safeToProduce || !identityReady} title={!identityReady ? `Identity Lock incompleto: ${identityStatus.approved}/${identityStatus.required}` : !safeToProduce ? system?.safetyReason : undefined}>{busy === 'produce' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} Iniciar producción</button>}
             </div>
           </div>
           <div className="mt-6 h-2 overflow-hidden rounded-full bg-black/30"><div className="h-full rounded-full bg-gradient-to-r from-violet-500 via-blue-500 to-cyan-400 transition-all duration-700" style={{ width: `${project.progress.percent}%` }} /></div><div className="mt-2 flex items-center justify-between gap-3 text-xs text-slate-500"><span>{project.progress.message}</span><span>{project.progress.percent}%</span></div>
         </div>
         {!safeToProduce && <div className="border-t border-emerald-400/20 bg-emerald-500/[.07] px-5 py-3 text-sm text-emerald-200"><ShieldCheck className="mr-2 inline h-4 w-4" />Producción bloqueada: {hasPaidHistory && system?.mode === 'demo' ? 'este proyecto contiene material pagado y no se sobrescribirá en modo demo.' : system?.safetyReason || 'la configuración segura no autoriza llamadas pagadas.'}</div>}
+        {project.plan?.realMotion && !identityReady && <div className="border-t border-amber-400/20 bg-amber-500/[.07] px-5 py-3 text-sm text-amber-200"><ShieldCheck className="mr-2 inline h-4 w-4" />Identity Lock incompleto: {identityStatus.approved}/{identityStatus.required}. La producción permanecerá bloqueada hasta aprobar todas las referencias maestras.</div>}
         <div className="grid grid-cols-2 divide-x divide-y divide-white/10 sm:grid-cols-4 sm:divide-y-0"><MiniMetric icon={<Clock3 />} value={`${Math.round(duration / 60)} min`} label="Duración" /><MiniMetric icon={<ListVideo />} value={project.plan ? `${project.plan.scenes.length} / ${totalShots}` : '—'} label="Escenas / tomas" /><MiniMetric icon={<Users />} value={`${project.plan?.characters.length || '—'}`} label="Personajes" /><MiniMetric icon={<Coins />} value={project.budget ? `US$${project.budget.estimatedUsd}` : `US$${project.input.budgetUsd}`} label="Estimado" /></div>
       </section>
 
       <nav className="panel flex gap-1 overflow-auto rounded-2xl p-1.5"><Tab active={tab === 'overview'} onClick={() => setTab('overview')} icon={<Activity />} label="Dirección" /><Tab active={tab === 'real-motion'} onClick={() => setTab('real-motion')} icon={<Video />} label="Real Motion 5.0" /><Tab active={tab === 'script'} onClick={() => setTab('script')} icon={<Clapperboard />} label="Guion y escenas" /><Tab active={tab === 'production'} onClick={() => setTab('production')} icon={<Play />} label="Producción y exportación" /></nav>
 
       {tab === 'overview' && <Overview project={project} system={system} onPlan={onPlan} busy={busy} />}
-      {tab === 'real-motion' && <RealMotionDashboard project={project} system={system} />}
+      {tab === 'real-motion' && <RealMotionDashboard project={project} system={system} locked={locked} onProjectChange={(next) => setProject(next)} />}
       {tab === 'script' && <ScriptEditor project={project} locked={locked} updateScene={updateScene} />}
       {tab === 'production' && <Production project={project} system={system} />}
     </div>
