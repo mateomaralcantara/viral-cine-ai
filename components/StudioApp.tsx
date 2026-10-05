@@ -314,7 +314,13 @@ function ProjectStudio(props: {
       {tab === 'overview' && <Overview project={project} system={system} onPlan={onPlan} busy={busy} />}
       {tab === 'real-motion' && <RealMotionDashboard project={project} system={system} locked={locked} onProjectChange={(next) => setProject(next)} />}
       {tab === 'script' && <ScriptEditor project={project} locked={locked} updateScene={updateScene} />}
-      {tab === 'production' && <Production project={project} system={system} />}
+      {tab === 'production' && (
+        <Production
+          project={project}
+          system={system}
+          onProjectChange={(next) => setProject(next)}
+        />
+      )}
     </div>
   );
 }
@@ -365,7 +371,18 @@ function ScriptEditor({ project, locked, updateScene }: { project: FilmProject; 
   })}</div>;
 }
 
-function Production({ project, system }: { project: FilmProject; system: SystemStatus | null }) {
+function Production({
+  project,
+  system,
+  onProjectChange
+}: {
+  project: FilmProject;
+  system: SystemStatus | null;
+  onProjectChange: (project: FilmProject) => void;
+}) {
+  const [reviewBusy, setReviewBusy] = useState('');
+  const [reviewActionError, setReviewActionError] = useState('');
+
   const allShots = project.plan?.scenes.flatMap((scene) => scene.shots) || [];
   const readyShots = allShots.filter((shot) => shot.status === 'ready').length;
   const reviewScene = project.plan?.scenes.find((scene) => scene.status === 'review-required');
@@ -373,9 +390,112 @@ function Production({ project, system }: { project: FilmProject; system: SystemS
   const reviewAsset = reviewShot?.videoAsset || reviewScene?.videoAsset;
   const reviewScore = reviewShot?.qualityScore ?? reviewScene?.qualityScore ?? 0;
   const reviewIssues = reviewShot?.qualityIssues || reviewScene?.qualityIssues || [];
+  const shotOneRetry =
+    reviewShot?.id === 'pilot-15d-01' &&
+    project.plan?.realMotion;
+
+  async function prepareShotOneRetry() {
+    setReviewBusy('prepare-retry');
+    setReviewActionError('');
+    try {
+      const data = await api(
+        `/api/projects/${project.id}/pilot-shot-one`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ action: 'prepare-retry' })
+        }
+      );
+      onProjectChange(data.project);
+    } catch (reason) {
+      setReviewActionError(messageOf(reason));
+    } finally {
+      setReviewBusy('');
+    }
+  }
+
+  async function runShotOneRetry() {
+    const cap = project.pilot?.maxSpendUsd || 0;
+    const confirmed = window.confirm(
+      `Autorizar el SEGUNDO Y ÚLTIMO intento controlado de “La moneda”?\n\nTope acumulado del piloto: US${cap.toFixed(2)}.\nEl primer intento será archivado antes de regenerar.`
+    );
+    if (!confirmed) return;
+
+    setReviewBusy('retry');
+    setReviewActionError('');
+    try {
+      const data = await api(
+        `/api/projects/${project.id}/produce`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ decision: 'retry' })
+        }
+      );
+      onProjectChange(data.project);
+    } catch (reason) {
+      setReviewActionError(messageOf(reason));
+    } finally {
+      setReviewBusy('');
+    }
+  }
+
   return <div className="grid gap-5 xl:grid-cols-[1fr_360px]"><div className="space-y-5">
     {project.finalVideoAsset ? <div className="panel rounded-3xl p-5 md:p-6"><div className="flex items-center justify-between"><div><div className="text-sm font-bold text-emerald-300">PRODUCCIÓN TERMINADA</div><h2 className="mt-1 text-2xl font-black">Película final</h2></div><a className="button-primary" href={assetUrl(project.id, project.finalVideoAsset)} download><Download className="h-4 w-4" /> Descargar MP4</a></div><video className="mt-5 aspect-video w-full rounded-2xl bg-black" controls src={assetUrl(project.id, project.finalVideoAsset)} /></div>
-      : reviewScene ? <div className="panel rounded-3xl border border-amber-400/25 p-5 md:p-6"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="text-sm font-bold text-amber-300">APROBACIÓN REQUERIDA</div><h2 className="mt-1 text-2xl font-black">Escena {reviewScene.order}{reviewShot ? ` · Toma ${reviewShot.order}` : ''}: {reviewShot?.title || reviewScene.title}</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">La toma recibió {reviewScore}/10. El modo ahorro no hará otro intento automático. Si decides usarla, se guardará como checkpoint aprobado y avanzará sin generar ni cobrar nuevamente.</p></div><span className="rounded-full bg-red-500/10 px-3 py-1.5 text-sm font-black text-red-300">{reviewScore}/10</span></div>{reviewAsset && <video className="mt-5 aspect-video w-full rounded-2xl bg-black" controls src={assetUrl(project.id, reviewAsset)} />}{reviewIssues.length ? <div className="mt-5 rounded-2xl bg-amber-500/[.06] p-4"><div className="text-xs font-black uppercase tracking-wider text-amber-300">Correcciones solicitadas por el supervisor IA</div><ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-amber-100/70">{reviewIssues.map((issue) => <li key={issue}>{issue}</li>)}</ul></div> : null}</div>
+      : reviewScene ? <div className="panel rounded-3xl border border-amber-400/25 p-5 md:p-6"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="text-sm font-bold text-amber-300">APROBACIÓN REQUERIDA</div><h2 className="mt-1 text-2xl font-black">Escena {reviewScene.order}{reviewShot ? ` · Toma ${reviewShot.order}` : ''}: {reviewShot?.title || reviewScene.title}</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">La toma recibió {reviewScore}/10. El modo ahorro no hará otro intento automático. Si decides usarla, se guardará como checkpoint aprobado y avanzará sin generar ni cobrar nuevamente.</p></div><span className="rounded-full bg-red-500/10 px-3 py-1.5 text-sm font-black text-red-300">{reviewScore}/10</span></div>{reviewAsset && <video className="mt-5 aspect-video w-full rounded-2xl bg-black" controls src={assetUrl(project.id, reviewAsset)} />}{reviewIssues.length ? <div className="mt-5 rounded-2xl bg-amber-500/[.06] p-4"><div className="text-xs font-black uppercase tracking-wider text-amber-300">Correcciones solicitadas por el supervisor IA</div><ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-amber-100/70">{reviewIssues.map((issue) => <li key={issue}>{issue}</li>)}</ul></div> : null}
+        {shotOneRetry && (
+          <div className="mt-5 rounded-2xl border border-cyan-400/20 bg-cyan-500/[.05] p-4">
+            <div className="text-xs font-black uppercase tracking-wider text-cyan-300">
+              CORRECCIÓN CONTROLADA · TOMA 1
+            </div>
+            <p className="mt-2 text-sm leading-6 text-slate-400">
+              La corrección V2 refuerza la identidad FACE + BODY, obliga a que
+              la moneda sea visible, elimina la caminata/manos en bolsillos y
+              fija la cámara baja→media. No se ejecuta ningún gasto hasta que
+              autorices el segundo intento.
+            </p>
+
+            {reviewActionError && (
+              <div className="mt-3 rounded-xl border border-red-400/20 bg-red-500/10 p-3 text-sm text-red-200">
+                {reviewActionError}
+              </div>
+            )}
+
+            <div className="mt-4 flex flex-wrap gap-3">
+              {!reviewShot?.qualityForceRegenerate ? (
+                <button
+                  type="button"
+                  className="button-secondary"
+                  disabled={reviewBusy !== ''}
+                  onClick={prepareShotOneRetry}
+                >
+                  {reviewBusy === 'prepare-retry'
+                    ? <LoaderCircle className="h-4 w-4 animate-spin" />
+                    : <WandSparkles className="h-4 w-4" />}
+                  Preparar corrección V2
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="button-primary"
+                  disabled={reviewBusy !== ''}
+                  onClick={runShotOneRetry}
+                >
+                  {reviewBusy === 'retry'
+                    ? <LoaderCircle className="h-4 w-4 animate-spin" />
+                    : <Video className="h-4 w-4" />}
+                  GENERAR SEGUNDO INTENTO
+                </button>
+              )}
+            </div>
+
+            {reviewShot?.qualityForceRegenerate && (
+              <div className="mt-3 text-xs font-bold text-emerald-300">
+                Corrección V2 preparada · segundo intento aún NO ejecutado ·
+                tope acumulado US${project.pilot?.maxSpendUsd?.toFixed(2) || '—'}.
+              </div>
+            )}
+          </div>
+        )}
+      </div>
       : <div className="panel rounded-3xl p-8 text-center"><div className="mx-auto grid h-16 w-16 place-items-center rounded-3xl bg-blue-500/10"><Film className="h-7 w-7 text-blue-300" /></div><h2 className="mt-5 text-2xl font-black">{['queued', 'producing', 'composing'].includes(project.status) ? 'La productora está trabajando' : 'Aún no se ha producido la película'}</h2><p className="mx-auto mt-2 max-w-lg text-slate-400">{project.progress.message}</p><div className="mx-auto mt-6 max-w-xl"><div className="h-3 overflow-hidden rounded-full bg-white/5"><div className="h-full rounded-full bg-gradient-to-r from-violet-500 to-cyan-400" style={{ width: `${project.progress.percent}%` }} /></div><div className="mt-2 flex justify-between text-xs text-slate-600"><span>{readyShots} de {allShots.length} tomas terminadas</span><span>{project.progress.percent}%</span></div></div></div>}
     {project.plan && <div className="panel rounded-3xl p-5"><h3 className="font-black">Rollo de escenas y tomas</h3><div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{project.plan.scenes.map((scene) => { const sceneReady = scene.shots.filter((shot) => shot.status === 'ready').length; return <div key={scene.id} className={`flex items-center gap-3 rounded-xl border bg-black/20 p-3 ${scene.status === 'review-required' ? 'border-amber-400/35' : 'border-white/10'}`}><span className={`h-2 w-2 rounded-full ${scene.status === 'ready' ? 'bg-emerald-400' : scene.status === 'rendering' ? 'animate-pulse bg-amber-400' : scene.status === 'review-required' ? 'animate-pulse bg-orange-400' : scene.status === 'failed' ? 'bg-red-400' : 'bg-slate-700'}`} /><span className="min-w-0 flex-1 truncate text-sm">{scene.order}. {scene.title}</span><span className="text-[10px] font-bold text-cyan-300">{sceneReady}/{scene.shots.length}</span><span className="text-[10px] text-slate-600">{scene.durationSeconds}s</span></div>; })}</div></div>}
   </div><aside className="space-y-5"><SystemCard system={system} /><div className="panel rounded-3xl p-5"><h3 className="font-black">Registro de producción</h3><div className="mt-4 max-h-[460px] space-y-3 overflow-auto pr-2">{project.productionLog.slice().reverse().map((entry, index) => <div key={`${entry}-${index}`} className="border-l border-white/10 pl-3 text-xs leading-5 text-slate-500">{entry}</div>)}</div></div></aside></div>;
