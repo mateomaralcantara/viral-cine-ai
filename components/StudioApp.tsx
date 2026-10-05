@@ -207,19 +207,31 @@ function ProjectRail({ projects, selectedId, onSelect }: { projects: FilmProject
   );
 }
 
-function Welcome({ onCreate }: { onCreate: () => void }) {
+function Welcome({ onCreate, onCreateFifteenDays, presetBusy }: { onCreate: () => void; onCreateFifteenDays: () => void; presetBusy: boolean }) {
   return (
-    <div className="panel grid min-h-[620px] place-items-center rounded-3xl p-8 text-center"><div className="max-w-xl"><div className="mx-auto grid h-20 w-20 place-items-center rounded-[28px] bg-gradient-to-br from-violet-500/25 to-blue-500/15"><WandSparkles className="h-9 w-9 text-violet-300" /></div><h1 className="mt-7 text-4xl font-black tracking-tight">Convierte una idea en una película.</h1><p className="mt-4 text-lg leading-8 text-slate-400">Guion, personajes, avatares, tomas de video real, narración, música, montaje y exportación en un solo flujo.</p><button className="button-primary mt-7" onClick={onCreate}><Sparkles className="h-4 w-4" /> Crear primera producción</button></div></div>
+    <div className="panel grid min-h-[620px] place-items-center rounded-3xl p-8 text-center">
+      <div className="max-w-2xl">
+        <div className="mx-auto grid h-20 w-20 place-items-center rounded-[28px] bg-gradient-to-br from-violet-500/25 to-blue-500/15"><WandSparkles className="h-9 w-9 text-violet-300" /></div>
+        <div className="mt-6 inline-flex rounded-full border border-cyan-400/20 bg-cyan-400/[.07] px-3 py-1 text-xs font-black text-cyan-300">VIRALCINE 5.0 · REAL MOTION</div>
+        <h1 className="mt-4 text-4xl font-black tracking-tight">Convierte una idea en una película.</h1>
+        <p className="mt-4 text-lg leading-8 text-slate-400">Guion, personajes, tomas de video generativo real, narración, música, montaje y exportación en un solo flujo.</p>
+        <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
+          <button className="button-primary" onClick={onCreateFifteenDays} disabled={presetBusy}>{presetBusy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Video className="h-4 w-4" />} Crear piloto “15 DÍAS”</button>
+          <button className="button-secondary" onClick={onCreate}><Sparkles className="h-4 w-4" /> Nueva producción</button>
+        </div>
+        <p className="mt-4 text-xs leading-5 text-slate-600">Instala Character Bible, Emotional Score y 8 tomas Real Motion sin ejecutar APIs pagadas.</p>
+      </div>
+    </div>
   );
 }
 
-function CreateProject({ onSubmit, busy }: { onSubmit: (input: ProjectInput) => Promise<void>; busy: boolean }) {
+function CreateProject({ onSubmit, onCreateFifteenDays, busy, presetBusy }: { onSubmit: (input: ProjectInput) => Promise<void>; onCreateFifteenDays: () => void; busy: boolean; presetBusy: boolean }) {
   const [input, setInput] = useState<ProjectInput>(initialInput);
   const valid = input.title.trim().length >= 3 && input.premise.trim().length >= 20;
   const set = <K extends keyof ProjectInput>(key: K, value: ProjectInput[K]) => setInput((current) => ({ ...current, [key]: value }));
   return (
     <div className="panel rounded-3xl p-5 md:p-8">
-      <div className="max-w-3xl"><div className="text-sm font-bold text-violet-300">NUEVA PRODUCCIÓN</div><h1 className="mt-2 text-3xl font-black tracking-tight md:text-5xl">Dale una premisa. El estudio construye el resto.</h1><p className="mt-3 text-slate-400">Produce audiovisuales de 5 a 120 minutos mediante escenas persistentes y reanudables.</p></div>
+      <div className="max-w-3xl"><div className="text-sm font-bold text-violet-300">NUEVA PRODUCCIÓN</div><h1 className="mt-2 text-3xl font-black tracking-tight md:text-5xl">Dale una premisa. El estudio construye el resto.</h1><p className="mt-3 text-slate-400">Produce audiovisuales de 5 a 120 minutos mediante escenas persistentes y reanudables.</p><button type="button" className="button-secondary mt-5" onClick={onCreateFifteenDays} disabled={presetBusy}>{presetBusy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Clapperboard className="h-4 w-4" />} Instalar piloto “15 DÍAS” Real Motion 5.0</button></div>
       <div className="mt-8 grid gap-5 xl:grid-cols-[1.1fr_.9fr]">
         <div className="space-y-5">
           <Field label="Título de la película"><input className="field" value={input.title} onChange={(event) => set('title', event.target.value)} placeholder="Ej.: El hombre que aprendió a comenzar" /></Field>
