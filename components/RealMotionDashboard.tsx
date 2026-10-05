@@ -1,9 +1,11 @@
 'use client';
 
-import { ShieldCheck, Users, Video, Music2, Activity } from 'lucide-react';
+import { useState } from 'react';
+import { ShieldCheck, Users, Video, Music2, Activity, LockKeyhole, LoaderCircle } from 'lucide-react';
 import type { FilmProject } from '@/lib/domain/schemas';
 import CharacterIdentityLockPanel from '@/components/CharacterIdentityLockPanel';
 import { getIdentityLockStatus } from '@/lib/engine/preflight-identity-check';
+import { getPilotStateLockStatus } from '@/lib/engine/pilot-state-lock-v5';
 
 type SystemLike = {
   veo?: boolean;
@@ -23,6 +25,38 @@ export default function RealMotionDashboard({
 }) {
   const plan = project.plan?.realMotion;
   const identityStatus = getIdentityLockStatus(project);
+  const stateLockStatus = getPilotStateLockStatus(project);
+  const [stateLockBusy, setStateLockBusy] = useState(false);
+  const [stateLockError, setStateLockError] = useState('');
+
+  async function applyStateLocks() {
+    setStateLockBusy(true);
+    setStateLockError('');
+
+    try {
+      const response = await fetch(
+        `/api/projects/${project.id}/pilot-state-lock`,
+        { method: 'POST', cache: 'no-store' }
+      );
+      const data = await response.json() as {
+        ok: boolean;
+        error?: string;
+        project?: FilmProject;
+      };
+
+      if (!response.ok || !data.ok || !data.project) {
+        throw new Error(data.error || 'No se pudieron bloquear los estados del piloto.');
+      }
+
+      onProjectChange(data.project);
+    } catch (reason) {
+      setStateLockError(
+        reason instanceof Error ? reason.message : 'Error desconocido'
+      );
+    } finally {
+      setStateLockBusy(false);
+    }
+  }
 
   if (!plan) {
     return (
@@ -69,7 +103,7 @@ export default function RealMotionDashboard({
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
           <MetricBox
             icon={<Users />}
             label="Character Bible"
@@ -79,6 +113,11 @@ export default function RealMotionDashboard({
             icon={<ShieldCheck />}
             label="Identity Lock"
             value={identityStatus.approved + '/' + identityStatus.required}
+          />
+          <MetricBox
+            icon={<LockKeyhole />}
+            label="State Lock"
+            value={stateLockStatus.readyCount + '/' + stateLockStatus.total}
           />
           <MetricBox
             icon={<Video />}
@@ -171,25 +210,64 @@ export default function RealMotionDashboard({
                 ))}
               </div>
             </article>
-          ))}
+            );
+          })}
         </div>
       </section>
 
       <section className="panel rounded-3xl p-5 md:p-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h2 className="text-xl font-black">Piloto · primeras 8 tomas</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Ninguna puede aprobarse como FINAL si proviene de una imagen estática animada.
+              Cada actor queda asociado al estado narrativo exacto de esa toma antes de producir.
             </p>
           </div>
-          <span className="w-fit rounded-full bg-cyan-500/10 px-3 py-1.5 text-xs font-black text-cyan-300">
-            {pilotRows.length}/8 preparadas
-          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`w-fit rounded-full px-3 py-1.5 text-xs font-black ${
+              stateLockStatus.ready
+                ? 'bg-emerald-500/10 text-emerald-300'
+                : 'bg-amber-500/10 text-amber-300'
+            }`}>
+              State Lock {stateLockStatus.readyCount}/{stateLockStatus.total}
+            </span>
+            {!stateLockStatus.ready && (
+              <button
+                type="button"
+                className="button-secondary"
+                disabled={locked || stateLockBusy}
+                onClick={applyStateLocks}
+              >
+                {stateLockBusy
+                  ? <LoaderCircle className="h-4 w-4 animate-spin" />
+                  : <LockKeyhole className="h-4 w-4" />}
+                Bloquear estados
+              </button>
+            )}
+          </div>
         </div>
 
+        {stateLockError && (
+          <div className="mt-4 rounded-2xl border border-red-400/20 bg-red-500/10 p-4 text-sm text-red-200">
+            {stateLockError}
+          </div>
+        )}
+
         <div className="mt-5 grid gap-3 lg:grid-cols-2">
-          {pilotRows.map(({ scene, shot }) => (
+          {pilotRows.map(({ scene, shot }) => {
+            const bindings = shot.characterIds.map((characterId) => {
+              const character = plan.characterBible.find(
+                (entry) => entry.characterId === characterId
+              );
+              const stateId = shot.characterStateIds?.[characterId];
+              const state = character?.states.find((item) => item.id === stateId);
+              return {
+                characterName: character?.name || characterId,
+                stateLabel: state?.label || 'SIN ESTADO'
+              };
+            });
+
+            return (
             <article
               key={shot.id}
               className="rounded-2xl border border-white/10 bg-black/20 p-4"
@@ -208,6 +286,22 @@ export default function RealMotionDashboard({
                   <p className="mt-2 text-sm leading-6 text-slate-400">
                     {shot.motionSpec?.intention}
                   </p>
+
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {bindings.map((binding) => (
+                      <span
+                        key={binding.characterName}
+                        className={`rounded-full px-2 py-1 text-[10px] font-bold ${
+                          binding.stateLabel === 'SIN ESTADO'
+                            ? 'bg-red-500/10 text-red-300'
+                            : 'bg-violet-500/10 text-violet-300'
+                        }`}
+                      >
+                        {binding.characterName} · {binding.stateLabel}
+                      </span>
+                    ))}
+                  </div>
+
                   <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-slate-500">
                     <span>Motion ≥ {shot.motionSpec?.minMotionScore}/10</span>
                     <span>Identidad ≥ {shot.motionSpec?.minIdentityScore}/10</span>
