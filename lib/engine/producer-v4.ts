@@ -10,7 +10,11 @@ import {
 } from '@/lib/storage/project-store';
 import { generateImage, generateImageWithReferences } from '@/lib/providers/openai-media';
 import { generateFalMusic, generateFalVideo } from '@/lib/providers/fal-media';
-import { generateVeoVideo } from '@/lib/providers/veo';
+import {
+  generateVeoVideo,
+  isVeoNoChargeFailure,
+  isVeoQuotaFailure
+} from '@/lib/providers/veo';
 import { generateGeminiOmniVideo } from '@/lib/providers/google-omni';
 import { isGooglePrepayDepleted } from '@/lib/providers/fal-compat';
 import {
@@ -42,7 +46,11 @@ import {
 } from '@/lib/engine/quality-review';
 import { preflightPlan } from '@/lib/engine/shot-plan';
 import { estimateBudget } from '@/lib/engine/budget';
-import { assertEstimatedBudgetAllowed, reserveShotGeneration } from '@/lib/engine/spend-guard';
+import {
+  assertEstimatedBudgetAllowed,
+  releaseNoChargeGenerationReservation,
+  reserveShotGeneration
+} from '@/lib/engine/spend-guard';
 import {
   assertPaidGenerationAllowed,
   assertProductionCanQueue,
@@ -819,18 +827,54 @@ async function generateBaseVideo(
     } catch (error) {
       const message = messageOf(error);
       errors.push(`${attempt.name}: ${message}`);
+
+      const safeNoCharge =
+        attempt.id === 'veo' &&
+        (isVeoQuotaFailure(error) || isVeoNoChargeFailure(error));
+
       if (submitted) {
-        shot.lastGenerationState = 'failed-unknown';
-        await appendSpend(project.id, {
-          operation: 'video', provider: attempt.name, model: attempt.model,
-          state: 'failed-unknown', estimatedUsd: reservedUsd, sceneId: scene.id, shotId: shot.id,
-          idempotencyKey: idempotencyKey || `video:${shot.id}:unknown`, error: message
-        });
+        if (safeNoCharge) {
+          releaseNoChargeGenerationReservation(shot, reservedUsd);
+          await appendSpend(project.id, {
+            operation: 'video',
+            provider: attempt.name,
+            model: attempt.model,
+            state: 'failed-no-charge',
+            estimatedUsd: reservedUsd,
+            actualUsd: 0,
+            sceneId: scene.id,
+            shotId: shot.id,
+            idempotencyKey:
+              idempotencyKey || `video:${shot.id}:unknown`,
+            error: message
+          });
+        } else {
+          shot.lastGenerationState = 'failed-unknown';
+          await appendSpend(project.id, {
+            operation: 'video',
+            provider: attempt.name,
+            model: attempt.model,
+            state: 'failed-unknown',
+            estimatedUsd: reservedUsd,
+            sceneId: scene.id,
+            shotId: shot.id,
+            idempotencyKey:
+              idempotencyKey || `video:${shot.id}:unknown`,
+            error: message
+          });
+        }
         await saveProject(project);
       }
+
       if (attempt.family === 'google' && isGooglePrepayDepleted(message)) {
         googleBillingBlockedUntil = Date.now() + GOOGLE_BILLING_COOLDOWN_MS;
       }
+
+      // Un fallo Veo confirmado como no-cobrable puede pasar al siguiente
+      // proveedor de la ruta sin duplicar gasto. Cualquier estado de cobro
+      // desconocido sigue deteniendo la toma.
+      if (safeNoCharge) continue;
+
       const kind = classifyProductionError(error);
       if (kind !== 'technical' || !allowFallback) throw error;
     }
