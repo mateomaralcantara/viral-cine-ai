@@ -7,6 +7,7 @@ import {
   Save, Settings2, ShieldCheck, Sparkles, Trash2, Users, Video, WandSparkles, XCircle
 } from 'lucide-react';
 import type { FilmProject, FilmScene, ProjectInput } from '@/lib/domain/schemas';
+import RealMotionDashboard from '@/components/RealMotionDashboard';
 
 type SystemStatus = {
   mode: 'demo' | 'real';
@@ -76,6 +77,15 @@ export default function StudioApp() {
     });
   }
 
+  async function createFifteenDaysPilot() {
+    await action('create-15dias', async () => {
+      const data = await api('/api/projects/presets/15-dias', { method: 'POST' });
+      setProject(data.project);
+      setCreating(false);
+      await refreshProjects();
+    });
+  }
+
   async function plan() {
     if (!project) return;
     await action('plan', async () => {
@@ -134,7 +144,7 @@ export default function StudioApp() {
         <section className="min-w-0">
           {error && <div className="mb-4 flex items-start gap-3 rounded-2xl border border-red-400/25 bg-red-500/10 p-4 text-sm text-red-200"><XCircle className="mt-0.5 h-4 w-4 shrink-0" />{error}</div>}
           {creating || (!project && projects.length === 0) ? (
-            <CreateProject onSubmit={create} busy={busy === 'create'} />
+            <CreateProject onSubmit={create} onCreateFifteenDays={createFifteenDaysPilot} busy={busy === 'create'} presetBusy={busy === 'create-15dias'} />
           ) : project ? (
             <ProjectStudio
               project={project}
@@ -148,7 +158,7 @@ export default function StudioApp() {
               onRefresh={() => refreshProject(project.id)}
             />
           ) : (
-            <Welcome onCreate={() => setCreating(true)} />
+            <Welcome onCreate={() => setCreating(true)} onCreateFifteenDays={createFifteenDaysPilot} presetBusy={busy === 'create-15dias'} />
           )}
         </section>
       </div>
@@ -241,7 +251,7 @@ function ProjectStudio(props: {
   onDelete: () => void; onRefresh: () => Promise<void>;
 }) {
   const { project, setProject, system, busy, onPlan, onSave, onProduce, onDelete, onRefresh } = props;
-  const [tab, setTab] = useState<'overview' | 'script' | 'production'>('overview');
+  const [tab, setTab] = useState<'overview' | 'real-motion' | 'script' | 'production'>('overview');
   const locked = ['planning', 'queued', 'producing', 'composing'].includes(project.status);
   const duration = project.plan?.scenes.reduce((sum, scene) => sum + scene.durationSeconds, 0) || project.input.durationMinutes * 60;
   const totalShots = project.plan?.scenes.reduce((sum, scene) => sum + scene.shots.length, 0) || 0;
@@ -283,9 +293,10 @@ function ProjectStudio(props: {
         <div className="grid grid-cols-2 divide-x divide-y divide-white/10 sm:grid-cols-4 sm:divide-y-0"><MiniMetric icon={<Clock3 />} value={`${Math.round(duration / 60)} min`} label="Duración" /><MiniMetric icon={<ListVideo />} value={project.plan ? `${project.plan.scenes.length} / ${totalShots}` : '—'} label="Escenas / tomas" /><MiniMetric icon={<Users />} value={`${project.plan?.characters.length || '—'}`} label="Personajes" /><MiniMetric icon={<Coins />} value={project.budget ? `US$${project.budget.estimatedUsd}` : `US$${project.input.budgetUsd}`} label="Estimado" /></div>
       </section>
 
-      <nav className="panel flex gap-1 overflow-auto rounded-2xl p-1.5"><Tab active={tab === 'overview'} onClick={() => setTab('overview')} icon={<Activity />} label="Dirección" /><Tab active={tab === 'script'} onClick={() => setTab('script')} icon={<Clapperboard />} label="Guion y escenas" /><Tab active={tab === 'production'} onClick={() => setTab('production')} icon={<Video />} label="Producción y exportación" /></nav>
+      <nav className="panel flex gap-1 overflow-auto rounded-2xl p-1.5"><Tab active={tab === 'overview'} onClick={() => setTab('overview')} icon={<Activity />} label="Dirección" /><Tab active={tab === 'real-motion'} onClick={() => setTab('real-motion')} icon={<Video />} label="Real Motion 5.0" /><Tab active={tab === 'script'} onClick={() => setTab('script')} icon={<Clapperboard />} label="Guion y escenas" /><Tab active={tab === 'production'} onClick={() => setTab('production')} icon={<Play />} label="Producción y exportación" /></nav>
 
       {tab === 'overview' && <Overview project={project} system={system} onPlan={onPlan} busy={busy} />}
+      {tab === 'real-motion' && <RealMotionDashboard project={project} system={system} />}
       {tab === 'script' && <ScriptEditor project={project} locked={locked} updateScene={updateScene} />}
       {tab === 'production' && <Production project={project} system={system} />}
     </div>
