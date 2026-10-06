@@ -112,9 +112,15 @@ export async function generateWanImageVideo(
       return outputPath;
     }
 
-    if (['FAILED', 'CANCELED', 'UNKNOWN'].includes(status)) {
+    if (status === 'FAILED') {
       throw new WanNoChargeError(
-        `Wan terminó ${status} para ${taskId}: ${wanDetail(task)}`
+        `Wan terminó FAILED para ${taskId}: ${wanDetail(task)}`
+      );
+    }
+
+    if (status === 'CANCELED' || status === 'UNKNOWN') {
+      throw new Error(
+        `Wan terminó ${status} para ${taskId}; el estado de cobro debe reconciliarse antes de reintentar. Detalle: ${wanDetail(task)}`
       );
     }
   }
