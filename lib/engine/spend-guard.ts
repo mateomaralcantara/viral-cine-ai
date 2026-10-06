@@ -46,7 +46,7 @@ export function assertShotGenerationAllowed(project: FilmProject, scene: FilmSce
   const controlledPilotRetry =
     project.pilot?.enabled === true &&
     Boolean(project.plan?.realMotion) &&
-    shot.id === 'pilot-15d-01' &&
+    Boolean(project.plan?.realMotion?.pilotShotIds.includes(shot.id)) &&
     (
       shot.qualityForceRegenerate === true ||
       shot.safeFailoverResume === true
