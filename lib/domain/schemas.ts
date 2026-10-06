@@ -183,6 +183,7 @@ export const FilmShotSchema = z.object({
   qualityOverrideApproved: z.boolean().optional(),
   qualityForceRegenerate: z.boolean().optional(),
   safeFailoverResume: z.boolean().optional(),
+  videoModelOverride: z.string().trim().min(1).optional(),
   generationCount: z.number().int().nonnegative().optional(),
   estimatedSpendUsd: z.number().nonnegative().optional(),
   lastProvider: z.string().optional(),
