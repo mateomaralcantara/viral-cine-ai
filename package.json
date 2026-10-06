@@ -48,7 +48,8 @@
     "support:voices": "node --import tsx scripts/support-voices-v4.ts",
     "verify:4": "npm run typecheck && npm test",
     "movie:master": "node --import tsx scripts/master-export-v4.ts",
-    "cleanup:workspace": "node --import tsx scripts/cleanup-workspace-v4.ts"
+    "cleanup:workspace": "node --import tsx scripts/cleanup-workspace-v4.ts",
+    "short:15dias": "node --import tsx scripts/compact-15-dias-short-v5.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",
