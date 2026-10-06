@@ -10,7 +10,10 @@ import {
   updateProject
 } from '@/lib/storage/project-store';
 import { estimatePilotShotSpend } from '@/lib/engine/pilot';
-import { reservedMovieSpend } from '@/lib/engine/spend-ledger';
+import {
+  latestSpendForKey,
+  reservedMovieSpend
+} from '@/lib/engine/spend-ledger';
 import { safeErrorMessage } from '@/lib/engine/production-safety';
 
 export const runtime = 'nodejs';
@@ -45,7 +48,9 @@ export async function POST(request: Request, context: Context) {
         ? 'arm'
         : body.action === 'prepare-retry'
           ? 'prepare-retry'
-          : 'preflight';
+          : body.action === 'resume-safe-failover'
+            ? 'resume-safe-failover'
+            : 'preflight';
 
     if (action === 'preflight') {
       const project = await getProject(projectId);
@@ -57,6 +62,71 @@ export async function POST(request: Request, context: Context) {
           project.pilot?.enabled === true &&
           project.pilot.maxScenes === 1 &&
           project.pilot.maxShotsPerScene === 1
+      });
+    }
+
+    if (action === 'resume-safe-failover') {
+      const latest = await latestSpendForKey(
+        projectId,
+        'video:pilot-15d-01:2'
+      );
+
+      if (!latest || latest.state !== 'failed-no-charge') {
+        throw new Error(
+          'No existe un fallo Veo confirmado como no-cobrable para reanudar el segundo intento.'
+        );
+      }
+
+      const project = await updateProject(projectId, (current) => {
+        const { scene, shot } = getPilotShotOne(current);
+
+        if ((shot.generationCount || 0) !== 1) {
+          throw new Error(
+            `Reanudación bloqueada: la Toma 1 registra ${shot.generationCount || 0} generaciones reservadas; se esperaba 1 tras liberar el intento Veo sin cobro.`
+          );
+        }
+
+        if (!shot.motionSpec) {
+          throw new Error('La Toma 1 perdió su especificación Real Motion.');
+        }
+
+        shot.motionSpec = {
+          ...shot.motionSpec,
+          preferredProviders: ['fal-video', 'veo']
+        };
+
+        // El frame V2 ya fue generado antes del fallo no-cobrable de Veo.
+        // Lo conservamos para no pagar otra imagen ni perder consistencia.
+        shot.qualityForceRegenerate = false;
+        shot.lastGenerationState = undefined;
+        shot.error = undefined;
+        shot.status = 'pending';
+
+        scene.error = undefined;
+        scene.status = 'pending';
+
+        current.error = undefined;
+        current.status = 'queued';
+        current.progress = {
+          ...current.progress,
+          phase: 'queued',
+          message:
+            'Reanudando E1/T1 con Fal usando el frame V2 ya aprobado; Veo falló sin cobro.',
+          updatedAt: new Date().toISOString()
+        };
+        current.productionLog = [
+          ...current.productionLog,
+          `${new Date().toISOString()} E1/T1 reanudada tras fallo Veo no-cobrable: se conserva frame V2 y se continúa con Fal sin crear un tercer intento.`
+        ];
+
+        return current;
+      });
+
+      return NextResponse.json({
+        ok: true,
+        project,
+        resumed: true,
+        provider: 'fal-video'
       });
     }
 
