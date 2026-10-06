@@ -72,6 +72,7 @@ import {
   turnSourceAssetMap
 } from '@/lib/engine/segmented-visual-sources-v4';
 import { assertCinematicVideoTrack } from '@/lib/media/probe';
+import { buildVeoRealMotionPrompt } from '@/lib/engine/provider-prompts-v5';
 
 const GOOGLE_BILLING_COOLDOWN_MS = 15 * 60 * 1000;
 let googleBillingBlockedUntil = 0;
@@ -754,6 +755,7 @@ async function generateBaseVideo(
 ): Promise<{ outputPath: string; provider: string }> {
   const provider = (process.env.VIDEO_PROVIDER || 'auto').toLowerCase();
   const prompt = `${shot.visualPrompt} Camera: ${shot.camera}. Duration exactly ${shot.durationSeconds} seconds. Generate natural motion only; do not generate dialogue or subtitles.`.trim();
+  const veoPrompt = buildVeoRealMotionPrompt(shot);
   type VideoAttempt = {
     id: 'omni' | 'veo' | 'fal-video' | 'wan';
     name: string;
@@ -800,7 +802,7 @@ async function generateBaseVideo(
       run: () =>
         generateVeoVideo(
           referencePaths[0],
-          prompt,
+          veoPrompt,
           project.input,
           outputPath,
           shot.durationSeconds,
