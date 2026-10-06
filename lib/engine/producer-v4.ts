@@ -128,7 +128,18 @@ export async function produceProjectV4(
     if (!preflight.passed) {
       throw new Error(`Preproduccion 4.0 bloqueada: ${preflight.issues.slice(0, 8).join(' | ')}`);
     }
-    assertProductionCanQueue(project);
+    assertProductionCanQueue(
+      sceneReviewMode && targetScene
+        ? {
+            ...project,
+            pilot: undefined,
+            plan: {
+              ...project.plan,
+              scenes: [targetScene]
+            }
+          }
+        : project
+    );
     project.budget = estimateBudget(project.input, preflightPlanInput);
     assertEstimatedBudgetAllowed(project);
     const pilot = sceneReviewMode ? false : pilotModeEnabled(project);
@@ -144,7 +155,12 @@ export async function produceProjectV4(
       )
     }, `Real Cinema 4.0 iniciado en modo ${pilot ? 'piloto' : 'película completa'} (${process.env.PRODUCTION_MODE === 'real' ? 'real' : 'offline'})`);
 
-    project = await prepareCharacters(project);
+    project = await prepareCharacters(
+      project,
+      sceneReviewMode && targetScene
+        ? new Set(targetScene.characterIds)
+        : undefined
+    );
     await removePartialSceneFiles(project.id);
 
     const scenes = requirePlan(project).scenes;
@@ -1146,10 +1162,16 @@ async function generateBaseVideo(
   throw new Error(`Todos los proveedores de video base fallaron. ${errors.join(' | ')}`);
 }
 
-async function prepareCharacters(project: FilmProject) {
+async function prepareCharacters(
+  project: FilmProject,
+  allowedCharacterIds?: Set<string>
+) {
   if (!project.plan) return project;
   for (let index = 0; index < requirePlan(project).characters.length; index += 1) {
     const character = requirePlan(project).characters[index];
+    if (allowedCharacterIds && !allowedCharacterIds.has(character.id)) {
+      continue;
+    }
     if (character.referenceAsset) {
       try {
         await access(assetAbsolutePath(project.id, character.referenceAsset));
