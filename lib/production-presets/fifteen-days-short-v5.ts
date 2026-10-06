@@ -152,13 +152,19 @@ const defs: ShortSceneDef[] = [
 ];
 
 function scene(def: ShortSceneDef, index: number): FilmScene {
-  const pilotShots = def.usePilotShots
+  const falOnlyProviders: RealMotionShotSpec['preferredProviders'] = [
+    'fal-video'
+  ];
+
+  const pilotShots: FilmShot[] = def.usePilotShots
     ? FIFTEEN_DAYS_PILOT_SHOTS_V5.slice(0, def.usePilotShots).map((shot) => ({
         ...shot,
-        motionSpec: shot.motionSpec ? {
-          ...shot.motionSpec,
-          preferredProviders: ['fal-video']
-        } : undefined
+        motionSpec: shot.motionSpec
+          ? {
+              ...shot.motionSpec,
+              preferredProviders: [...falOnlyProviders]
+            }
+          : undefined
       }))
     : [];
 
