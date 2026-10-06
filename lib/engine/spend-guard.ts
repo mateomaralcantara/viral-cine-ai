@@ -106,6 +106,14 @@ export function totalReservedSpend(project: FilmProject) {
 }
 
 export function estimatedGenerationCost(shot: FilmShot, scene?: FilmScene) {
+  if (shot.videoModelOverride === 'veo-3.1-lite-generate-preview') {
+    return round(0.05 * shot.durationSeconds);
+  }
+
+  if (shot.motionSpec?.preferredProviders?.[0] === 'wan') {
+    return round(0.025 * shot.durationSeconds);
+  }
+
   const blocks = Math.max(1, Math.ceil(shot.durationSeconds / 8));
   const generalVideo = numberEnv('COST_AI_VIDEO_8S', 1.23, 0, 1_000) * blocks;
   if (shot.mode !== 'avatar-video' || !likelyAvatarFallback(scene, shot)) return round(generalVideo);
