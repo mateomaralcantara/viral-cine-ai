@@ -61,7 +61,7 @@ export async function generateFalLipSync(videoPath: string, audioPath: string, o
     input: {
       video_url: videoUrl,
       audio_url: audioUrl,
-      sync_mode: process.env.FAL_LIPSYNC_SYNC_MODE || 'cut_off'
+      sync_mode: process.env.FAL_LIPSYNC_SYNC_MODE || 'silence'
     },
     logs: true
   }));
