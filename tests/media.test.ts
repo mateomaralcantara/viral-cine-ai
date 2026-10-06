@@ -12,9 +12,11 @@ import {
   createSceneContactSheet,
   createSilenceAudio,
   createSyntheticSpeechAudio,
+  normalizeGeneratedVideo,
   renderAnimatedImage
 } from '../lib/media/ffmpeg';
 import { assertCinematicSceneVideo, assertCinematicVideoTrack, assertPlayableSceneVideo } from '../lib/media/probe';
+import { createSyntheticMotionVideo } from '../lib/media/synthetic-video';
 
 const execFileAsync = promisify(execFile);
 
@@ -86,5 +88,22 @@ test('rechaza un MP4 negro antes de enviarlo a la auditoria de calidad', async (
   await assert.rejects(
     () => assertCinematicVideoTrack(video, 2),
     /Fuente visual rechazada.*negro/
+  );
+});
+
+
+test('normalizador rechaza video corto en vez de repetirlo como relleno', async (context) => {
+  if (!(await checkFfmpeg())) return context.skip('FFmpeg no está disponible');
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'viralcine-no-loop-'));
+  const source = path.join(directory, 'source.mp4');
+  const audio = path.join(directory, 'voice.mp3');
+  const output = path.join(directory, 'output.mp4');
+
+  await createSyntheticMotionVideo(1, source, '16:9');
+  await createSilenceAudio(2, audio);
+
+  await assert.rejects(
+    () => normalizeGeneratedVideo(source, audio, 2, output, '16:9'),
+    /no repetirá la escena como relleno/i
   );
 });
