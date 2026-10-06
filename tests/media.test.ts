@@ -13,6 +13,7 @@ import {
   createSilenceAudio,
   createSyntheticSpeechAudio,
   normalizeGeneratedVideo,
+  normalizeGeneratedVideoWithEmbeddedAudio,
   renderAnimatedImage
 } from '../lib/media/ffmpeg';
 import { assertCinematicSceneVideo, assertCinematicVideoTrack, assertPlayableSceneVideo } from '../lib/media/probe';
@@ -105,5 +106,38 @@ test('normalizador rechaza video corto en vez de repetirlo como relleno', async 
   await assert.rejects(
     () => normalizeGeneratedVideo(source, audio, 2, output, '16:9'),
     /no repetirá la escena como relleno/i
+  );
+});
+
+
+test('normalizador de lip-sync conserva el audio embebido del proveedor', async (context) => {
+  if (!(await checkFfmpeg())) return context.skip('FFmpeg no está disponible');
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'viralcine-embedded-audio-'));
+  const image = path.join(directory, 'frame.png');
+  const audio = path.join(directory, 'provider-audio.mp3');
+  const source = path.join(directory, 'provider-lipsync.mp4');
+  const output = path.join(directory, 'normalized.mp4');
+
+  const input = ProjectInputSchema.parse({
+    title: 'Lip sync embebido',
+    premise: 'Prueba técnica para mantener el audio sincronizado que entrega el proveedor.',
+    durationMinutes: 5,
+    genre: 'Técnico',
+    audience: 'Equipo',
+    visualStyle: 'Cine',
+    budgetUsd: 50
+  });
+
+  await createPlaceholderImage('Lip sync', 'Frame técnico.', image, input);
+  await createSyntheticSpeechAudio(2, audio);
+  await renderAnimatedImage(image, audio, 2, source, '16:9');
+
+  await normalizeGeneratedVideoWithEmbeddedAudio(source, 2, output, '16:9');
+
+  const probe = await assertPlayableSceneVideo(output, 2);
+  assert.equal(probe.hasVideo, true);
+  assert.equal(probe.hasAudio, true);
+  await assert.doesNotReject(
+    () => assertCinematicSceneVideo(output, 2, { requireAudibleAudio: true })
   );
 });
