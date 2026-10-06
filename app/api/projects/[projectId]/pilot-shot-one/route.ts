@@ -54,7 +54,9 @@ export async function POST(request: Request, context: Context) {
             ? 'resume-safe-failover'
             : body.action === 'resume-veo-lite'
               ? 'resume-veo-lite'
-              : 'preflight';
+              : body.action === 'resume-wan-flash'
+                ? 'resume-wan-flash'
+                : 'preflight';
 
     if (action === 'preflight') {
       const project = await getProject(projectId);
@@ -66,6 +68,70 @@ export async function POST(request: Request, context: Context) {
           project.pilot?.enabled === true &&
           project.pilot.maxScenes === 1 &&
           project.pilot.maxShotsPerScene === 1
+      });
+    }
+
+    if (action === 'resume-wan-flash') {
+      const key = 'video:pilot-15d-01:2';
+      const latest = await latestSpendForKey(projectId, key);
+
+      if (!latest || latest.state !== 'failed-no-charge') {
+        throw new Error(
+          'No existe un fallo previo confirmado como no-cobrable para continuar con Wan.'
+        );
+      }
+
+      const project = await updateProject(projectId, (current) => {
+        const { scene, shot } = getPilotShotOne(current);
+
+        if ((shot.generationCount || 0) !== 1) {
+          throw new Error(
+            `Reanudación Wan bloqueada: la Toma 1 registra ${shot.generationCount || 0} generaciones; se esperaba 1 tras liberar el fallo Veo sin cobro.`
+          );
+        }
+
+        if (!shot.motionSpec) {
+          throw new Error('La Toma 1 perdió su especificación Real Motion.');
+        }
+
+        shot.motionSpec = {
+          ...shot.motionSpec,
+          preferredProviders: ['wan']
+        };
+        shot.videoModelOverride = undefined;
+        shot.qualityForceRegenerate = false;
+        shot.safeFailoverResume = true;
+        shot.lastGenerationState = undefined;
+        shot.error = undefined;
+        shot.status = 'pending';
+
+        scene.error = undefined;
+        scene.status = 'pending';
+
+        current.error = undefined;
+        current.status = 'queued';
+        current.progress = {
+          ...current.progress,
+          phase: 'queued',
+          message:
+            'Reanudando E1/T1 con Wan 2.6 I2V Flash 720p silencioso usando el frame V2 existente.',
+          updatedAt: new Date().toISOString()
+        };
+        current.productionLog = [
+          ...current.productionLog,
+          `${new Date().toISOString()} E1/T1 enviada a Wan 2.6 I2V Flash: frame V2 reutilizado, 720p, audio=false, costo estimado US$0.15 por 6s.`
+        ];
+
+        return current;
+      });
+
+      return NextResponse.json({
+        ok: true,
+        project,
+        resumed: true,
+        provider: 'wan',
+        model: 'wan2.6-i2v-flash',
+        estimatedVideoUsd: 0.15
       });
     }
 
