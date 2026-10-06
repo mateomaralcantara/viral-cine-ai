@@ -195,7 +195,7 @@ export const FilmShotSchema = z.object({
 export const ProjectInputSchema = z.object({
   title: z.string().trim().min(3).max(120),
   premise: z.string().trim().min(20).max(6000),
-  durationMinutes: z.number().int().min(5).max(120),
+  durationMinutes: z.number().min(1).max(120),
   genre: z.string().trim().min(2).max(80),
   audience: z.string().trim().min(2).max(160),
   visualStyle: z.string().trim().min(2).max(240),
@@ -271,7 +271,7 @@ export const FilmPlanSchema = z.object({
   musicPlan: MusicPlanSchema.optional(),
   realMotion: RealMotionPlanSchema.optional(),
   characters: z.array(CharacterSchema).min(1).max(8),
-  scenes: z.array(SceneSchema).min(12).max(120)
+  scenes: z.array(SceneSchema).min(4).max(120)
 });
 
 export const BudgetSchema = z.object({
