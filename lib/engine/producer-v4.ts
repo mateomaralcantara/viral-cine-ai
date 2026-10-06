@@ -256,7 +256,10 @@ export async function produceProjectV4(projectId: string) {
 async function produceShotV4(project: FilmProject, sceneIndex: number, shotIndex: number, totalScenes: number) {
   let scene = requirePlan(project).scenes[sceneIndex];
   let shot = scene.shots[shotIndex];
-  const reusable = shot.qualityForceRegenerate ? undefined : await reusableShotAssets(project, scene, shot);
+  const reusable =
+    shot.qualityForceRegenerate || shot.safeFailoverResume
+      ? undefined
+      : await reusableShotAssets(project, scene, shot);
   if (reusable) {
     Object.assign(shot, reusable, { status: 'ready' as const, error: undefined });
     project.productionLog.push(`${new Date().toISOString()} Escena ${scene.order}, segmento ${shot.order}: checkpoint reutilizado`);
@@ -326,6 +329,7 @@ async function produceShotV4(project: FilmProject, sceneIndex: number, shotIndex
     shot.status = 'ready';
     shot.error = undefined;
     shot.qualityForceRegenerate = false;
+    shot.safeFailoverResume = false;
     shot.pipelineVersion = hasMultipleDialogueSpeakers(shot) ? '4.1-segmented-visual-turns' : '4.0-audio-first';
     scene.status = 'rendering';
     project.productionLog.push(`${new Date().toISOString()} Escena ${scene.order}, segmento ${shot.order} terminado con Real Cinema 4.0`);
