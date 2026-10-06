@@ -755,6 +755,8 @@ async function generateBaseVideo(
     run: () => Promise<unknown>;
   };
 
+  const hasShotRouting = Boolean(shot.motionSpec?.preferredProviders?.length);
+
   const allAttempts: VideoAttempt[] = [
     {
       id: 'omni',
@@ -763,6 +765,7 @@ async function generateBaseVideo(
       model: process.env.GEMINI_OMNI_VIDEO_MODEL,
       enabled:
         hasUsableCredential('GEMINI_API_KEY') &&
+        !hasShotRouting &&
         (provider === 'auto' || provider === 'omni'),
       run: () =>
         generateGeminiOmniVideo(
@@ -779,7 +782,11 @@ async function generateBaseVideo(
       model: process.env.GEMINI_VIDEO_MODEL,
       enabled:
         hasUsableCredential('GEMINI_API_KEY') &&
-        (provider === 'auto' || provider === 'veo'),
+        (
+          hasShotRouting ||
+          provider === 'auto' ||
+          provider === 'veo'
+        ),
       run: () =>
         generateVeoVideo(
           referencePaths[0],
@@ -796,7 +803,11 @@ async function generateBaseVideo(
       model: process.env.FAL_VIDEO_MODEL,
       enabled:
         hasUsableCredential('FAL_KEY') &&
-        (provider === 'auto' || provider === 'fal'),
+        (
+          hasShotRouting ||
+          provider === 'auto' ||
+          provider === 'fal'
+        ),
       run: () =>
         generateFalVideo(
           referencePaths[0],
