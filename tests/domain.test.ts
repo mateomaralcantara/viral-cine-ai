@@ -29,23 +29,42 @@ test('el plan demo respeta duración, límites y continuidad básica', () => {
   assert.ok(plan.scenes.every((scene) => scene.shots.every((shot) => ['video', 'avatar-video'].includes(shot.mode))));
 });
 
-test('acepta películas desde 5 hasta 120 minutos y distribuye la duración exacta', () => {
-  for (const durationMinutes of [5, 120]) {
+test('acepta cortos desde 1 minuto, 2.5 minutos y películas hasta 120 minutos', () => {
+  for (const durationMinutes of [1, 2.5, 5, 120]) {
     const boundaryInput = ProjectInputSchema.parse({ ...input, durationMinutes });
     const plan = createDemoPlan(boundaryInput);
     assert.equal(
       plan.scenes.reduce((sum, scene) => sum + scene.durationSeconds, 0),
       durationMinutes * 60
     );
-    assert.ok(plan.scenes.length >= 12 && plan.scenes.length <= 120);
-    assert.ok(plan.scenes.every((scene) => scene.durationSeconds >= 5 && scene.durationSeconds <= 90));
+
+    if (durationMinutes <= 3) {
+      assert.ok(plan.scenes.length >= 4 && plan.scenes.length <= 8);
+    } else {
+      assert.ok(plan.scenes.length >= 12 && plan.scenes.length <= 120);
+    }
+
+    assert.ok(
+      plan.scenes.every(
+        (scene) => scene.durationSeconds >= 5 && scene.durationSeconds <= 90
+      )
+    );
     assert.equal(
-      plan.scenes.flatMap((scene) => scene.shots).reduce((sum, shot) => sum + shot.durationSeconds, 0),
+      plan.scenes
+        .flatMap((scene) => scene.shots)
+        .reduce((sum, shot) => sum + shot.durationSeconds, 0),
       durationMinutes * 60
     );
   }
-  assert.equal(ProjectInputSchema.safeParse({ ...input, durationMinutes: 4 }).success, false);
-  assert.equal(ProjectInputSchema.safeParse({ ...input, durationMinutes: 121 }).success, false);
+
+  assert.equal(
+    ProjectInputSchema.safeParse({ ...input, durationMinutes: 0.5 }).success,
+    false
+  );
+  assert.equal(
+    ProjectInputSchema.safeParse({ ...input, durationMinutes: 121 }).success,
+    false
+  );
 });
 
 test('el presupuesto preventivo entrega desglose y comparación', () => {
