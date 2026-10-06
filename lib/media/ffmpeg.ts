@@ -139,6 +139,56 @@ export async function normalizeGeneratedVideo(
   return outputPath;
 }
 
+export async function normalizeGeneratedVideoWithEmbeddedAudio(
+  videoPath: string,
+  durationSeconds: number,
+  outputPath: string,
+  aspectRatio: ProjectInput['aspectRatio']
+) {
+  const probe = await probeVideo(videoPath);
+  const shortfallTolerance =
+    durationSeconds < 0.5
+      ? Math.max(0.08, durationSeconds * 0.2)
+      : Math.max(0.25, durationSeconds * 0.05);
+  const minimumVisualDuration = Math.max(0.12, durationSeconds - shortfallTolerance);
+
+  if (
+    !probe.hasVideo ||
+    !probe.hasAudio ||
+    !Number.isFinite(probe.durationSeconds) ||
+    probe.durationSeconds < minimumVisualDuration
+  ) {
+    throw new Error(
+      `Lip-sync fuente inválido: video=${probe.hasVideo}, audio=${probe.hasAudio}, ` +
+      `duración=${probe.durationSeconds.toFixed(2)}s, mínimo=${minimumVisualDuration.toFixed(2)}s. ` +
+      'ViralCine no sustituirá ni desplazará el audio sincronizado por el proveedor.'
+    );
+  }
+
+  const { width, height } = dimensions(aspectRatio);
+  const filter = `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},fps=25,format=yuv420p`;
+
+  await run([
+    '-y',
+    '-i', videoPath,
+    '-t', String(durationSeconds),
+    '-vf', filter,
+    '-map', '0:v:0',
+    '-map', '0:a:0',
+    '-c:v', 'libx264',
+    '-preset', 'medium',
+    '-crf', '20',
+    '-af', 'apad',
+    '-c:a', 'aac',
+    '-b:a', '192k',
+    '-ar', '48000',
+    '-ac', '2',
+    outputPath
+  ]);
+
+  return outputPath;
+}
+
 export async function concatenate(clips: string[], outputPath: string) {
   if (!clips.length) throw new Error('No existen clips para componer.');
   const listPath = path.join(path.dirname(outputPath), 'concat-list.txt');
