@@ -389,8 +389,9 @@ export const FIFTEEN_DAYS_PILOT_SHOTS_V5: FilmShot[] = [
     title: 'La maleta',
     durationSeconds: 6,
     visualPrompt:
-      'Dormitorio realista. Raúl guarda ropa en una maleta abierta mientras Elena permanece cerca de la puerta. Ambos mantienen distancia física; tensión silenciosa.',
-    camera: 'Plano medio a dos con desplazamiento lateral mínimo que conserva el eje entre Elena y Raúl, sin cortes.',
+      'Dormitorio realista. Raúl está junto a una maleta abierta sobre la cama con UNA sola camisa ya doblada en las manos. Elena está claramente visible cerca de la puerta, en tres cuartos hacia Raúl, con rostro y boca despejados porque ELLA es quien hablará en esta toma. Raúl coloca esa única camisa dentro de la maleta UNA sola vez y después deja las manos quietas; PROHIBIDO volver a doblar, repetir el gesto, sacar y meter la misma prenda o crear un bucle. Elena da como máximo medio paso hacia el interior, se detiene y mantiene su mirada dirigida a Raúl. Ambos conservan exactamente sus identidades y vestuario del estado Hogar. Tensión silenciosa y contenida, sin actuación teatral.',
+    camera:
+      'Plano medio a dos estable: Elena en primer término lateral o tercio izquierdo con rostro y labios legibles; Raúl y la maleta en el tercio derecho. Entre el segundo 0 y 1 mantener ambos visibles. Desde el segundo 1 hacer un microdesplazamiento o rack de atención hacia Elena sin perder a Raúl del cuadro, dejando inequívoco que Elena es la hablante. Sin cortes, sin cambio de eje, sin acercamientos bruscos y sin repetir movimientos.',
     spokenText: '¿Adónde vas?',
     speakerId: IDS.elena,
     dialogueLines: [{
@@ -401,18 +402,18 @@ export const FIFTEEN_DAYS_PILOT_SHOTS_V5: FilmShot[] = [
       startSeconds: 1
     }],
     motionSpec: motion({
-      intention: 'Iniciar la ruptura con acción física concreta y silencio incómodo.',
-      startState: 'Raúl dobla una camisa sin mirar a Elena; Elena permanece inmóvil en la puerta.',
-      endState: 'Raúl detiene las manos un instante pero todavía no la mira.',
-      bodyMotion: 'Raúl dobla una prenda y la coloca en la maleta; Elena da un paso corto y habla.',
-      environmentMotion: 'Tela de ropa, luz de habitación y cortina apenas móvil.',
-      cameraMotion: 'Microdesplazamiento lateral estable manteniendo ambos cuerpos legibles.',
+      intention: 'Hacer inequívoco que Elena le habla a Raúl mientras él guarda una sola prenda en la maleta sin repetir la acción.',
+      startState: 'Raúl sostiene una única camisa ya doblada sobre la maleta abierta. Elena está quieta junto a la puerta, rostro visible en tres cuartos y mirada dirigida a Raúl.',
+      endState: 'Raúl ya dejó la camisa dentro de la maleta y mantiene las manos quietas. Elena permanece orientada hacia él, con el rostro claramente visible para el momento de su pregunta.',
+      bodyMotion: 'Raúl ejecuta UNA sola acción: baja la camisa ya doblada y la deja dentro de la maleta una vez; después detiene las manos. Elena da como máximo medio paso, gira ligeramente torso y cabeza hacia Raúl y se queda quieta. Prohibido doblar de nuevo, repetir ciclos de manos, sacar la prenda, volver a meterla o caminar en bucle.',
+      environmentMotion: 'Solo movimiento ambiental mínimo de cortina o tela secundaria. Ningún elemento repite acciones ni distrae de Elena y Raúl.',
+      cameraMotion: 'Plano a dos continuo y estable con leve prioridad visual hacia Elena desde el segundo 1, manteniendo visible a Raúl y la maleta; sin cortes ni oscilaciones repetitivas.',
       shotClass: 'dialogue',
       minMotionScore: 8,
       minIdentityScore: 9,
       minContinuityScore: 9,
       minAnatomyScore: 9,
-      minCameraScore: 8
+      minCameraScore: 9
     }),
     mode: 'video',
     characterIds: [IDS.elena, IDS.raul],
