@@ -33,7 +33,10 @@ export function estimatePilotShotSpend(shot: FilmShot) {
     Boolean(shot.speakerId) &&
     shot.speakerId !== 'narrator';
 
-  const image = estimateOperationCost('image', 1);
+  const image =
+    shot.imageAsset && !shot.qualityForceRegenerate
+      ? 0
+      : estimateOperationCost('image', 1);
   const voice = shot.spokenText.trim()
     ? estimateOperationCost('voice', voiceCostUnits(shot.spokenText))
     : 0;
