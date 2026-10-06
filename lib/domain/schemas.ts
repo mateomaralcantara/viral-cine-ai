@@ -182,6 +182,7 @@ export const FilmShotSchema = z.object({
   qualityReportAsset: z.string().optional(),
   qualityOverrideApproved: z.boolean().optional(),
   qualityForceRegenerate: z.boolean().optional(),
+  safeFailoverResume: z.boolean().optional(),
   generationCount: z.number().int().nonnegative().optional(),
   estimatedSpendUsd: z.number().nonnegative().optional(),
   lastProvider: z.string().optional(),
