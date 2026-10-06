@@ -240,11 +240,16 @@ export function buildFifteenDaysShortPlanV5(): FilmPlan {
   withShots.scenes.forEach((filmScene, index) => {
     const stateMap = defs[index].states;
     filmScene.shots.forEach((shot) => {
-      shot.characterStateIds = Object.fromEntries(
-        shot.characterIds
-          .filter((id) => stateMap[id])
-          .map((id) => [id, stateMap[id]])
-      );
+      if (
+        !shot.characterStateIds ||
+        Object.keys(shot.characterStateIds).length === 0
+      ) {
+        shot.characterStateIds = Object.fromEntries(
+          shot.characterIds
+            .filter((id) => stateMap[id])
+            .map((id) => [id, stateMap[id]])
+        );
+      }
       shot.motionSpec = shot.motionSpec || genericMotion(filmScene, shot);
       shot.motionSpec = {
         ...shot.motionSpec,
