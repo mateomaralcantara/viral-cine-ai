@@ -199,7 +199,10 @@ function scene(def: ShortSceneDef, index: number): FilmScene {
 function genericMotion(scene: FilmScene, shot: FilmShot): RealMotionShotSpec {
   return {
     version: '5.0-real-motion-v1',
-    intention: shot.spokenText.trim() || scene.summary,
+    intention:
+      shot.spokenText.trim().length >= 5
+        ? shot.spokenText.trim()
+        : scene.summary,
     startState: 'Comenzar exactamente desde el primer frame aprobado y mantener identidad, vestuario y geografía.',
     endState: 'Terminar la acción de esta toma sin introducir un nuevo beat narrativo.',
     bodyMotion: 'Movimiento corporal natural, físicamente plausible y contenido; una sola acción dominante.',
@@ -230,7 +233,7 @@ export function buildFifteenDaysShortPlanV5(): FilmPlan {
       version: '5.0-real-motion-v1',
       finalMode: 'real-motion',
       allowStillFallbackFinal: false,
-      providerOrder: ['fal-video'],
+      providerOrder: ['fal-video', 'wan'],
       circuitBreaker: { failureThreshold: 3, cooldownSeconds: 900 },
       pilotShotIds: [],
       characterBible: FIFTEEN_DAYS_CHARACTER_BIBLE_V5,
