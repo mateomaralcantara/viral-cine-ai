@@ -53,7 +53,8 @@
     "pilot:next15": "node --import tsx scripts/approve-next-15-dias-pilot-v5.ts",
     "pilot:advance15": "node --import tsx scripts/advance-15-dias-scene1-v5.ts",
     "pilot:retry-t4": "node --import tsx scripts/retry-15-dias-t4-v2.ts",
-    "pilot:repair-t4-no-loop": "node --import tsx scripts/repair-15-dias-t4-no-loop.ts"
+    "pilot:repair-t4-no-loop": "node --import tsx scripts/repair-15-dias-t4-no-loop.ts",
+    "pilot:fix-t4-sync": "node --import tsx scripts/fix-15-dias-t4-sync-local.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",
