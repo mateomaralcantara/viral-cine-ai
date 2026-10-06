@@ -52,7 +52,8 @@
     "short:15dias": "node --import tsx scripts/compact-15-dias-short-v5.ts",
     "pilot:next15": "node --import tsx scripts/approve-next-15-dias-pilot-v5.ts",
     "pilot:advance15": "node --import tsx scripts/advance-15-dias-scene1-v5.ts",
-    "pilot:retry-t4": "node --import tsx scripts/retry-15-dias-t4-v2.ts"
+    "pilot:retry-t4": "node --import tsx scripts/retry-15-dias-t4-v2.ts",
+    "pilot:repair-t4-no-loop": "node --import tsx scripts/repair-15-dias-t4-no-loop.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",
