@@ -11,9 +11,17 @@ import {
 import { produceProjectV4 } from '@/lib/engine/producer-v4';
 import {
   assetAbsolutePath,
+  assetRelativePath,
   getProject,
+  projectAssetDir,
   saveProject
 } from '@/lib/storage/project-store';
+import { concatenate } from '@/lib/media/ffmpeg';
+import {
+  renderedAssets,
+  saveSceneCheckpoint
+} from '@/lib/engine/scene-checkpoints';
+import path from 'node:path';
 
 loadProjectLocalEnvOverride();
 
@@ -74,6 +82,33 @@ if (action === 'approve') {
     shot.safeFailoverResume = false;
   }
 
+  const shotClips = scene.shots
+    .sort((a, b) => a.order - b.order)
+    .map((shot) => assetAbsolutePath(project.id, shot.videoAsset!));
+  const sceneVideo = path.join(
+    projectAssetDir(project.id, 'video'),
+    'scene-' + String(scene.order).padStart(3, '0') + '.mp4'
+  );
+  await concatenate(shotClips, sceneVideo);
+
+  const representativeShot = scene.shots.find(
+    (shot) => Boolean(shot.imageAsset && shot.voiceAsset)
+  );
+
+  if (representativeShot?.imageAsset && representativeShot.voiceAsset) {
+    const sceneAssets = renderedAssets(
+      project.id,
+      scene.mode === 'animated-image' ? 'ai-video' : scene.mode,
+      assetAbsolutePath(project.id, representativeShot.imageAsset),
+      assetAbsolutePath(project.id, representativeShot.voiceAsset),
+      sceneVideo
+    );
+    Object.assign(scene, sceneAssets);
+    await saveSceneCheckpoint(project, scene, sceneAssets);
+  } else {
+    scene.videoAsset = assetRelativePath(project.id, sceneVideo);
+  }
+
   scene.status = 'ready';
   scene.error = undefined;
   scene.qualityOverrideApproved = true;
@@ -108,6 +143,7 @@ if (action === 'approve') {
   console.log(`Escena ${sceneOrder}: ${scene.title}`);
   console.log('Estado: ready');
   console.log('Tomas: congeladas/reutilizables');
+  console.log('Video de escena: ' + (scene.videoAsset || 'NO DISPONIBLE'));
   console.log('Siguiente escena: ' + (sceneOrder + 1));
   console.log('SCENE_APPROVED=YES');
   process.exit(0);
