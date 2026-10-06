@@ -126,3 +126,36 @@ test('Spend guard permite reanudar con Fal el mismo segundo intento no-cobrable'
     /2 de 2 generaciones permitidas/
   );
 });
+
+
+test('Spend guard permite un segundo intento controlado en otra toma Real Motion del piloto', () => {
+  const value = project();
+  const scene = value.plan!.scenes[0];
+  const shot = scene.shots[0];
+
+  shot.id = 'pilot-15d-04';
+  shot.order = 4;
+  shot.title = 'La maleta';
+  shot.qualityForceRegenerate = true;
+  shot.safeFailoverResume = false;
+  shot.generationCount = 1;
+  value.plan!.realMotion!.pilotShotIds = ['pilot-15d-04'];
+  value.pilot = {
+    enabled: true,
+    maxScenes: 1,
+    maxShotsPerScene: 4,
+    maxSpendUsd: 8,
+    approvedForFullProduction: false
+  };
+
+  assert.doesNotThrow(() =>
+    assertShotGenerationAllowed(value, scene, shot)
+  );
+
+  shot.generationCount = 2;
+
+  assert.throws(
+    () => assertShotGenerationAllowed(value, scene, shot),
+    /2 de 2 generaciones permitidas/
+  );
+});
