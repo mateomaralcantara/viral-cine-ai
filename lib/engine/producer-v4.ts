@@ -783,7 +783,9 @@ async function generateBaseVideo(
       id: 'veo',
       name: 'Veo',
       family: 'google',
-      model: process.env.GEMINI_VIDEO_MODEL,
+      model:
+        shot.videoModelOverride ||
+        process.env.GEMINI_VIDEO_MODEL,
       enabled:
         hasUsableCredential('GEMINI_API_KEY') &&
         (
@@ -797,7 +799,8 @@ async function generateBaseVideo(
           prompt,
           project.input,
           outputPath,
-          shot.durationSeconds
+          shot.durationSeconds,
+          shot.videoModelOverride
         )
     },
     {
