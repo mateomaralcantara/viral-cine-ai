@@ -3,6 +3,7 @@ import { copyFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { deflateSync } from 'node:zlib';
 import type { FilmScene, ProjectInput } from '@/lib/domain/schemas';
+import { probeVideo } from '@/lib/media/probe';
 
 const ffmpeg = () => process.env.FFMPEG_PATH || 'ffmpeg';
 
@@ -109,10 +110,29 @@ export async function normalizeGeneratedVideo(
   outputPath: string,
   aspectRatio: ProjectInput['aspectRatio']
 ) {
+  const probe = await probeVideo(videoPath);
+  const shortfallTolerance =
+    durationSeconds < 0.5
+      ? Math.max(0.08, durationSeconds * 0.2)
+      : Math.max(0.25, durationSeconds * 0.05);
+  const minimumVisualDuration = Math.max(0.12, durationSeconds - shortfallTolerance);
+
+  if (
+    !probe.hasVideo ||
+    !Number.isFinite(probe.durationSeconds) ||
+    probe.durationSeconds < minimumVisualDuration
+  ) {
+    throw new Error(
+      `Video fuente demasiado corto para ${durationSeconds.toFixed(2)}s: ` +
+      `${probe.durationSeconds.toFixed(2)}s disponibles, mínimo ${minimumVisualDuration.toFixed(2)}s. ` +
+      'ViralCine no repetirá la escena como relleno.'
+    );
+  }
+
   const { width, height } = dimensions(aspectRatio);
   const filter = `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},fps=25,format=yuv420p`;
   await run([
-    '-y', '-stream_loop', '-1', '-i', videoPath, '-i', audioPath, '-t', String(durationSeconds),
+    '-y', '-i', videoPath, '-i', audioPath, '-t', String(durationSeconds),
     '-vf', filter, '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'libx264', '-preset', 'medium',
     '-crf', '20', '-af', 'apad', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-ac', '2', outputPath
   ]);
