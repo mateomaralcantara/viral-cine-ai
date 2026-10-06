@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { FilmPlanSchema } from '../lib/domain/schemas';
 import {
   FIFTEEN_DAYS_SHORT_INPUT_V5,
   buildFifteenDaysShortPlanV5
 } from '../lib/production-presets/fifteen-days-short-v5';
 
 test('15 DÍAS short dura exactamente 150 segundos', () => {
-  const plan = buildFifteenDaysShortPlanV5();
+  const plan = FilmPlanSchema.parse(buildFifteenDaysShortPlanV5());
   const seconds = plan.scenes.reduce(
     (sum, scene) => sum + scene.durationSeconds,
     0
@@ -18,11 +19,11 @@ test('15 DÍAS short dura exactamente 150 segundos', () => {
 });
 
 test('15 DÍAS short usa Fal y conserva Real Motion', () => {
-  const plan = buildFifteenDaysShortPlanV5();
+  const plan = FilmPlanSchema.parse(buildFifteenDaysShortPlanV5());
   const shots = plan.scenes.flatMap((scene) => scene.shots);
 
   assert.equal(shots.length, 21);
-  assert.deepEqual(plan.realMotion?.providerOrder, ['fal-video']);
+  assert.deepEqual(plan.realMotion?.providerOrder, ['fal-video', 'wan']);
   assert.ok(
     shots.every(
       (shot) =>
