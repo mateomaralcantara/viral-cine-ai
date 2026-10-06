@@ -43,7 +43,10 @@ export function assertShotGenerationAllowed(project: FilmProject, scene: FilmSce
     project.pilot?.enabled === true &&
     Boolean(project.plan?.realMotion) &&
     shot.id === 'pilot-15d-01' &&
-    shot.qualityForceRegenerate === true;
+    (
+      shot.qualityForceRegenerate === true ||
+      shot.safeFailoverResume === true
+    );
   const maximumGenerations = controlledPilotRetry
     ? Math.max(2, configuredMaximumGenerations)
     : configuredMaximumGenerations;
