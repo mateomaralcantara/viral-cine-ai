@@ -96,8 +96,14 @@ export function assertProductionCanQueue(project?: ProductionProjectContext) {
   if (!hasUsableCredential('OPENAI_API_KEY')) {
     throw new ProductionSafetyError('Bloqueo de seguridad: falta una credencial utilizable de OpenAI para referencias visuales y auditoría.');
   }
-  if (!hasUsableCredential('GEMINI_API_KEY') && !hasUsableCredential('FAL_KEY')) {
-    throw new ProductionSafetyError('Bloqueo de seguridad: falta una credencial utilizable de Gemini o Fal para video.');
+  if (
+    !hasUsableCredential('GEMINI_API_KEY') &&
+    !hasUsableCredential('FAL_KEY') &&
+    !hasUsableCredential('DASHSCOPE_API_KEY')
+  ) {
+    throw new ProductionSafetyError(
+      'Bloqueo de seguridad: falta una credencial utilizable de Gemini, Fal o DashScope/Wan para video.'
+    );
   }
 
   const plan = project?.plan;
