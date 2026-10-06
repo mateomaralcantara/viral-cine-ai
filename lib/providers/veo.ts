@@ -48,7 +48,14 @@ export function isVeoQuotaFailure(error: unknown) {
   );
 }
 
-export async function generateVeoVideo(imagePath: string, prompt: string, input: ProjectInput, outputPath: string, durationSeconds = 8) {
+export async function generateVeoVideo(
+  imagePath: string,
+  prompt: string,
+  input: ProjectInput,
+  outputPath: string,
+  durationSeconds = 8,
+  modelOverride?: string
+) {
   assertPaidGenerationAllowed('generar video con Veo', 'GEMINI_API_KEY');
   const geminiApiKey = process.env.GEMINI_API_KEY;
   const previousGoogleApiKey = process.env.GOOGLE_API_KEY;
@@ -65,7 +72,10 @@ export async function generateVeoVideo(imagePath: string, prompt: string, input:
   }
   const bytes = await readFile(imagePath);
   let operation = await ai.models.generateVideos({
-    model: process.env.GEMINI_VIDEO_MODEL || 'veo-3.1-fast-generate-preview',
+    model:
+      modelOverride ||
+      process.env.GEMINI_VIDEO_MODEL ||
+      'veo-3.1-fast-generate-preview',
     source: {
       prompt,
       image: {
