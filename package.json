@@ -51,7 +51,8 @@
     "cleanup:workspace": "node --import tsx scripts/cleanup-workspace-v4.ts",
     "short:15dias": "node --import tsx scripts/compact-15-dias-short-v5.ts",
     "pilot:next15": "node --import tsx scripts/approve-next-15-dias-pilot-v5.ts",
-    "pilot:advance15": "node --import tsx scripts/advance-15-dias-scene1-v5.ts"
+    "pilot:advance15": "node --import tsx scripts/advance-15-dias-scene1-v5.ts",
+    "pilot:retry-t4": "node --import tsx scripts/retry-15-dias-t4-v2.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",
