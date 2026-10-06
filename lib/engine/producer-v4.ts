@@ -201,7 +201,10 @@ export async function produceProjectV4(
           sceneIndex,
           shotIndex,
           sceneCount,
-          { deferQualityPause: sceneReviewMode }
+          {
+            deferQualityPause: sceneReviewMode,
+            bypassPilotBudget: sceneReviewMode
+          }
         );
         if (project.status === 'quality-review' && !sceneReviewMode) return project;
         const completed = requirePlan(project).scenes[sceneIndex].shots[shotIndex];
@@ -377,7 +380,10 @@ async function produceShotV4(
   sceneIndex: number,
   shotIndex: number,
   totalScenes: number,
-  options: { deferQualityPause?: boolean } = {}
+  options: {
+    deferQualityPause?: boolean;
+    bypassPilotBudget?: boolean;
+  } = {}
 ) {
   let scene = requirePlan(project).scenes[sceneIndex];
   let shot = scene.shots[shotIndex];
@@ -391,7 +397,7 @@ async function produceShotV4(
     return saveProject(project);
   }
 
-  if (pilotModeEnabled(project)) await assertPilotShotBudget(project, shot);
+  if (pilotModeEnabled(project) && !options.bypassPilotBudget) await assertPilotShotBudget(project, shot);
   shot.status = 'rendering';
   shot.error = undefined;
   scene.status = 'rendering';
