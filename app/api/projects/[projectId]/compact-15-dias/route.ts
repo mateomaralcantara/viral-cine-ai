@@ -118,7 +118,7 @@ export async function POST(_request: Request, context: Context) {
         enabled: true,
         maxScenes: 1,
         maxShotsPerScene: 1,
-        maxSpendUsd: Math.max(current.pilot?.maxSpendUsd || 1, 1.5),
+        maxSpendUsd: Math.max(current.pilot?.maxSpendUsd || 1, 2),
         approvedForFullProduction: false
       },
       progress: {
