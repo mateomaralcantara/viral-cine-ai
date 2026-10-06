@@ -103,3 +103,26 @@ test('Spend guard permite generación 2 solo cuando el retry fue preparado', () 
     /2 de 2 generaciones permitidas/
   );
 });
+
+
+test('Spend guard permite reanudar con Fal el mismo segundo intento no-cobrable', () => {
+  const value = project();
+  const scene = value.plan!.scenes[0];
+  const shot = scene.shots[0];
+
+  shot.qualityForceRegenerate = false;
+  shot.safeFailoverResume = true;
+  shot.generationCount = 1;
+  shot.estimatedSpendUsd = 0.8;
+
+  assert.doesNotThrow(() =>
+    assertShotGenerationAllowed(value, scene, shot)
+  );
+
+  shot.generationCount = 2;
+
+  assert.throws(
+    () => assertShotGenerationAllowed(value, scene, shot),
+    /2 de 2 generaciones permitidas/
+  );
+});
