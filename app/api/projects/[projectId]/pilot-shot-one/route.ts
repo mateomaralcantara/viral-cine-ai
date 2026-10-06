@@ -11,9 +11,11 @@ import {
 } from '@/lib/storage/project-store';
 import { estimatePilotShotSpend } from '@/lib/engine/pilot';
 import {
+  appendSpend,
   latestSpendForKey,
   reservedMovieSpend
 } from '@/lib/engine/spend-ledger';
+import { releaseNoChargeGenerationReservation } from '@/lib/engine/spend-guard';
 import { safeErrorMessage } from '@/lib/engine/production-safety';
 
 export const runtime = 'nodejs';
@@ -50,7 +52,9 @@ export async function POST(request: Request, context: Context) {
           ? 'prepare-retry'
           : body.action === 'resume-safe-failover'
             ? 'resume-safe-failover'
-            : 'preflight';
+            : body.action === 'resume-veo-lite'
+              ? 'resume-veo-lite'
+              : 'preflight';
 
     if (action === 'preflight') {
       const project = await getProject(projectId);
@@ -62,6 +66,114 @@ export async function POST(request: Request, context: Context) {
           project.pilot?.enabled === true &&
           project.pilot.maxScenes === 1 &&
           project.pilot.maxShotsPerScene === 1
+      });
+    }
+
+    if (action === 'resume-veo-lite') {
+      if (body.confirmFalNoCredit !== true) {
+        throw new Error(
+          'Confirma explícitamente que Fal no tenía crédito antes de reconciliar el intento como no-cobrable.'
+        );
+      }
+
+      const key = 'video:pilot-15d-01:2';
+      let latest = await latestSpendForKey(projectId, key);
+
+      if (!latest) {
+        throw new Error(
+          'No existe un registro de gasto del segundo intento para reconciliar.'
+        );
+      }
+
+      if (
+        latest.state === 'failed-unknown' &&
+        /fal/i.test(latest.provider) &&
+        /(credit|saldo|balance|billing|payment|insufficient|403)/i.test(
+          latest.error || ''
+        )
+      ) {
+        latest = await appendSpend(projectId, {
+          operation: latest.operation,
+          provider: latest.provider,
+          model: latest.model,
+          state: 'failed-no-charge',
+          estimatedUsd: latest.estimatedUsd,
+          actualUsd: 0,
+          sceneId: latest.sceneId,
+          shotId: latest.shotId,
+          characterId: latest.characterId,
+          idempotencyKey: latest.idempotencyKey,
+          providerRequestId: latest.providerRequestId,
+          error:
+            '[manual-reconcile-fal-no-credit] ' +
+            (latest.error || 'Fal sin crédito confirmado por el usuario.')
+        });
+      }
+
+      if (latest.state !== 'failed-no-charge') {
+        throw new Error(
+          `No es seguro continuar: el intento Fal permanece en estado ${latest.state}. No se autoriza otro cobro.`
+        );
+      }
+
+      const project = await updateProject(projectId, (current) => {
+        const { scene, shot } = getPilotShotOne(current);
+
+        if ((shot.generationCount || 0) >= 2) {
+          releaseNoChargeGenerationReservation(
+            shot,
+            latest?.estimatedUsd || 0
+          );
+        }
+
+        if ((shot.generationCount || 0) !== 1) {
+          throw new Error(
+            `Reanudación Veo Lite bloqueada: la Toma 1 registra ${shot.generationCount || 0} generaciones después de reconciliar Fal; se esperaba 1.`
+          );
+        }
+
+        if (!shot.motionSpec) {
+          throw new Error('La Toma 1 perdió su especificación Real Motion.');
+        }
+
+        shot.motionSpec = {
+          ...shot.motionSpec,
+          preferredProviders: ['veo']
+        };
+        shot.videoModelOverride = 'veo-3.1-lite-generate-preview';
+        shot.qualityForceRegenerate = false;
+        shot.safeFailoverResume = true;
+        shot.lastGenerationState = undefined;
+        shot.error = undefined;
+        shot.status = 'pending';
+
+        scene.error = undefined;
+        scene.status = 'pending';
+
+        current.error = undefined;
+        current.status = 'queued';
+        current.progress = {
+          ...current.progress,
+          phase: 'queued',
+          message:
+            'Reanudando E1/T1 con Veo 3.1 Lite usando el frame V2 existente; Fal sin crédito fue reconciliado sin cobro.',
+          updatedAt: new Date().toISOString()
+        };
+        current.productionLog = [
+          ...current.productionLog,
+          `${new Date().toISOString()} E1/T1 reanudada con Veo 3.1 Lite (720p): frame V2 reutilizado, Fal sin crédito reconciliado como no-cobrable y Fal deshabilitado para esta prueba.`
+        ];
+
+        return current;
+      });
+
+      return NextResponse.json({
+        ok: true,
+        project,
+        resumed: true,
+        provider: 'veo',
+        model: 'veo-3.1-lite-generate-preview',
+        estimatedVideoUsd: 0.30
       });
     }
 
@@ -197,9 +309,14 @@ export async function POST(request: Request, context: Context) {
   }
 }
 
-async function optionalJson(request: Request): Promise<{ action?: unknown }> {
+async function optionalJson(
+  request: Request
+): Promise<{ action?: unknown; confirmFalNoCredit?: unknown }> {
   try {
-    return await request.json() as { action?: unknown };
+    return await request.json() as {
+      action?: unknown;
+      confirmFalNoCredit?: unknown;
+    };
   } catch {
     return {};
   }
