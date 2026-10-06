@@ -74,28 +74,56 @@ import {
 } from '@/lib/engine/segmented-visual-sources-v4';
 import { assertCinematicVideoTrack } from '@/lib/media/probe';
 import { buildVeoRealMotionPrompt } from '@/lib/engine/provider-prompts-v5';
+import { ensureProjectMusicReal, shotTimelineOffsetSeconds } from '@/lib/engine/project-music-v4';
 
 const GOOGLE_BILLING_COOLDOWN_MS = 15 * 60 * 1000;
 let googleBillingBlockedUntil = 0;
 
-export async function produceProjectV4(projectId: string) {
+export type ProducerV4Options = {
+  targetSceneOrder?: number;
+  reviewWholeScene?: boolean;
+  integrateSceneMusic?: boolean;
+};
+
+export async function produceProjectV4(
+  projectId: string,
+  options: ProducerV4Options = {}
+) {
   let project = await getProject(projectId);
   if (!project.plan) throw new Error('El proyecto todavía no tiene un plan de escenas.');
   if (!['queued', 'planned', 'failed', 'ready'].includes(project.status)) return project;
 
   try {
-    const projectPilot = project.pilot;
-    const preflightPlanInput = projectPilot?.enabled
+    const sceneReviewMode =
+      Boolean(options.reviewWholeScene) &&
+      Number.isInteger(options.targetSceneOrder);
+    const projectPilot = sceneReviewMode ? undefined : project.pilot;
+    const targetScene = sceneReviewMode
+      ? project.plan.scenes.find((scene) => scene.order === options.targetSceneOrder)
+      : undefined;
+
+    if (sceneReviewMode && !targetScene) {
+      throw new Error(
+        `No existe la escena ${options.targetSceneOrder} para revisión integrada.`
+      );
+    }
+
+    const preflightPlanInput = sceneReviewMode && targetScene
       ? {
           ...project.plan,
-          scenes: project.plan.scenes
-            .slice(0, projectPilot.maxScenes)
-            .map((scene) => ({
-              ...scene,
-              shots: scene.shots.slice(0, projectPilot.maxShotsPerScene)
-            }))
+          scenes: [targetScene]
         }
-      : project.plan;
+      : projectPilot?.enabled
+        ? {
+            ...project.plan,
+            scenes: project.plan.scenes
+              .slice(0, projectPilot.maxScenes)
+              .map((scene) => ({
+                ...scene,
+                shots: scene.shots.slice(0, projectPilot.maxShotsPerScene)
+              }))
+          }
+        : project.plan;
     const preflight = preflightPlan(preflightPlanInput);
     if (!preflight.passed) {
       throw new Error(`Preproduccion 4.0 bloqueada: ${preflight.issues.slice(0, 8).join(' | ')}`);
@@ -103,7 +131,7 @@ export async function produceProjectV4(projectId: string) {
     assertProductionCanQueue(project);
     project.budget = estimateBudget(project.input, preflightPlanInput);
     assertEstimatedBudgetAllowed(project);
-    const pilot = pilotModeEnabled(project);
+    const pilot = sceneReviewMode ? false : pilotModeEnabled(project);
     project = await persist(project, {
       status: 'producing',
       error: undefined,
@@ -120,11 +148,21 @@ export async function produceProjectV4(projectId: string) {
     await removePartialSceneFiles(project.id);
 
     const scenes = requirePlan(project).scenes;
-    const sceneCount = pilot ? Math.min(pilotSceneLimit(project), scenes.length) : scenes.length;
+    const sceneCount = pilot
+      ? Math.min(pilotSceneLimit(project), scenes.length)
+      : scenes.length;
     const clips: string[] = [];
 
     for (let sceneIndex = 0; sceneIndex < sceneCount; sceneIndex += 1) {
       let scene = requirePlan(project).scenes[sceneIndex];
+
+      if (
+        sceneReviewMode &&
+        options.targetSceneOrder !== undefined &&
+        scene.order !== options.targetSceneOrder
+      ) {
+        continue;
+      }
 
       const forceSceneRegeneration = scene.shots.some((shot) => shot.qualityForceRegenerate);
       if (!pilot && !forceSceneRegeneration) {
@@ -158,8 +196,14 @@ export async function produceProjectV4(projectId: string) {
       const shotClips: string[] = [];
 
       for (let shotIndex = 0; shotIndex < shotCount; shotIndex += 1) {
-        project = await produceShotV4(project, sceneIndex, shotIndex, sceneCount);
-        if (project.status === 'quality-review') return project;
+        project = await produceShotV4(
+          project,
+          sceneIndex,
+          shotIndex,
+          sceneCount,
+          { deferQualityPause: sceneReviewMode }
+        );
+        if (project.status === 'quality-review' && !sceneReviewMode) return project;
         const completed = requirePlan(project).scenes[sceneIndex].shots[shotIndex];
         if (!completed.videoAsset) throw new Error(`El segmento ${completed.order} terminó sin video.`);
         shotClips.push(assetAbsolutePath(project.id, completed.videoAsset));
@@ -177,29 +221,98 @@ export async function produceProjectV4(projectId: string) {
       }
 
       scene = requirePlan(project).scenes[sceneIndex];
-      const sceneVideo = path.join(projectAssetDir(project.id, 'video'), `scene-${pad(scene.order)}.mp4`);
+      const sceneVideo = path.join(
+        projectAssetDir(project.id, 'video'),
+        `scene-${pad(scene.order)}.mp4`
+      );
       await concatenate(shotClips, sceneVideo);
+
+      let sceneReviewVideo = sceneVideo;
+      if (sceneReviewMode && options.integrateSceneMusic && project.input.generateMusic) {
+        const music = await ensureProjectMusicReal(project);
+        if (music.ready && music.path) {
+          const mixedScene = path.join(
+            projectAssetDir(project.id, 'video'),
+            `scene-${pad(scene.order)}-review-mix.mp4`
+          );
+          const firstShotForOffset = scene.shots[0];
+          const offsetSeconds = firstShotForOffset
+            ? shotTimelineOffsetSeconds(project, scene.id, firstShotForOffset.id)
+            : 0;
+          await mixBackgroundMusic(
+            sceneVideo,
+            music.path,
+            mixedScene,
+            offsetSeconds
+          );
+          sceneReviewVideo = mixedScene;
+          project.musicAsset = music.asset;
+        }
+      }
+
       const firstShot = scene.shots[0];
-      if (!firstShot?.imageAsset || !firstShot.voiceAsset) throw new Error(`La escena ${scene.order} no tiene recursos completos.`);
+      if (!firstShot?.imageAsset || !firstShot.voiceAsset) {
+        throw new Error(`La escena ${scene.order} no tiene recursos completos.`);
+      }
+
       const sceneAssets = renderedAssets(
         project.id,
         scene.mode === 'animated-image' ? 'ai-video' : scene.mode,
         assetAbsolutePath(project.id, firstShot.imageAsset),
         assetAbsolutePath(project.id, firstShot.voiceAsset),
-        sceneVideo
+        sceneReviewVideo
       );
       await saveSceneCheckpoint(project, scene, sceneAssets);
+
+      const sceneIssues = scene.shots.flatMap((shot) =>
+        (shot.qualityIssues || []).map(
+          (issue) => `T${shot.order}: ${issue}`
+        )
+      );
+
       Object.assign(scene, sceneAssets, {
-        status: 'ready' as const,
+        status: sceneReviewMode ? 'review-required' as const : 'ready' as const,
         productionStrategy: 'real-cinema-v2' as const,
         qualityScore: aggregateQuality(scene.shots),
-        qualityAttempts: Math.max(0, ...scene.shots.map((shot) => shot.qualityAttempts || 0)),
-        qualityIssues: undefined,
-        error: undefined
+        qualityAttempts: Math.max(
+          0,
+          ...scene.shots.map((shot) => shot.qualityAttempts || 0)
+        ),
+        qualityIssues: sceneIssues.length ? sceneIssues : undefined,
+        error: sceneReviewMode
+          ? 'Escena completa generada; requiere revisión humana integrada.'
+          : undefined
       });
-      clips.push(sceneVideo);
-      project.productionLog.push(`${new Date().toISOString()} Escena ${scene.order} terminada con Real Cinema 4.0`);
-      project.progress = progress('real-cinema', scenePercent(sceneIndex + 1, 0, 1, sceneCount), `Escena ${scene.order} aprobada y guardada`, scene.order, sceneCount);
+
+      clips.push(sceneReviewVideo);
+      project.productionLog.push(
+        `${new Date().toISOString()} Escena ${scene.order} terminada con Real Cinema 4.0`
+      );
+
+      if (sceneReviewMode) {
+        project.status = 'quality-review';
+        project.error = undefined;
+        project.progress = progress(
+          'quality-review',
+          scenePercent(sceneIndex + 1, 0, 1, sceneCount),
+          `Revisa escena ${scene.order} completa; las tomas quedan disponibles para reparación selectiva.`,
+          scene.order,
+          scenes.length
+        );
+        project.productionLog.push(
+          `${new Date().toISOString()} Scene Review 5.0: escena ${scene.order} montada como unidad de revisión. No se avanzará a otra escena hasta aprobación humana.`
+        );
+        project = await saveProject(project);
+        return project;
+      }
+
+      project.progress = progress(
+        'real-cinema',
+        scenePercent(sceneIndex + 1, 0, 1, sceneCount),
+        `Escena ${scene.order} aprobada y guardada`,
+        scene.order,
+        sceneCount
+      );
       project = await saveProject(project);
     }
 
@@ -259,7 +372,13 @@ export async function produceProjectV4(projectId: string) {
   }
 }
 
-async function produceShotV4(project: FilmProject, sceneIndex: number, shotIndex: number, totalScenes: number) {
+async function produceShotV4(
+  project: FilmProject,
+  sceneIndex: number,
+  shotIndex: number,
+  totalScenes: number,
+  options: { deferQualityPause?: boolean } = {}
+) {
   let scene = requirePlan(project).scenes[sceneIndex];
   let shot = scene.shots[shotIndex];
   const reusable =
@@ -309,18 +428,37 @@ async function produceShotV4(project: FilmProject, sceneIndex: number, shotIndex
           outputAsset: reviewed.reportAsset
         });
         if (shouldPauseForQuality(reviewed.report)) {
-          shot.status = 'review-required';
-          shot.error = `El segmento obtuvo ${reviewed.report.overallScore}/10 y requiere revisión manual.`;
-          scene.status = 'review-required';
-          scene.qualityScore = shot.qualityScore;
-          scene.qualityAttempts = shot.qualityAttempts;
-          scene.qualityIssues = shot.qualityIssues;
-          scene.qualityReportAsset = shot.qualityReportAsset;
-          scene.error = `Segmento ${shot.order}: ${shot.error}`;
-          project.status = 'quality-review';
-          project.progress = progress('quality-review', project.progress.percent, `Revisa escena ${scene.order}, segmento ${shot.order}`, scene.order, totalScenes);
-          project.productionLog.push(`${new Date().toISOString()} Pausa manual por calidad en escena ${scene.order}, segmento ${shot.order}`);
-          return saveProject(project);
+          const qualityMessage =
+            `El segmento obtuvo ${reviewed.report.overallScore}/10 y requiere revisión manual.`;
+
+          if (options.deferQualityPause) {
+            shot.status = 'ready';
+            shot.error = undefined;
+            project.productionLog.push(
+              `${new Date().toISOString()} Aviso de calidad diferido en escena ${scene.order}, segmento ${shot.order}: ${qualityMessage} Se revisará dentro de la escena completa.`
+            );
+          } else {
+            shot.status = 'review-required';
+            shot.error = qualityMessage;
+            scene.status = 'review-required';
+            scene.qualityScore = shot.qualityScore;
+            scene.qualityAttempts = shot.qualityAttempts;
+            scene.qualityIssues = shot.qualityIssues;
+            scene.qualityReportAsset = shot.qualityReportAsset;
+            scene.error = `Segmento ${shot.order}: ${shot.error}`;
+            project.status = 'quality-review';
+            project.progress = progress(
+              'quality-review',
+              project.progress.percent,
+              `Revisa escena ${scene.order}, segmento ${shot.order}`,
+              scene.order,
+              totalScenes
+            );
+            project.productionLog.push(
+              `${new Date().toISOString()} Pausa manual por calidad en escena ${scene.order}, segmento ${shot.order}`
+            );
+            return saveProject(project);
+          }
         }
       } catch (error) {
         await appendSpend(project.id, {
