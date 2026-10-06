@@ -11,6 +11,10 @@ import {
 import { generateImage, generateImageWithReferences } from '@/lib/providers/openai-media';
 import { generateFalMusic, generateFalVideo } from '@/lib/providers/fal-media';
 import {
+  generateWanImageVideo,
+  isWanNoChargeFailure
+} from '@/lib/providers/wan';
+import {
   generateVeoVideo,
   isVeoNoChargeFailure,
   isVeoQuotaFailure
@@ -751,9 +755,9 @@ async function generateBaseVideo(
   const provider = (process.env.VIDEO_PROVIDER || 'auto').toLowerCase();
   const prompt = `${shot.visualPrompt} Camera: ${shot.camera}. Duration exactly ${shot.durationSeconds} seconds. Generate natural motion only; do not generate dialogue or subtitles.`.trim();
   type VideoAttempt = {
-    id: 'omni' | 'veo' | 'fal-video';
+    id: 'omni' | 'veo' | 'fal-video' | 'wan';
     name: string;
-    family: 'google' | 'fal';
+    family: 'google' | 'fal' | 'wan';
     enabled: boolean;
     model?: string;
     run: () => Promise<unknown>;
@@ -822,13 +826,35 @@ async function generateBaseVideo(
           outputPath,
           shot.durationSeconds
         )
+    },
+    {
+      id: 'wan',
+      name: 'Wan 2.6 I2V Flash',
+      family: 'wan',
+      model: process.env.WAN_VIDEO_MODEL || 'wan2.6-i2v-flash',
+      enabled:
+        hasUsableCredential('DASHSCOPE_API_KEY') &&
+        (
+          hasShotRouting ||
+          provider === 'auto' ||
+          provider === 'wan'
+        ),
+      run: () =>
+        generateWanImageVideo(
+          referencePaths[0],
+          prompt,
+          outputPath,
+          shot.durationSeconds
+        )
     }
   ];
 
   const preferredProviders =
     shot.motionSpec?.preferredProviders?.filter(
       (providerId) =>
-        providerId === 'veo' || providerId === 'fal-video'
+        providerId === 'veo' ||
+        providerId === 'fal-video' ||
+        providerId === 'wan'
     ) || [];
 
   const attempts =
@@ -850,7 +876,19 @@ async function generateBaseVideo(
     let idempotencyKey = '';
     let reservedUsd = estimateOperationCost('video', shot.durationSeconds);
     try {
-      const reservation = reserveShotGeneration(project, scene, shot);
+      const attemptCostOverride =
+        attempt.id === 'wan'
+          ? Math.round(shot.durationSeconds * 0.025 * 100) / 100
+          : attempt.id === 'veo' &&
+              shot.videoModelOverride === 'veo-3.1-lite-generate-preview'
+            ? Math.round(shot.durationSeconds * 0.05 * 100) / 100
+            : undefined;
+      const reservation = reserveShotGeneration(
+        project,
+        scene,
+        shot,
+        attemptCostOverride
+      );
       reservedUsd = reservation.reservedUsd;
       idempotencyKey = `video:${shot.id}:${reservation.generationNumber}`;
       shot.lastProvider = attempt.name;
@@ -879,8 +917,14 @@ async function generateBaseVideo(
       errors.push(`${attempt.name}: ${message}`);
 
       const safeNoCharge =
-        attempt.id === 'veo' &&
-        (isVeoQuotaFailure(error) || isVeoNoChargeFailure(error));
+        (
+          attempt.id === 'veo' &&
+          (isVeoQuotaFailure(error) || isVeoNoChargeFailure(error))
+        ) ||
+        (
+          attempt.id === 'wan' &&
+          isWanNoChargeFailure(error)
+        );
 
       if (submitted) {
         if (safeNoCharge) {
@@ -920,9 +964,9 @@ async function generateBaseVideo(
         googleBillingBlockedUntil = Date.now() + GOOGLE_BILLING_COOLDOWN_MS;
       }
 
-      // Un fallo Veo confirmado como no-cobrable puede pasar al siguiente
-      // proveedor de la ruta sin duplicar gasto. Cualquier estado de cobro
-      // desconocido sigue deteniendo la toma.
+      // Un fallo confirmado como no-cobrable (Veo o Wan) puede pasar al
+      // siguiente proveedor de la ruta sin duplicar gasto. Cualquier estado
+      // de cobro desconocido sigue deteniendo la toma.
       if (safeNoCharge) continue;
 
       const kind = classifyProductionError(error);
