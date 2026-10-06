@@ -141,8 +141,18 @@ export async function prepareAudioFirstVoice(
       idempotencyKey
     });
     try {
-      await generateSpeech(text, voiceProfile.voiceInstructions, voicePath);
-      await writeFile(alignmentPath, `${JSON.stringify({ provider: 'openai', speakerId, text, alignment: null }, null, 2)}\n`, 'utf8');
+      const exactLanguageInstructions = [
+        'Habla exactamente el texto de entrada en español latino.',
+        'No traduzcas, no parafrasees, no agregues, no omitas y no sustituyas ninguna palabra.',
+        voiceProfile.voiceInstructions
+      ].filter(Boolean).join(' ');
+      await generateSpeech(
+        text,
+        exactLanguageInstructions,
+        voicePath,
+        voiceProfile.voiceId
+      );
+      await writeFile(alignmentPath, `${JSON.stringify({ provider: 'openai', speakerId, text, voice: voiceProfile.voiceId || process.env.OPENAI_TTS_VOICE || 'marin', exactText: true, alignment: null }, null, 2)}\n`, 'utf8');
       await appendSpend(project.id, {
         operation: 'voice',
         provider: 'openai',
