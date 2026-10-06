@@ -234,7 +234,7 @@ export async function applyAudioFirstLipSync(
   }
 
   const estimatedUsd = estimateOperationCost('lip-sync', shot.durationSeconds);
-  const idempotencyKey = `lip-sync:${shot.id}:${shot.durationSeconds}`;
+  const idempotencyKey = `lip-sync:${shot.id}:${shot.durationSeconds}:${Math.max(1, shot.generationCount || 1)}`;
   await assertSpendRetrySafe(project.id, idempotencyKey, 'lip-sync');
   await appendSpend(project.id, {
     operation: 'lip-sync',
