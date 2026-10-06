@@ -54,9 +54,11 @@ export async function POST(request: Request, context: Context) {
             ? 'resume-safe-failover'
             : body.action === 'resume-veo-lite'
               ? 'resume-veo-lite'
-              : body.action === 'resume-wan-flash'
-                ? 'resume-wan-flash'
-                : 'preflight';
+              : body.action === 'resume-fal-funded'
+                ? 'resume-fal-funded'
+                : body.action === 'resume-wan-flash'
+                  ? 'resume-wan-flash'
+                  : 'preflight';
 
     if (action === 'preflight') {
       const project = await getProject(projectId);
@@ -240,6 +242,107 @@ export async function POST(request: Request, context: Context) {
         provider: 'veo',
         model: 'veo-3.1-lite-generate-preview',
         estimatedVideoUsd: 0.30
+      });
+    }
+
+    if (action === 'resume-fal-funded') {
+      const key = 'video:pilot-15d-01:2';
+      let latest = await latestSpendForKey(projectId, key);
+
+      if (!latest) {
+        throw new Error(
+          'No existe un registro del segundo intento para reconciliar antes de usar Fal.'
+        );
+      }
+
+      if (
+        latest.state === 'failed-unknown' &&
+        /veo/i.test(latest.provider) &&
+        /(permission_denied|denied access|project has been denied access|"code"\s*:\s*403|\b403\b)/i.test(
+          latest.error || ''
+        )
+      ) {
+        latest = await appendSpend(projectId, {
+          operation: latest.operation,
+          provider: latest.provider,
+          model: latest.model,
+          state: 'failed-no-charge',
+          estimatedUsd: latest.estimatedUsd,
+          actualUsd: 0,
+          sceneId: latest.sceneId,
+          shotId: latest.shotId,
+          characterId: latest.characterId,
+          idempotencyKey: latest.idempotencyKey,
+          providerRequestId: latest.providerRequestId,
+          error:
+            '[manual-reconcile-veo-permission-denied] ' +
+            (latest.error || 'Veo rechazó la solicitud con HTTP 403 antes de generar video.')
+        });
+      }
+
+      if (latest.state !== 'failed-no-charge') {
+        throw new Error(
+          `No es seguro continuar con Fal: el último intento permanece en estado ${latest.state}.`
+        );
+      }
+
+      const project = await updateProject(projectId, (current) => {
+        const { scene, shot } = getPilotShotOne(current);
+
+        if ((shot.generationCount || 0) >= 2) {
+          releaseNoChargeGenerationReservation(
+            shot,
+            latest?.estimatedUsd || 0
+          );
+        }
+
+        if ((shot.generationCount || 0) !== 1) {
+          throw new Error(
+            `Reanudación Fal bloqueada: la Toma 1 registra ${shot.generationCount || 0} generaciones después de reconciliar el 403 de Veo; se esperaba 1.`
+          );
+        }
+
+        if (!shot.motionSpec) {
+          throw new Error('La Toma 1 perdió su especificación Real Motion.');
+        }
+
+        shot.motionSpec = {
+          ...shot.motionSpec,
+          preferredProviders: ['fal-video']
+        };
+        shot.videoModelOverride = undefined;
+        shot.qualityForceRegenerate = false;
+        shot.safeFailoverResume = true;
+        shot.lastGenerationState = undefined;
+        shot.error = undefined;
+        shot.status = 'pending';
+
+        scene.error = undefined;
+        scene.status = 'pending';
+
+        current.error = undefined;
+        current.status = 'queued';
+        current.progress = {
+          ...current.progress,
+          phase: 'queued',
+          message:
+            'Reanudando E1/T1 con Fal.ai usando el frame V2 existente; Veo 403 fue reconciliado sin generación.',
+          updatedAt: new Date().toISOString()
+        };
+        current.productionLog = [
+          ...current.productionLog,
+          `${new Date().toISOString()} E1/T1 enviada a Fal.ai con saldo disponible: frame V2 reutilizado, Veo 403 reconciliado y sin nueva imagen.`
+        ];
+
+        return current;
+      });
+
+      return NextResponse.json({
+        ok: true,
+        project,
+        resumed: true,
+        provider: 'fal-video',
+        frameReused: true
       });
     }
 
