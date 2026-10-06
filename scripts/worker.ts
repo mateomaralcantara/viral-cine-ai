@@ -35,7 +35,9 @@ try {
           if (result.status === 'quality-review') {
             console.log(`[worker] Pausado por calidad: ${queued.input.title}`);
           } else if (result.status === 'paused-billing') {
-            console.warn(`[worker] Pausado por saldo: ${queued.input.title}`);
+            console.warn(
+              `[worker] Pausado por saldo: ${queued.input.title} — ${result.error || 'sin detalle'}`
+            );
           } else if (result.status === 'paused-safety') {
             console.warn(
               `[worker] Pausado por seguridad: ${queued.input.title} — ${result.error || 'sin detalle'}`
