@@ -28,7 +28,8 @@ import {
   createPlaceholderImage,
   createSubtitles,
   mixBackgroundMusic,
-  normalizeGeneratedVideo
+  normalizeGeneratedVideo,
+  normalizeGeneratedVideoWithEmbeddedAudio
 } from '@/lib/media/ffmpeg';
 import { createSyntheticMotionVideo } from '@/lib/media/synthetic-video';
 import {
@@ -424,17 +425,36 @@ async function renderShotV4(project: FilmProject, scene: FilmScene, shot: FilmSh
   shot.baseVideoAsset = assetRelativePath(project.id, normalizedBasePath);
 
   let sourceForFinal = normalizedBasePath;
-  if (shot.spokenText.trim()) {
-    if (!(await fileExists(lipSyncRawPath))) await applyAudioFirstLipSync(project, scene, shot, normalizedBasePath, voicePath, lipSyncRawPath);
+  const hasSpokenText = Boolean(shot.spokenText.trim());
+  if (hasSpokenText) {
+    if (!(await fileExists(lipSyncRawPath))) {
+      await applyAudioFirstLipSync(project, scene, shot, normalizedBasePath, voicePath, lipSyncRawPath);
+    }
     sourceForFinal = lipSyncRawPath;
     shot.lipSyncAsset = assetRelativePath(project.id, lipSyncRawPath);
   }
 
   const partialPath = temporarySceneVideoPath(normalizedPath);
   try {
-    await normalizeGeneratedVideo(sourceForFinal, voicePath, shot.durationSeconds, partialPath, project.input.aspectRatio);
+    if (hasSpokenText) {
+      await normalizeGeneratedVideoWithEmbeddedAudio(
+        sourceForFinal,
+        shot.durationSeconds,
+        partialPath,
+        project.input.aspectRatio
+      );
+    } else {
+      await normalizeGeneratedVideo(
+        sourceForFinal,
+        voicePath,
+        shot.durationSeconds,
+        partialPath,
+        project.input.aspectRatio
+      );
+    }
+
     await publishSceneVideo(partialPath, normalizedPath, shot.durationSeconds, {
-      requireAudibleAudio: Boolean(shot.spokenText.trim()),
+      requireAudibleAudio: hasSpokenText,
       requireMotion: true
     });
   } finally {
