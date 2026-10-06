@@ -10,11 +10,15 @@ export type GenerationReservation = {
 export function reserveShotGeneration(
   project: FilmProject,
   scene: FilmScene,
-  shot: FilmShot
+  shot: FilmShot,
+  reservedUsdOverride?: number
 ): GenerationReservation {
   assertShotGenerationAllowed(project, scene, shot);
 
-  const reservedUsd = estimatedGenerationCost(shot, scene);
+  const reservedUsd =
+    reservedUsdOverride !== undefined
+      ? round(Math.max(0, reservedUsdOverride))
+      : estimatedGenerationCost(shot, scene);
   shot.generationCount = (shot.generationCount || 0) + 1;
   shot.estimatedSpendUsd = round((shot.estimatedSpendUsd || 0) + reservedUsd);
   shot.lastGenerationAt = new Date().toISOString();
