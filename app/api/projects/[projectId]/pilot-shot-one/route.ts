@@ -98,6 +98,7 @@ export async function POST(request: Request, context: Context) {
         // El frame V2 ya fue generado antes del fallo no-cobrable de Veo.
         // Lo conservamos para no pagar otra imagen ni perder consistencia.
         shot.qualityForceRegenerate = false;
+        shot.safeFailoverResume = true;
         shot.lastGenerationState = undefined;
         shot.error = undefined;
         shot.status = 'pending';
