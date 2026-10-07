@@ -12,7 +12,7 @@ export const SCENE4_VISIBLE_LIPSYNC_SEGMENTS_V6 = [
 ] as const;
 
 export const SCENE4_VISIBLE_LIPSYNC_SECONDS_V6 = 12;
-export const SCENE4_VISIBLE_LIPSYNC_MAX_USD_V6 = 1.61;
+export const SCENE4_VISIBLE_LIPSYNC_MAX_USD_V6 = 1.21;
 
 export function validateScene4VisibleLipSyncPlanV6() {
   const rebuilt = SCENE4_VISIBLE_LIPSYNC_SEGMENTS_V6
