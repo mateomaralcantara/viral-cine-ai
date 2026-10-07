@@ -67,7 +67,8 @@
     "safe:scene3:resume-internal": "node --import tsx scripts/resume-scene3-internal-v6.ts",
     "safe:scene3:resume-wan": "node --import tsx scripts/resume-scene3-wan-v6.ts",
     "safe:scene3:fix-female-voice-local": "node --import tsx scripts/fix-scene3-t2-female-voice-local-v6.ts",
-    "safe:scene3:restore-female-reference-voice": "node --import tsx scripts/restore-scene3-t2-female-reference-voice-v6.ts"
+    "safe:scene3:restore-female-reference-voice": "node --import tsx scripts/restore-scene3-t2-female-reference-voice-v6.ts",
+    "safe:scene3:new-female-voice": "node --import tsx scripts/generate-scene3-t2-new-female-voice-v6.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",
