@@ -264,6 +264,23 @@ export async function copyMedia(source: string, destination: string) {
   return destination;
 }
 
+export async function normalizeReferenceImage(
+  imagePath: string,
+  outputPath: string,
+  aspectRatio: ProjectInput['aspectRatio']
+) {
+  const { width, height } = dimensions(aspectRatio);
+  await run([
+    '-y',
+    '-i', imagePath,
+    '-frames:v', '1',
+    '-vf',
+    'scale=' + width + ':' + height + ':force_original_aspect_ratio=increase,crop=' + width + ':' + height,
+    outputPath
+  ]);
+  return outputPath;
+}
+
 export async function extractLastFrame(
   videoPath: string,
   outputPath: string,
