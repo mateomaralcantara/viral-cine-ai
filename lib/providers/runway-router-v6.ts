@@ -107,6 +107,23 @@ export async function dryRunRunwayRouterVideo(
   };
 }
 
+export async function generateRunwayGrokLiteFromEnvironment(
+  request: GrokLiteImageToVideoRequest,
+  outputPath: string,
+  timeoutMs = 12 * 60 * 1000
+) {
+  const key = process.env.RUNWAYML_API_SECRET?.trim();
+  if (!key || key.length < 8) {
+    throw new Error('Runway API secret no está configurado.');
+  }
+  return generateRunwayGrokLiteImageToVideo(
+    request,
+    key,
+    outputPath,
+    timeoutMs
+  );
+}
+
 export async function generateRunwayGrokLiteImageToVideo(
   request: GrokLiteImageToVideoRequest,
   secret: string,
