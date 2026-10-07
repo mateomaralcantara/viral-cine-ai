@@ -35,7 +35,7 @@ const plan = validateScene3SynchronizedV6(project);
 project = await saveProject(project);
 
 const liteCredits = grokLiteImageToVideoCredits(8, 'auto_720p');
-const dialogueCredits = grok15AudioDrivenCredits(8, '720p', 2, 1);
+const dialogueCredits = grok15AudioDrivenCredits(8, '720p', 1, 1);
 const videoCredits = liteCredits + dialogueCredits + liteCredits;
 
 console.log('\n==================================================');
@@ -63,8 +63,8 @@ console.log('- T2 Grok 1.5 audio-driven: ' + dialogueCredits + ' créditos');
 console.log('- T3 Grok Lite: ' + liteCredits + ' créditos');
 console.log('- Total Runway: ' + videoCredits + ' créditos = US$' + (videoCredits * 0.01).toFixed(2));
 console.log('- Imágenes OpenAI: hasta 2 si faltan referencias; estimación interna hasta US$0.16');
-console.log('- Voz OpenAI: tope de autorización US$0.01');
-console.log('- TOPE CONSERVADOR ESCENA 3: US$1.98');
+console.log('- Voz OpenAI: tope interno de autorización US$0.01');
+console.log('- TOPE INTERNO ESCENA 3: US$1.81');
 console.log('');
 console.log('Fal.ai: NO');
 console.log('Fallback pagado: NO');
