@@ -24,6 +24,30 @@ export type RunwayDryRunResult = {
   resolvedSettings?: Record<string, unknown>;
 };
 
+export type GrokLiteImageToVideoRequest = {
+  model: 'grok_imagine_1_5_lite';
+  promptImage: string;
+  promptText?: string;
+  ratio: 'auto_480p' | 'auto_720p' | 'auto_1080p';
+  duration: number;
+};
+
+export function grokLiteImageToVideoCredits(
+  durationSeconds: number,
+  ratio: GrokLiteImageToVideoRequest['ratio']
+) {
+  if (!Number.isInteger(durationSeconds) || durationSeconds < 1 || durationSeconds > 15) {
+    throw new Error('Grok Lite permite duraciones enteras de 1 a 15 segundos.');
+  }
+
+  const perSecond =
+    ratio === 'auto_480p' ? 2 :
+    ratio === 'auto_720p' ? 3 :
+    14;
+
+  return durationSeconds * perSecond + 1;
+}
+
 export async function imageFileToDataUri(filePath: string) {
   const data = await readFile(filePath);
   const ext = path.extname(filePath).toLowerCase();
@@ -81,6 +105,91 @@ export async function dryRunRunwayRouterVideo(
     credits,
     resolvedSettings: record(routing.resolvedSettings)
   };
+}
+
+export async function generateRunwayGrokLiteImageToVideo(
+  request: GrokLiteImageToVideoRequest,
+  secret: string,
+  outputPath: string,
+  timeoutMs = 12 * 60 * 1000
+) {
+  if (request.model !== 'grok_imagine_1_5_lite') {
+    throw new Error('ViralCine 6 Safe solo autoriza grok_imagine_1_5_lite en esta ruta.');
+  }
+
+  const submitted = await runwayRequest(
+    '/v1/image_to_video',
+    request,
+    secret
+  );
+
+  const taskId =
+    stringValue(submitted.id) ||
+    stringValue(record(submitted.task).id);
+
+  if (!taskId) {
+    throw new Error('Runway no devolvió task id.');
+  }
+
+  const started = Date.now();
+
+  while (Date.now() - started < timeoutMs) {
+    await sleep(5000);
+
+    const task = await runwayGet(
+      '/v1/tasks/' + encodeURIComponent(taskId),
+      secret
+    );
+
+    const status = stringValue(task.status);
+
+    if (status === 'SUCCEEDED') {
+      const output = Array.isArray(task.output)
+        ? task.output.find((item) => typeof item === 'string')
+        : undefined;
+
+      if (typeof output !== 'string') {
+        throw new Error('Runway terminó la tarea sin URL de salida.');
+      }
+
+      const media = await fetch(output);
+      if (!media.ok) {
+        throw new Error(
+          'No se pudo descargar el video de Runway: HTTP ' + media.status
+        );
+      }
+
+      await writeFile(
+        outputPath,
+        Buffer.from(await media.arrayBuffer())
+      );
+
+      return {
+        taskId,
+        model: request.model,
+        credits: grokLiteImageToVideoCredits(
+          request.duration,
+          request.ratio
+        ),
+        outputPath
+      };
+    }
+
+    if (status === 'FAILED' || status === 'CANCELED') {
+      throw new Error(
+        'Runway terminó la tarea con estado ' +
+          status +
+          '. taskId=' +
+          taskId
+      );
+    }
+  }
+
+  throw new Error(
+    'Timeout esperando Runway. taskId=' +
+      taskId +
+      '. No reintentes automáticamente; consulta la tarea primero.'
+  );
 }
 
 export async function generateRunwayRouterVideo(
