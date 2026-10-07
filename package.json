@@ -83,7 +83,8 @@
     "safe:scene5:mateo-true-child": "node --import tsx scripts/fix-scene5-mateo-true-child-v6.ts",
     "safe:scene5:approve": "node --import tsx scripts/approve-scene5-true-child-v6.ts",
     "safe:scene6:prepare": "node --import tsx scripts/prepare-scene6-v6.ts",
-    "safe:scene6:audition-sofia": "node --import tsx scripts/audition-scene6-sofia-v6.ts"
+    "safe:scene6:audition-sofia": "node --import tsx scripts/audition-scene6-sofia-v6.ts",
+    "safe:scene6:reconcile-sofia-audition": "node --import tsx scripts/reconcile-scene6-sofia-audition-v6.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",
