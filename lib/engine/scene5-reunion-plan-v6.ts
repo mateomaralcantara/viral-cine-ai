@@ -18,7 +18,8 @@ export const SCENE5_RUNWAY_SILENT_SECONDS_V6 = 14;
 export const SCENE5_WAN_DIALOGUE_SECONDS_V6 = 16;
 export const SCENE5_MAX_VIDEO_USD_V6 = 2.04;
 export const SCENE5_MAX_VOICE_USD_V6 = 0.01;
-export const SCENE5_SAFE_MAX_USD_V6 = 2.05;
+export const SCENE5_MAX_REFERENCE_IMAGE_USD_V6 = 0.08;
+export const SCENE5_SAFE_MAX_USD_V6 = 2.13;
 
 export function planScene5ReunionV6(project: FilmProject) {
   if (!project.plan) throw new Error('El proyecto no tiene plan.');
