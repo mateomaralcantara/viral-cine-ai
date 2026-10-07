@@ -9,7 +9,7 @@ import {
   SCENE3_DIALOGUE_V6,
   SCENE3_MARIANA_ID_V6
 } from '@/lib/engine/scene3-sync-plan-v6';
-import { grok15AudioDrivenCredits } from '@/lib/providers/runway-router-v6';
+import { grok15AudioDrivenCredits, wan3VideoCredits } from '@/lib/providers/runway-router-v6';
 import { decideLipSync } from '@/lib/engine/lip-sync-policy-v4';
 
 function fixture(): FilmProject {
@@ -78,5 +78,13 @@ test('Grok 1.5 audio-driven E3/T2 8s 720p con 1 imagen y 1 audio cuesta 130 cré
   assert.equal(
     grok15AudioDrivenCredits(8, '720p', 1, 1),
     130
+  );
+});
+
+
+test('WAN 3.0 E3/T2 8s 720p cuesta 80 creditos', () => {
+  assert.equal(
+    wan3VideoCredits(8, '1280:720'),
+    80
   );
 });
