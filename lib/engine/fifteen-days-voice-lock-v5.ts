@@ -51,11 +51,11 @@ export const FIFTEEN_DAYS_CORE_VOICE_LOCKS_V5: VoiceLockEntry[] = [
     id: IDS.mariana,
     label: 'Mariana',
     provider: 'openai',
-    voiceId: 'cedar',
+    voiceId: 'shimmer',
     language: 'es-LATAM',
     exactDialogue: true,
     instructions:
-      'Español latino natural. Voz femenina madura de unos 48 años, calmada, clara y cálida, con autoridad tranquila. Habla exactamente el texto de entrada. No traduzcas, no parafrasees, no agregues, no omitas y no sustituyas ninguna palabra. Ritmo conversacional, pausas naturales, sin tono de gurú, publicitario ni melodramático.'
+      'Español latino natural. Voz inequívocamente femenina de una mujer adulta de unos 48 años, natural, cálida y clara, con registro femenino medio y autoridad tranquila. Evita por completo un timbre masculino, grave o andrógino. Habla exactamente el texto de entrada. No traduzcas, no parafrasees, no agregues, no omitas y no sustituyas ninguna palabra. Ritmo conversacional, pausas naturales, sin tono de gurú, publicitario ni melodramático.'
   }
 ];
 
@@ -84,7 +84,7 @@ export function applyFifteenDaysCoreVoiceLocksV5(project: FilmProject) {
 
   project.productionLog.push(
     new Date().toISOString() +
-      ' Voice Lock 5.0 aplicado: Narrador/Elena=OpenAI marin, Raúl=OpenAI onyx, Mariana=OpenAI cedar, español latino exacto y traducción/paráfrasis prohibidas.'
+      ' Voice Lock 5.0 aplicado: Narrador/Elena=OpenAI marin, Raúl=OpenAI onyx, Mariana=OpenAI shimmer, español latino exacto y traducción/paráfrasis prohibidas.'
   );
 
   return project;
