@@ -18,7 +18,7 @@ import {
   generateRunwayGrokLiteFromEnvironment,
   grokLiteImageToVideoCredits,
   imageFileToDataUri
-} from '@/lib/providers/runway-direct-v6';
+} from '@/lib/providers/runway-router-v6';
 import {
   appendSpend,
   estimateOperationCost,
@@ -185,7 +185,41 @@ for (const shotOrder of [2, 3]) {
   console.log(
     'Costo máximo fijo: ' +
       directCredits +
-      ' créditos = US
+      ' créditos = USD ' +
+      (directCredits * 0.01).toFixed(2)
+  );
+
+  if (directCredits > MAX_CREDITS_PER_SHOT) {
+    throw new Error(
+      'SAFE COST GATE: E2/T' +
+        shotOrder +
+        ' cuesta ' +
+        directCredits +
+        ' créditos; máximo permitido: ' +
+        MAX_CREDITS_PER_SHOT +
+        '. NO se generó.'
+    );
+  }
+
+  if (totalCredits + directCredits > MAX_SCENE_CREDITS) {
+    throw new Error(
+      'SAFE COST GATE: la escena superaría ' +
+        MAX_SCENE_CREDITS +
+        ' créditos. NO se generó esta toma.'
+    );
+  }
+
+  const request = {
+    model: MODEL,
+    promptImage: referenceUri,
+    promptText: buildPrompt(shot.visualPrompt, shot.camera),
+    ratio: RATIO,
+    duration: shot.durationSeconds
+  };
+
+  const spendKey =
+    'v6safe:grok-direct:' + shot.id + ':1';
+
   const previousSpend = await latestSpendForKey(
     project.id,
     spendKey
