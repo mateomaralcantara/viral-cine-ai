@@ -31,7 +31,7 @@ if (!scene2 || scene2.status !== 'ready') {
 
 applyFifteenDaysCoreVoiceLocksV5(project);
 planScene3SynchronizedV6(project);
-const plan = validateScene3SynchronizedV6(project);
+validateScene3SynchronizedV6(project);
 project = await saveProject(project);
 
 const liteCredits = grokLiteImageToVideoCredits(8, 'auto_720p');
@@ -62,7 +62,6 @@ console.log('- T1 Grok Lite: ' + liteCredits + ' créditos');
 console.log('- T2 Grok 1.5 audio-driven: ' + dialogueCredits + ' créditos');
 console.log('- T3 Grok Lite: ' + liteCredits + ' créditos');
 console.log('- Total Runway: ' + videoCredits + ' créditos = US$' + (videoCredits * 0.01).toFixed(2));
-console.log('- Imágenes OpenAI: hasta 2 si faltan referencias; estimación interna hasta US$0.16');
 console.log('- Voz OpenAI: tope interno de autorización US$0.01');
 console.log('- TOPE INTERNO ESCENA 3: US$1.81');
 console.log('');
