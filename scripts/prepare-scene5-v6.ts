@@ -104,9 +104,9 @@ console.log('T6 · 4s · Elena: “De verdad.” · WAN 3.0 audio-reference');
 console.log('');
 console.log('VOCES CANDIDATAS / LOCK');
 console.log('Elena: OpenAI marin');
-console.log('Mateo: OpenAI ash · instrucciones niño latino de 7 años');
+console.log('Mateo: OpenAI alloy · true-child obligatorio para master final');
 console.log('Sofía: OpenAI coral · instrucciones niña latina de 10 años');
-console.log('IMPORTANTE: Mateo debe audicionarse antes de generar video.');
+console.log('IMPORTANTE: Mateo jamás puede quedar con voz adulta; master final exige true-child.');
 console.log('');
 console.log('REFERENCIAS VISUALES');
 for (const ref of refs) {
