@@ -164,3 +164,15 @@ test('productor Escena 5 normaliza speaker reference a 9:16 antes de WAN', async
   );
   assert.match(producer, /runway-request-rejected-no-task/);
 });
+
+
+test('productor Escena 5 aplica tope acumulado entre reanudaciones', async () => {
+  const producer = await readFile(
+    new URL('../lib/engine/scene5-reunion-producer-v6.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(producer, /readSpendLedger/);
+  assert.match(producer, /SAFE CUMULATIVE COST GATE E5/);
+  assert.match(producer, /SCENE5_SAFE_MAX_USD_V6/);
+});
