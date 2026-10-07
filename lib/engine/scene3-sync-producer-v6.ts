@@ -685,6 +685,9 @@ async function recordUnknownVideoFailure(
   credits: number,
   error: unknown
 ) {
+  const message = errorText(error);
+  const taskIdMatch = message.match(/taskId=([0-9a-f-]{36})/i);
+
   await appendSpend(project.id, {
     operation: 'video',
     provider: 'runway-direct',
@@ -694,7 +697,8 @@ async function recordUnknownVideoFailure(
     sceneId: scene.id,
     shotId: shot.id,
     idempotencyKey: spendKey,
-    error: errorText(error)
+    providerRequestId: taskIdMatch?.[1],
+    error: message
   });
 }
 
