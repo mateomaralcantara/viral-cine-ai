@@ -13,8 +13,10 @@ import {
   audioFileToDataUri,
   generateRunwayGrok15AudioDrivenFromEnvironment,
   generateRunwayGrokLiteFromEnvironment,
+  generateRunwayWan3AudioReferenceFromEnvironment,
   grok15AudioDrivenCredits,
   grokLiteImageToVideoCredits,
+  wan3VideoCredits,
   imageFileToDataUri
 } from '@/lib/providers/runway-router-v6';
 import {
@@ -49,6 +51,7 @@ import { applyFifteenDaysCoreVoiceLocksV5 } from '@/lib/engine/fifteen-days-voic
 
 const MAX_LITE_CREDITS = 25;
 const MAX_DIALOGUE_CREDITS = 130;
+const MAX_WAN_DIALOGUE_CREDITS = 80;
 const MAX_SCENE_CREDITS = 180;
 const MAX_VOICE_USD = 0.01;
 
@@ -59,9 +62,13 @@ export type Scene3SynchronizedResult = {
   runwayUsd: number;
 };
 
+export type Scene3DialogueProviderV6 = 'grok15' | 'wan3';
+
 export async function produceScene3SynchronizedV6(
-  projectId: string
+  projectId: string,
+  options: { dialogueProvider?: Scene3DialogueProviderV6 } = {}
 ): Promise<Scene3SynchronizedResult> {
+  const dialogueProvider = options.dialogueProvider || 'grok15';
   let project = await getProject(projectId);
   assertProjectReady(project);
 
@@ -119,12 +126,23 @@ export async function produceScene3SynchronizedV6(
 
   const t2 = await produceDialogueShot(
     project.id,
-    t1LastFrame
+    t1LastFrame,
+    dialogueProvider
+  );
+
+  const t2LastFrame = path.join(
+    projectAssetDir(project.id, 'images'),
+    'scene-003-shot-02-last.jpg'
+  );
+  await extractLastFrame(
+    t2,
+    t2LastFrame,
+    project.input.aspectRatio
   );
 
   const t3 = await produceReactionShot(
     project.id,
-    t1LastFrame
+    t2LastFrame
   );
 
   project = await getProject(project.id);
@@ -183,9 +201,14 @@ export async function produceScene3SynchronizedV6(
   await saveSceneCheckpoint(project, finalScene, sceneAssets);
   project = await saveProject(project);
 
+  const dialogueCredits =
+    dialogueProvider === 'wan3'
+      ? wan3VideoCredits(8, '1280:720')
+      : grok15AudioDrivenCredits(8, '720p', 1, 1);
+
   const credits =
     grokLiteImageToVideoCredits(8, 'auto_720p') +
-    grok15AudioDrivenCredits(8, '720p', 1, 1) +
+    dialogueCredits +
     grokLiteImageToVideoCredits(8, 'auto_720p');
 
   return {
@@ -305,7 +328,8 @@ async function produceSetupShot(
 
 async function produceDialogueShot(
   projectId: string,
-  sceneContinuityFrame: string
+  sceneContinuityFrame: string,
+  dialogueProvider: Scene3DialogueProviderV6
 ) {
   let project = await getProject(projectId);
   const scene = scene3(project);
@@ -404,9 +428,10 @@ async function produceDialogueShot(
     );
   }
 
+  const useWan = dialogueProvider === 'wan3';
   const rawPath = path.join(
     projectAssetDir(project.id, 'video'),
-    key + '-grok-audio-driven-raw.mp4'
+    key + (useWan ? '-wan3-audio-ref-raw.mp4' : '-grok-audio-driven-raw.mp4')
   );
   const finalPath = path.join(
     projectAssetDir(project.id, 'video'),
@@ -414,19 +439,31 @@ async function produceDialogueShot(
   );
 
   if (!(await exists(rawPath))) {
-    const credits = grok15AudioDrivenCredits(8, '720p', 1, 1);
-    if (credits !== MAX_DIALOGUE_CREDITS) {
+    const credits = useWan
+      ? wan3VideoCredits(8, '1280:720')
+      : grok15AudioDrivenCredits(8, '720p', 1, 1);
+
+    const expectedCredits = useWan
+      ? MAX_WAN_DIALOGUE_CREDITS
+      : MAX_DIALOGUE_CREDITS;
+
+    if (credits !== expectedCredits) {
       throw new Error(
         'SAFE COST GATE T2: costo inesperado ' + credits + ' créditos.'
       );
     }
-    const spendKey = 'v6safe:e3:t2:grok15-audio-driven:1';
+
+    const model = useWan ? 'wan3' : 'grok_imagine_1_5';
+    const spendKey = useWan
+      ? 'v6safe:e3:t2:wan3-audio-ref:1'
+      : 'v6safe:e3:t2:grok15-audio-driven:1';
+
     await assertSpendAvailable(project.id, spendKey, rawPath);
 
     await appendSpend(project.id, {
       operation: 'video',
       provider: 'runway-direct',
-      model: 'grok_imagine_1_5',
+      model,
       state: 'submitted',
       estimatedUsd: credits * 0.01,
       sceneId: scene.id,
@@ -435,34 +472,51 @@ async function produceDialogueShot(
     });
 
     try {
-      const generated = await generateRunwayGrok15AudioDrivenFromEnvironment(
-        {
-          model: 'grok_imagine_1_5',
-          promptText: [
-            '[Image 1] es el último frame aprobado de T1 y define identidades, calle, iluminación y continuidad.',
-            'Mariana es la mujer madura que acaba de sentarse junto a Elena; Elena es la mujer del cuaderno.',
-            'Mariana es la única persona que habla.',
-            'Su boca, labios y mandíbula permanecen visibles durante todo el parlamento.',
-            'La interpretación facial y los movimientos de boca deben seguir el audio de referencia exactamente, palabra por palabra.',
-            'Elena, si aparece, permanece completamente en silencio y no mueve los labios como si hablara.',
-            'Plano medio corto frontal, leve push-in continuo, sin cortes.',
-            'No generar voz adicional, música, texto, subtítulos, logos ni marcas de agua.'
-          ].join(' '),
-          duration: 8,
-          ratio: '16:9',
-          resolution: '720p',
-          references: [
-            { uri: await imageFileToDataUri(sceneContinuityFrame) }
-          ],
-          referenceAudio: [
+      const imageUri = await imageFileToDataUri(sceneContinuityFrame);
+      const audioUri = await audioFileToDataUri(voicePath);
+
+      const generated = useWan
+        ? await generateRunwayWan3AudioReferenceFromEnvironment(
             {
-              type: 'audio',
-              uri: await audioFileToDataUri(voicePath)
-            }
-          ]
-        },
-        rawPath
-      );
+              model: 'wan3',
+              promptText: [
+                '[Image 1] es el último frame aprobado de T1 y fija identidad, vestuario, calle, iluminación y continuidad.',
+                'Mariana es la mujer madura sentada junto a Elena y es la única persona que habla.',
+                'Usa el audio de referencia como la interpretación vocal de Mariana.',
+                'Sincroniza con precisión los movimientos de labios, mandíbula y expresiones de Mariana con el ritmo y fonemas del audio de referencia.',
+                'Elena permanece en silencio y no mueve los labios como si hablara.',
+                'Plano medio corto frontal de Mariana, boca completamente visible, leve push-in continuo, sin cortes.',
+                'No añadir palabras, voz adicional, música, texto, subtítulos, logos ni marcas de agua.'
+              ].join(' '),
+              audio: true,
+              duration: 8,
+              ratio: '1280:720',
+              references: [{ uri: imageUri }],
+              referenceAudio: [{ type: 'audio', uri: audioUri }]
+            },
+            rawPath
+          )
+        : await generateRunwayGrok15AudioDrivenFromEnvironment(
+            {
+              model: 'grok_imagine_1_5',
+              promptText: [
+                '[Image 1] es el último frame aprobado de T1 y define identidades, calle, iluminación y continuidad.',
+                'Mariana es la mujer madura que acaba de sentarse junto a Elena; Elena es la mujer del cuaderno.',
+                'Mariana es la única persona que habla.',
+                'Su boca, labios y mandíbula permanecen visibles durante todo el parlamento.',
+                'La interpretación facial y los movimientos de boca deben seguir el audio de referencia exactamente, palabra por palabra.',
+                'Elena, si aparece, permanece completamente en silencio y no mueve los labios como si hablara.',
+                'Plano medio corto frontal, leve push-in continuo, sin cortes.',
+                'No generar voz adicional, música, texto, subtítulos, logos ni marcas de agua.'
+              ].join(' '),
+              duration: 8,
+              ratio: '16:9',
+              resolution: '720p',
+              references: [{ uri: imageUri }],
+              referenceAudio: [{ type: 'audio', uri: audioUri }]
+            },
+            rawPath
+          );
 
       await appendSpend(project.id, {
         operation: 'video',
@@ -478,7 +532,15 @@ async function produceDialogueShot(
         outputAsset: assetRelativePath(project.id, rawPath)
       });
     } catch (error) {
-      await recordUnknownVideoFailure(project, scene, shot, spendKey, 'grok_imagine_1_5', credits, error);
+      await recordUnknownVideoFailure(
+        project,
+        scene,
+        shot,
+        spendKey,
+        model,
+        credits,
+        error
+      );
       throw error;
     }
   }
@@ -486,7 +548,7 @@ async function produceDialogueShot(
   const rawProbe = await probeVideo(rawPath);
   if (!rawProbe.hasAudio) {
     throw new Error(
-      'Grok audio-driven devolvió video sin audio embebido. No se publicará la toma.'
+      'El proveedor audio-reference devolvió video sin audio embebido. No se publicará la toma.'
     );
   }
 
@@ -508,9 +570,18 @@ async function produceDialogueShot(
     rawPath,
     lipSyncPath: rawPath,
     finalPath,
-    provider: 'Runway Direct / grok_imagine_1_5 audio-driven',
-    pipelineVersion: '6.0-audio-driven-lipsync',
-    spendUsd: MAX_DIALOGUE_CREDITS * 0.01
+    provider:
+      dialogueProvider === 'wan3'
+        ? 'Runway Direct / wan3 audio-reference'
+        : 'Runway Direct / grok_imagine_1_5 audio-driven',
+    pipelineVersion:
+      dialogueProvider === 'wan3'
+        ? '6.0-wan3-audio-reference-review'
+        : '6.0-audio-driven-lipsync',
+    spendUsd:
+      (dialogueProvider === 'wan3'
+        ? MAX_WAN_DIALOGUE_CREDITS
+        : MAX_DIALOGUE_CREDITS) * 0.01
   });
 
   return finalPath;
