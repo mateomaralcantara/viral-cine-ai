@@ -73,7 +73,9 @@
     "safe:scene4:run": "node --import tsx scripts/generate-scene4-v6.ts",
     "safe:scene4:lipsync": "node --import tsx scripts/lipsync-scene4-v6.ts",
     "safe:scene4:wan3": "node --import tsx scripts/lipsync-scene4-v6.ts",
-    "safe:scene4:reconcile-wan-internal": "node --import tsx scripts/reconcile-scene4-wan-internal-v6.ts"
+    "safe:scene4:reconcile-wan-internal": "node --import tsx scripts/reconcile-scene4-wan-internal-v6.ts",
+    "safe:scene4:approve": "node --import tsx scripts/approve-scene4-wan-v6.ts",
+    "safe:scene5:prepare": "node --import tsx scripts/prepare-scene5-v6.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",
