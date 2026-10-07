@@ -64,7 +64,8 @@ theatrical acting, baby talk, cartoon squeakiness, metallic processing, or exagg
 She is speaking affectionately to her mother at home. The delivery is innocent, simple,
 close, curious, emotionally genuine, and conversational. This is an original fictional
 synthetic character voice and must not imitate any real child or identifiable person.
-"@.Trim()
+"@
+$VoicePrompt = $VoicePrompt.Trim()
 
 $ScriptHint = "Mami, ¿ya terminaste? Mamá, ven un momento. Quiero enseñarte algo que hice hoy."
 $VoiceId = $null
@@ -151,19 +152,22 @@ function Send-JsonWs {
     ).GetAwaiter().GetResult()
 }
 
-$sessionStart = @{
-    type = "session.start"
-    event_id = "sofia_v2_start"
-    session = @{
-        model = "gpt-live-1"
-        instructions = @"
+$SessionInstructions = @"
 You are performing one isolated voice audition for a fictional film character named Sofia.
 Speak in Latin American Spanish. Use the configured Sofia custom voice exactly as designed.
 Your entire spoken response must be exactly these words and nothing else:
 Mami, ¿ya terminaste?
 Do not greet. Do not explain. Do not add any word before or after the line.
 Natural daughter-to-mother delivery: curious, warm, simple, innocent, conversational.
-"@.Trim()
+"@
+$SessionInstructions = $SessionInstructions.Trim()
+
+$sessionStart = @{
+    type = "session.start"
+    event_id = "sofia_v2_start"
+    session = @{
+        model = "gpt-live-1"
+        instructions = $SessionInstructions
         audio = @{
             format = @{ type = "audio/pcm"; rate = 24000 }
             output = @{ voice = @{ id = $VoiceId } }
