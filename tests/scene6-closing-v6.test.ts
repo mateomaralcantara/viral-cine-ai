@@ -160,3 +160,19 @@ test('reconciliador Sofía asume posible cobro y no llama proveedores', async ()
   assert.doesNotMatch(reconciler, /generateSpeech/);
   assert.doesNotMatch(reconciler, /generateRunway/);
 });
+
+
+test('Sofía clean local elimina pitch-shift y no llama proveedores', async () => {
+  const fixer = await readFile(
+    new URL('../scripts/fix-scene6-sofia-clean-local-v6.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(fixer, /createCleanVoicePreserveTiming/);
+  assert.match(fixer, /scene-006-sofia-audition-coral-raw\.mp3/);
+  assert.match(fixer, /Pitch shift: NO/);
+  assert.match(fixer, /Gasto nuevo: US\$0/);
+  assert.doesNotMatch(fixer, /generateSpeech/);
+  assert.doesNotMatch(fixer, /generateRunway/);
+  assert.doesNotMatch(fixer, /fal-media/);
+});
