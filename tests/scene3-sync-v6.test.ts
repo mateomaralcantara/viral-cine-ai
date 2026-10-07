@@ -74,9 +74,9 @@ test('Mariana queda con voz OpenAI cedar y exige lip-sync individual', () => {
   );
 });
 
-test('Grok 1.5 audio-driven E3/T2 8s 720p con 2 imágenes y 1 audio cuesta 131 créditos', () => {
+test('Grok 1.5 audio-driven E3/T2 8s 720p con 1 imagen y 1 audio cuesta 130 créditos', () => {
   assert.equal(
-    grok15AudioDrivenCredits(8, '720p', 2, 1),
-    131
+    grok15AudioDrivenCredits(8, '720p', 1, 1),
+    130
   );
 });
