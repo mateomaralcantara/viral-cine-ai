@@ -127,7 +127,36 @@ test('audición Sofía usa solo OpenAI voz y remaster infantil local', async () 
   assert.match(audition, /OpenAI coral/);
   assert.match(audition, /niña latina de 10 años/i);
   assert.match(audition, /createYouthfulChildVoicePreserveTiming/);
-  assert.match(audition, /--confirm-sofia-audition-usd-0\.01/);
+  assert.match(audition, /--confirm-sofia-audition-retry-usd-0\.01/);
   assert.doesNotMatch(audition, /generateRunway/);
   assert.doesNotMatch(audition, /fal-media/);
+});
+
+
+test('audición Sofía crea directorio antes de llamar OpenAI', async () => {
+  const audition = await readFile(
+    new URL('../scripts/audition-scene6-sofia-v6.ts', import.meta.url),
+    'utf8'
+  );
+
+  const mkdirIndex = audition.indexOf('await mkdir(audioDir');
+  const speechIndex = audition.indexOf('generateSpeech(');
+
+  assert.ok(mkdirIndex >= 0);
+  assert.ok(speechIndex >= 0);
+  assert.ok(mkdirIndex < speechIndex);
+  assert.match(audition, /coral-true-child:2/);
+});
+
+test('reconciliador Sofía asume posible cobro y no llama proveedores', async () => {
+  const reconciler = await readFile(
+    new URL('../scripts/reconcile-scene6-sofia-audition-v6.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(reconciler, /reconciled-provider-response-local-write-failed/);
+  assert.match(reconciler, /state: 'reconciled'/);
+  assert.match(reconciler, /actualUsd: latest\.estimatedUsd/);
+  assert.doesNotMatch(reconciler, /generateSpeech/);
+  assert.doesNotMatch(reconciler, /generateRunway/);
 });
