@@ -57,7 +57,7 @@ test('Escena 3 V6 se planifica en setup, diálogo audio-driven y reacción', () 
   assert.equal(scene.shots[2].spokenText, '');
 });
 
-test('Mariana queda con voz OpenAI cedar y exige lip-sync individual', () => {
+test('Mariana queda con voz OpenAI shimmer y exige lip-sync individual', () => {
   const project = fixture();
   applyFifteenDaysCoreVoiceLocksV5(project);
 
@@ -66,7 +66,7 @@ test('Mariana queda con voz OpenAI cedar y exige lip-sync individual', () => {
   );
 
   assert.equal(mariana?.voiceProvider, 'openai');
-  assert.equal(mariana?.voiceId, 'cedar');
+  assert.equal(mariana?.voiceId, 'shimmer');
   assert.match(mariana?.voiceInstructions || '', /exactamente/i);
   assert.equal(
     decideLipSync(project, SCENE3_MARIANA_ID_V6).required,
