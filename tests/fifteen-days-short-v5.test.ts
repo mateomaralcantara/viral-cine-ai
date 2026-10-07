@@ -18,16 +18,17 @@ test('15 DÍAS short dura exactamente 150 segundos', () => {
   assert.equal(plan.scenes.length, 6);
 });
 
-test('15 DÍAS short usa Fal y conserva Real Motion', () => {
+test('15 DÍAS short usa Runway/WAN y conserva Real Motion', () => {
   const plan = FilmPlanSchema.parse(buildFifteenDaysShortPlanV5());
   const shots = plan.scenes.flatMap((scene) => scene.shots);
 
   assert.equal(shots.length, 21);
-  assert.deepEqual(plan.realMotion?.providerOrder, ['fal-video', 'wan']);
+  assert.deepEqual(plan.realMotion?.providerOrder, ['runway', 'wan']);
   assert.ok(
     shots.every(
       (shot) =>
-        shot.motionSpec?.preferredProviders?.[0] === 'fal-video' &&
+        shot.motionSpec?.preferredProviders?.[0] === 'runway' &&
+        !shot.motionSpec?.preferredProviders?.includes('fal-video') &&
         shot.motionSpec?.allowStillFallbackFinal === false
     )
   );
