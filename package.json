@@ -62,7 +62,8 @@
     "safe:compare": "node --import tsx scripts/safe-provider-compare-v6.ts",
     "safe:scene2:runway": "node --import tsx scripts/generate-scene2-runway-safe-v6.ts",
     "safe:scene3:prepare": "node --import tsx scripts/prepare-scene3-sync-v6.ts",
-    "safe:scene3:run": "node --import tsx scripts/generate-scene3-sync-v6.ts"
+    "safe:scene3:run": "node --import tsx scripts/generate-scene3-sync-v6.ts",
+    "safe:runway:task": "node --import tsx scripts/runway-task-diagnostic-v6.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",
