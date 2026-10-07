@@ -15,10 +15,9 @@ import {
 } from '@/lib/media/ffmpeg';
 import { generateSpeech } from '@/lib/providers/openai-media';
 import {
-  dryRunRunwayRouterVideo,
-  generateRunwayRouterVideo,
-  imageFileToDataUri,
-  type RunwayRouterVideoInput
+  generateRunwayGrokLiteFromEnvironment,
+  grokLiteImageToVideoCredits,
+  imageFileToDataUri
 } from '@/lib/providers/runway-router-v6';
 import {
   appendSpend,
@@ -42,6 +41,8 @@ const [projectId, confirm] = process.argv.slice(2);
 const CONFIRM = '--confirm-50-credits';
 const MAX_CREDITS_PER_SHOT = 25;
 const MAX_SCENE_CREDITS = 50;
+const MODEL = 'grok_imagine_1_5_lite' as const;
+const RATIO = 'auto_720p' as const;
 
 if (!projectId || confirm !== CONFIRM) {
   console.error(
@@ -62,13 +63,8 @@ if (
 }
 
 const runwaySecret = process.env.RUNWAYML_API_SECRET?.trim();
-const configId = process.env.RUNWAY_ROUTER_CONFIG_ID?.trim();
-
 if (!runwaySecret || runwaySecret.length < 8) {
   throw new Error('RUNWAYML_API_SECRET no está configurado.');
-}
-if (!configId) {
-  throw new Error('RUNWAY_ROUTER_CONFIG_ID no está configurado.');
 }
 if (!process.env.OPENAI_API_KEY?.trim()) {
   throw new Error('OPENAI_API_KEY no está configurado para la narración.');
