@@ -164,18 +164,6 @@ Mami, ¿ya terminaste?
 Do not greet. Do not explain. Do not add any word before or after the line.
 Natural daughter-to-mother delivery: curious, warm, simple, innocent, conversational.
 "@.Trim()
-        input = @(
-            @{
-                type = "message"
-                role = "user"
-                content = @(
-                    @{
-                        type = "input_text"
-                        text = 'Di exactamente: "Mami, ¿ya terminaste?"'
-                    }
-                )
-            }
-        )
         audio = @{
             format = @{ type = "audio/pcm"; rate = 24000 }
             output = @{ voice = @{ id = $VoiceId } }
@@ -189,6 +177,7 @@ Send-JsonWs -Socket $ws -Object $sessionStart -Token $cts.Token
 
 $pcm = [System.IO.MemoryStream]::new()
 $started = $false
+$promptSent = $false
 $heardAudio = $false
 $lastAudioAt = [DateTime]::MinValue
 $deadline = [DateTime]::UtcNow.AddSeconds(8)
@@ -216,7 +205,18 @@ while ([DateTime]::UtcNow -lt $deadline) {
             $detail = if ($event.error.message) { $event.error.message } else { $text }
             throw "LIVE ERROR: $detail"
         }
-        if ($event.type -eq "session.started") { $started = $true }
+        if ($event.type -eq "session.started") {
+            $started = $true
+            if (-not $promptSent) {
+                Send-JsonWs -Socket $ws -Object @{
+                    type = "session.commentary.append"
+                    event_id = "sofia_v2_line"
+                    delegation_id = $null
+                    content = "Mami, ¿ya terminaste?"
+                } -Token $cts.Token
+                $promptSent = $true
+            }
+        }
         if ($event.type -eq "session.output_audio.delta" -and $event.delta) {
             $chunk = [Convert]::FromBase64String([string]$event.delta)
             $pcm.Write($chunk, 0, $chunk.Length)
