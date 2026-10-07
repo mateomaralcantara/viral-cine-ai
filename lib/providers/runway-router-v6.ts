@@ -42,6 +42,32 @@ export type Grok15AudioDrivenRequest = {
   referenceAudio: Array<{ type: 'audio'; uri: string }>;
 };
 
+export type Wan3AudioReferenceRequest = {
+  model: 'wan3';
+  promptText: string;
+  audio: true;
+  duration: number;
+  ratio: '832:480' | '1280:720' | '1920:1080';
+  references: Array<{ uri: string }>;
+  referenceAudio: Array<{ type: 'audio'; uri: string }>;
+};
+
+export function wan3VideoCredits(
+  durationSeconds: number,
+  ratio: Wan3AudioReferenceRequest['ratio']
+) {
+  if (!Number.isInteger(durationSeconds) || durationSeconds < 2 || durationSeconds > 30) {
+    throw new Error('WAN 3.0 permite duraciones enteras de 2 a 30 segundos.');
+  }
+
+  const perSecond =
+    ratio === '832:480' ? 5 :
+    ratio === '1280:720' ? 10 :
+    20;
+
+  return durationSeconds * perSecond;
+}
+
 export function grokLiteImageToVideoCredits(
   durationSeconds: number,
   ratio: GrokLiteImageToVideoRequest['ratio']
@@ -198,6 +224,104 @@ export async function getRunwayTaskDetailsFromEnvironment(
       ? task.output.filter((item): item is string => typeof item === 'string')
       : []
   };
+}
+
+export async function generateRunwayWan3AudioReferenceFromEnvironment(
+  request: Wan3AudioReferenceRequest,
+  outputPath: string,
+  timeoutMs = 12 * 60 * 1000
+) {
+  const key = process.env.RUNWAYML_API_SECRET?.trim();
+  if (!key || key.length < 8) {
+    throw new Error('Runway API secret no está configurado.');
+  }
+
+  if (request.model !== 'wan3') {
+    throw new Error('ViralCine 6 Safe solo autoriza wan3 en esta ruta.');
+  }
+
+  if (!request.references.length || !request.referenceAudio.length) {
+    throw new Error('WAN 3.0 audio-reference requiere imagen y audio de referencia.');
+  }
+
+  const credits = wan3VideoCredits(
+    request.duration,
+    request.ratio
+  );
+
+  const submitted = await runwayRequest(
+    '/v1/text_to_video',
+    request,
+    key
+  );
+
+  const taskId =
+    stringValue(submitted.id) ||
+    stringValue(record(submitted.task).id);
+
+  if (!taskId) {
+    throw new Error('Runway no devolvió task id.');
+  }
+
+  const started = Date.now();
+
+  while (Date.now() - started < timeoutMs) {
+    await sleep(5000);
+
+    const task = await runwayGet(
+      '/v1/tasks/' + encodeURIComponent(taskId),
+      key
+    );
+    const status = stringValue(task.status);
+
+    if (status === 'SUCCEEDED') {
+      const output = Array.isArray(task.output)
+        ? task.output.find((item) => typeof item === 'string')
+        : undefined;
+
+      if (typeof output !== 'string') {
+        throw new Error('Runway terminó WAN 3.0 sin URL de salida.');
+      }
+
+      const media = await fetch(output);
+      if (!media.ok) {
+        throw new Error(
+          'No se pudo descargar el video WAN 3.0: HTTP ' + media.status
+        );
+      }
+
+      await writeFile(
+        outputPath,
+        Buffer.from(await media.arrayBuffer())
+      );
+
+      return {
+        taskId,
+        model: request.model,
+        credits,
+        outputPath
+      };
+    }
+
+    if (status === 'FAILED' || status === 'CANCELED') {
+      const failureCode = stringValue(task.failureCode);
+      const failure = stringValue(task.failure);
+      throw new Error(
+        'Runway WAN 3.0 terminó con estado ' +
+          status +
+          '. taskId=' +
+          taskId +
+          (failureCode ? ' failureCode=' + failureCode : '') +
+          (failure ? ' failure=' + failure : '')
+      );
+    }
+  }
+
+  throw new Error(
+    'Timeout esperando WAN 3.0. taskId=' +
+      taskId +
+      '. No reintentes automáticamente; consulta la tarea primero.'
+  );
 }
 
 export async function generateRunwayGrok15AudioDrivenFromEnvironment(
