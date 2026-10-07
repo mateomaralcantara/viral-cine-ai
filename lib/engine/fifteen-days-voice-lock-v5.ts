@@ -3,7 +3,9 @@ import type { FilmProject } from '@/lib/domain/schemas';
 const IDS = {
   elena: 'char-v5-elena-0001',
   raul: 'char-v5-raul-0002',
-  mariana: 'char-v5-mariana-0003'
+  mariana: 'char-v5-mariana-0003',
+  sofia: 'char-v5-sofia-0004',
+  mateo: 'char-v5-mateo-0005'
 } as const;
 
 export type VoiceLockEntry = {
@@ -56,6 +58,26 @@ export const FIFTEEN_DAYS_CORE_VOICE_LOCKS_V5: VoiceLockEntry[] = [
     exactDialogue: true,
     instructions:
       'Español latino natural. Voz inequívocamente femenina de una mujer adulta de unos 48 años, natural, cálida y clara, con registro femenino medio y autoridad tranquila. Evita por completo un timbre masculino, grave o andrógino. Habla exactamente el texto de entrada. No traduzcas, no parafrasees, no agregues, no omitas y no sustituyas ninguna palabra. Ritmo conversacional, pausas naturales, sin tono de gurú, publicitario ni melodramático.'
+  },
+  {
+    id: IDS.sofia,
+    label: 'Sofía',
+    provider: 'openai',
+    voiceId: 'coral',
+    language: 'es-LATAM',
+    exactDialogue: true,
+    instructions:
+      'Español latino natural. Interpretar como niña latina de 10 años: voz infantil femenina, espontánea, clara y cálida, sin impostación adulta. Habla exactamente el texto de entrada. No traduzcas, no parafrasees, no agregues, no omitas y no sustituyas ninguna palabra. Evita tono de locutora, dramatización excesiva y cualquier sensualización o madurez vocal impropia de su edad.'
+  },
+  {
+    id: IDS.mateo,
+    label: 'Mateo',
+    provider: 'openai',
+    voiceId: 'ash',
+    language: 'es-LATAM',
+    exactDialogue: true,
+    instructions:
+      'Español latino natural. Interpretar como niño latino de 7 años: voz infantil masculina ligera, espontánea, curiosa y cálida, sin impostación adulta ni tono grave. Habla exactamente el texto de entrada. No traduzcas, no parafrasees, no agregues, no omitas y no sustituyas ninguna palabra. Las preguntas deben sonar genuinas, simples y emocionadas, nunca teatrales.'
   }
 ];
 
@@ -84,7 +106,7 @@ export function applyFifteenDaysCoreVoiceLocksV5(project: FilmProject) {
 
   project.productionLog.push(
     new Date().toISOString() +
-      ' Voice Lock 5.0 aplicado: Narrador/Elena=OpenAI marin, Raúl=OpenAI onyx, Mariana=OpenAI shimmer, español latino exacto y traducción/paráfrasis prohibidas.'
+      ' Voice Lock 5.1 aplicado: Narrador/Elena=OpenAI marin, Raúl=OpenAI onyx, Mariana=OpenAI shimmer, Sofía=OpenAI coral, Mateo=OpenAI ash; español latino exacto y traducción/paráfrasis prohibidas.'
   );
 
   return project;
