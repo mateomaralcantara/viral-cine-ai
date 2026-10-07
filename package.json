@@ -56,7 +56,9 @@
     "pilot:repair-t4-no-loop": "node --import tsx scripts/repair-15-dias-t4-no-loop.ts",
     "pilot:fix-t4-sync": "node --import tsx scripts/fix-15-dias-t4-sync-local.ts",
     "pilot:repair-t5-voice": "node --import tsx scripts/repair-15-dias-t5-voice.ts",
-    "scene:15dias": "node --import tsx scripts/scene-review-15-dias-v5.ts"
+    "scene:15dias": "node --import tsx scripts/scene-review-15-dias-v5.ts",
+    "safe:status": "node --import tsx scripts/safe-status-v6.ts",
+    "safe:ticket": "node --import tsx scripts/safe-cost-ticket-v6.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",
