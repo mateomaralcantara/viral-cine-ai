@@ -217,10 +217,10 @@ for (const shotOrder of [2, 3]) {
 
   await appendSpend(project.id, {
     operation: 'video',
-    provider: 'runway-router',
-    model: dry.model,
+    provider: 'runway-direct',
+    model: MODEL,
     state: 'submitted',
-    estimatedUsd: dry.credits * 0.01,
+    estimatedUsd: directCredits * 0.01,
     sceneId: currentScene.id,
     shotId: shot.id,
     idempotencyKey: spendKey
@@ -228,18 +228,17 @@ for (const shotOrder of [2, 3]) {
 
   let generated;
   try {
-    generated = await generateRunwayRouterVideo(
+    generated = await generateRunwayGrokLiteFromEnvironment(
       request,
-      runwaySecret,
       rawPath
     );
   } catch (error) {
     await appendSpend(project.id, {
       operation: 'video',
-      provider: 'runway-router',
-      model: dry.model,
+      provider: 'runway-direct',
+      model: MODEL,
       state: 'failed-unknown',
-      estimatedUsd: dry.credits * 0.01,
+      estimatedUsd: directCredits * 0.01,
       sceneId: currentScene.id,
       shotId: shot.id,
       idempotencyKey: spendKey,
@@ -251,8 +250,7 @@ for (const shotOrder of [2, 3]) {
     throw error;
   }
 
-  const chargedCredits =
-    generated.credits ?? dry.credits;
+  const chargedCredits = generated.credits;
 
   if (chargedCredits > MAX_CREDITS_PER_SHOT) {
     throw new Error(
@@ -266,10 +264,10 @@ for (const shotOrder of [2, 3]) {
 
   await appendSpend(project.id, {
     operation: 'video',
-    provider: 'runway-router',
-    model: generated.model || dry.model,
+    provider: 'runway-direct',
+    model: generated.model,
     state: 'succeeded',
-    estimatedUsd: dry.credits * 0.01,
+    estimatedUsd: directCredits * 0.01,
     actualUsd: chargedCredits * 0.01,
     sceneId: currentScene.id,
     shotId: shot.id,
@@ -410,7 +408,7 @@ for (const shotOrder of [2, 3]) {
   saveShot.error = undefined;
   saveShot.lastProvider =
     'Runway Router / ' +
-    (generated.model || dry.model);
+    generated.model;
   saveShot.lastGenerationState = 'succeeded';
   saveShot.generationCount =
     (saveShot.generationCount || 0) + 1;
@@ -440,7 +438,7 @@ for (const shotOrder of [2, 3]) {
       ' ViralCine 6 Safe: E2/T' +
       shotOrder +
       ' generada por Runway Router (' +
-      (generated.model || dry.model) +
+      generated.model +
       ') · ' +
       chargedCredits +
       ' créditos.'
@@ -939,7 +937,7 @@ function restoreEnv(
   saveShot.error = undefined;
   saveShot.lastProvider =
     'Runway Router / ' +
-    (generated.model || dry.model);
+    generated.model;
   saveShot.lastGenerationState = 'succeeded';
   saveShot.generationCount =
     (saveShot.generationCount || 0) + 1;
@@ -969,7 +967,7 @@ function restoreEnv(
       ' ViralCine 6 Safe: E2/T' +
       shotOrder +
       ' generada por Runway Router (' +
-      (generated.model || dry.model) +
+      generated.model +
       ') · ' +
       chargedCredits +
       ' créditos.'
