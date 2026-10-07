@@ -43,7 +43,6 @@ import {
   planScene3SynchronizedV6,
   validateScene3SynchronizedV6,
   SCENE3_DIALOGUE_V6,
-  SCENE3_ELENA_ID_V6,
   SCENE3_MARIANA_ID_V6
 } from '@/lib/engine/scene3-sync-plan-v6';
 import { applyFifteenDaysCoreVoiceLocksV5 } from '@/lib/engine/fifteen-days-voice-lock-v5';
@@ -72,8 +71,6 @@ export async function produceScene3SynchronizedV6(
   project = await saveProject(project);
 
   const scene2 = project.plan!.scenes.find((item) => item.order === 2)!;
-  const scene3 = project.plan!.scenes.find((item) => item.order === 3)!;
-
   const scene2Video = scene2.videoAsset
     ? assetAbsolutePath(project.id, scene2.videoAsset)
     : undefined;
