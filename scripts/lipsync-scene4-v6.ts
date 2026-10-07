@@ -9,10 +9,7 @@ import {
   projectAssetDir,
   saveProject
 } from '@/lib/storage/project-store';
-import {
-  prepareAudioFirstVoice,
-  applyAudioFirstLipSync
-} from '@/lib/engine/audio-first';
+import { prepareAudioFirstVoice } from '@/lib/engine/audio-first';
 import {
   fitAudioToSlot,
   probeMediaDurationSeconds
@@ -21,9 +18,14 @@ import {
   concatenate,
   normalizeGeneratedVideoWithEmbeddedAudio
 } from '@/lib/media/ffmpeg';
-import { assertCinematicSceneVideo } from '@/lib/media/probe';
 import {
+  assertCinematicSceneVideo,
+  probeVideo
+} from '@/lib/media/probe';
+import {
+  appendSpend,
   estimateOperationCost,
+  latestSpendForKey,
   voiceCostUnits
 } from '@/lib/engine/spend-ledger';
 import {
@@ -41,18 +43,29 @@ import {
   SCENE4_VISIBLE_LIPSYNC_MAX_USD_V6,
   validateScene4VisibleLipSyncPlanV6
 } from '@/lib/engine/scene4-visible-lipsync-plan-v6';
+import {
+  audioFileToDataUri,
+  generateRunwayWan3AudioReferenceFromEnvironment,
+  imageFileToDataUri,
+  wan3VideoCredits
+} from '@/lib/providers/runway-router-v6';
 
 loadProjectLocalEnvOverride();
 
 const [projectId, confirmation] = process.argv.slice(2);
-const EXPECTED = '--confirm-scene4-lipsync-usd-1.61';
+const EXPECTED = '--confirm-scene4-wan3-usd-1.21';
 
 if (!projectId || confirmation !== EXPECTED) {
   console.error(
-    'Uso: npm run safe:scene4:lipsync -- <projectId> ' + EXPECTED
+    'Uso: npm run safe:scene4:wan3 -- <projectId> ' + EXPECTED
   );
   process.exit(1);
 }
+
+// Protección explícita: esta ruta NO puede usar Fal.
+delete process.env.FAL_KEY;
+process.env.ENABLE_LIPSYNC = 'false';
+process.env.VIRALCINE_LOCAL_LIPSYNC_ONLY = '1';
 
 const plan = validateScene4VisibleLipSyncPlanV6();
 
@@ -62,12 +75,12 @@ assertProjectReady(project);
 const scene = sceneByOrder(project, 4);
 const finalScenePath = path.join(
   projectAssetDir(project.id, 'video'),
-  'scene-004-lipsync-v6.mp4'
+  'scene-004-wan3-lipsync-v6.mp4'
 );
 
 if (
   scene.videoAsset &&
-  scene.videoAsset.endsWith('scene-004-lipsync-v6.mp4') &&
+  scene.videoAsset.endsWith('scene-004-wan3-lipsync-v6.mp4') &&
   await exists(finalScenePath)
 ) {
   await assertCinematicSceneVideo(finalScenePath, 30, {
@@ -76,29 +89,39 @@ if (
   });
 
   console.log('\n==================================================');
-  console.log(' VIRALCINE 6 SAFE — ESCENA 4 LIP-SYNC YA EXISTE');
+  console.log(' VIRALCINE 6 SAFE — ESCENA 4 WAN 3.0 YA EXISTE');
   console.log('==================================================');
   console.log('Video: ' + finalScenePath);
-  console.log('Fal: NO');
+  console.log('Runway nuevo: NO');
+  console.log('Fal.ai: NO');
   console.log('OpenAI: NO');
   console.log('Gasto nuevo: US$0');
-  console.log('SCENE4_LIPSYNC_IDEMPOTENT=PASS');
+  console.log('SCENE4_WAN3_IDEMPOTENT=PASS');
   process.exit(0);
 }
 
+const creditsPerShot = wan3VideoCredits(6, '1280:720');
+const videoUsd =
+  SCENE4_VISIBLE_LIPSYNC_SEGMENTS_V6.length *
+  creditsPerShot *
+  0.01;
 const voiceEstimate = SCENE4_VISIBLE_LIPSYNC_SEGMENTS_V6.reduce(
   (sum, item) =>
     sum + estimateOperationCost('voice', voiceCostUnits(item.text)),
   0
 );
-const lipSyncEstimate =
-  SCENE4_VISIBLE_LIPSYNC_SEGMENTS_V6.length *
-  estimateOperationCost('lip-sync', 6);
-const totalEstimate = voiceEstimate + lipSyncEstimate;
+const totalEstimate = videoUsd + voiceEstimate;
 
-if (lipSyncEstimate > 1.6001 || totalEstimate > SCENE4_VISIBLE_LIPSYNC_MAX_USD_V6) {
+if (creditsPerShot !== 60) {
   throw new Error(
-    'SAFE COST GATE E4 LIP-SYNC: estimación US$' +
+    'SAFE COST GATE: WAN 3.0 6s 720p debía costar 60 créditos; calculó ' +
+      creditsPerShot + '.'
+  );
+}
+
+if (videoUsd > 1.2001 || totalEstimate > SCENE4_VISIBLE_LIPSYNC_MAX_USD_V6) {
+  throw new Error(
+    'SAFE COST GATE E4 WAN3: estimación US$' +
       totalEstimate.toFixed(4) +
       ' supera US$' +
       SCENE4_VISIBLE_LIPSYNC_MAX_USD_V6.toFixed(2) +
@@ -110,18 +133,22 @@ applyFifteenDaysCoreVoiceLocksV5(project);
 project = await saveProject(project);
 
 console.log('\n==================================================');
-console.log(' VIRALCINE 6 SAFE — ESCENA 4 / VOZ + LABIOS');
+console.log(' VIRALCINE 6 SAFE — ESCENA 4 / WAN 3.0 VOZ + LABIOS');
 console.log('==================================================');
-console.log('Videos Runway existentes: REUTILIZAR');
-console.log('Regeneración Runway: NO');
-console.log('Tomas con voz visible: T1 y T2');
-console.log('T3-T5: montaje silencioso');
+console.log('Fal.ai: PROHIBIDO / NO USADO');
+console.log('FAL_KEY en este proceso: ELIMINADA');
+console.log('Videos originales T1-T5: PRESERVADOS');
+console.log('Regeneración: SOLO T1 y T2');
+console.log('T3-T5: REUTILIZAR SIN CAMBIOS');
 console.log('Voz: Elena / OpenAI marin');
-console.log('Lip-sync: Fal Sync Lipsync v3');
-console.log('Segundos de lip-sync: ' + plan.visibleLipSyncSeconds);
-console.log('Máximo lip-sync: US$' + lipSyncEstimate.toFixed(2));
-console.log('Máximo voz segmentada: US$0.01');
+console.log('Video hablado: Runway Direct / WAN 3.0 audio-reference');
+console.log('Resolución: 1280x720');
+console.log('Duración por toma: 6s');
+console.log('Costo máximo por toma WAN: 60 créditos = US$0.60');
+console.log('Máximo WAN total: US$1.20');
+console.log('Máximo voz: US$0.01');
 console.log('Máximo total autorizado: US$' + SCENE4_VISIBLE_LIPSYNC_MAX_USD_V6.toFixed(2));
+console.log('Fallback pagado: NO');
 console.log('');
 
 for (const segment of SCENE4_VISIBLE_LIPSYNC_SEGMENTS_V6) {
@@ -130,14 +157,14 @@ for (const segment of SCENE4_VISIBLE_LIPSYNC_SEGMENTS_V6) {
   const shot = shotByOrder(currentScene, segment.order);
 
   if (
-    shot.pipelineVersion === '6.0-scene4-visible-lipsync' &&
+    shot.pipelineVersion === '6.0-scene4-wan3-audio-reference' &&
     shot.videoAsset
   ) {
     const existing = assetAbsolutePath(project.id, shot.videoAsset);
     if (await exists(existing)) {
       console.log(
         'E4/T' + segment.order +
-        ': lip-sync ya existente; se reutiliza sin gasto.'
+        ': WAN 3.0 ya existente; se reutiliza sin gasto.'
       );
       continue;
     }
@@ -146,19 +173,30 @@ for (const segment of SCENE4_VISIBLE_LIPSYNC_SEGMENTS_V6) {
   if (!shot.videoAsset) {
     throw new Error(
       'E4/T' + segment.order +
-      ' no tiene video generado para reutilizar.'
+      ' no tiene video original para preservar/referenciar.'
+    );
+  }
+  if (!shot.imageAsset) {
+    throw new Error(
+      'E4/T' + segment.order +
+      ' no tiene imageAsset de continuidad para WAN 3.0.'
     );
   }
 
-  const baseVideoPath = assetAbsolutePath(project.id, shot.videoAsset);
-  await access(baseVideoPath);
+  const originalVideoAsset = shot.videoAsset;
+  const originalVideoPath = assetAbsolutePath(project.id, originalVideoAsset);
+  const referenceImagePath = assetAbsolutePath(project.id, shot.imageAsset);
+  await Promise.all([
+    access(originalVideoPath),
+    access(referenceImagePath)
+  ]);
 
   const voiceShot: FilmShot = {
     ...shot,
     spokenText: segment.text,
     speakerId: SCENE4_ELENA_ID_V6,
     dialogueLines: [{
-      id: shot.id + ':visible-dialogue-v6',
+      id: shot.id + ':visible-dialogue-wan3-v6',
       speakerId: SCENE4_ELENA_ID_V6,
       text: segment.text,
       emotion: 'íntima y determinada',
@@ -169,14 +207,21 @@ for (const segment of SCENE4_VISIBLE_LIPSYNC_SEGMENTS_V6) {
 
   console.log(
     '\n--- E4/T' + segment.order +
-    ' · sincronización visible ---'
+    ' · WAN 3.0 audio-reference ---'
   );
   console.log('Texto: ' + segment.text);
+  console.log('Video original: PRESERVAR');
+  console.log('Fal.ai: NO');
 
   const voiceKey =
     'scene4-visible-lipsync-v6/e4-t' + segment.order + '-elena';
+  const expectedVoicePath = path.join(
+    projectAssetDir(project.id, 'audio'),
+    voiceKey + '.mp3'
+  );
+  const voiceAlreadyExists = await exists(expectedVoicePath);
 
-  const prepared = await withAuthorizedPaidGate(() =>
+  const prepared = await withVoicePaidGate(() =>
     prepareAudioFirstVoice(
       project,
       currentScene,
@@ -195,17 +240,17 @@ for (const segment of SCENE4_VISIBLE_LIPSYNC_SEGMENTS_V6) {
       'E4/T' + segment.order +
       ': la voz dura ' + rawVoiceDuration.toFixed(3) +
       's y necesitaría ' + speedFactor.toFixed(3) +
-      'x. Diálogo visible limitado a 1.2x. Fal NO fue llamado.'
+      'x. Diálogo visible limitado a 1.2x. Runway NO fue llamado.'
     );
   }
 
   const audioDir = path.join(
     projectAssetDir(project.id, 'audio'),
-    'scene4-visible-lipsync-v6'
+    'scene4-wan3-v6'
   );
   const videoDir = path.join(
     projectAssetDir(project.id, 'video'),
-    'scene4-visible-lipsync-v6'
+    'scene4-wan3-v6'
   );
   await Promise.all([
     mkdir(audioDir, { recursive: true }),
@@ -218,17 +263,17 @@ for (const segment of SCENE4_VISIBLE_LIPSYNC_SEGMENTS_V6) {
       String(segment.order).padStart(2, '0') +
       '-elena-master.wav'
   );
-  const rawLipSyncPath = path.join(
+  const rawWanPath = path.join(
     videoDir,
     'scene-004-shot-' +
       String(segment.order).padStart(2, '0') +
-      '-fal-lipsync-raw.mp4'
+      '-wan3-audio-ref-raw.mp4'
   );
-  const finalLipSyncPath = path.join(
+  const finalWanPath = path.join(
     videoDir,
     'scene-004-shot-' +
       String(segment.order).padStart(2, '0') +
-      '-lipsync-final.mp4'
+      '-wan3-final.mp4'
   );
 
   await fitAudioToSlot(
@@ -238,28 +283,118 @@ for (const segment of SCENE4_VISIBLE_LIPSYNC_SEGMENTS_V6) {
     masterAudioPath
   );
 
-  if (!(await exists(rawLipSyncPath))) {
-    await withAuthorizedPaidGate(() =>
-      applyAudioFirstLipSync(
-        project,
-        currentScene,
-        voiceShot,
-        baseVideoPath,
-        masterAudioPath,
-        rawLipSyncPath
-      )
+  const spendKey =
+    'v6safe:e4:t' + segment.order + ':wan3-audio-reference:1';
+
+  if (!(await exists(rawWanPath))) {
+    await assertWanSpendAvailable(
+      project.id,
+      spendKey,
+      rawWanPath
+    );
+
+    await appendSpend(project.id, {
+      operation: 'video',
+      provider: 'runway-direct',
+      model: 'wan3',
+      state: 'submitted',
+      estimatedUsd: creditsPerShot * 0.01,
+      sceneId: currentScene.id,
+      shotId: shot.id,
+      characterId: SCENE4_ELENA_ID_V6,
+      idempotencyKey: spendKey
+    });
+
+    try {
+      const imageUri = await imageFileToDataUri(referenceImagePath);
+      const audioUri = await audioFileToDataUri(masterAudioPath);
+
+      const generated =
+        await generateRunwayWan3AudioReferenceFromEnvironment(
+          {
+            model: 'wan3',
+            promptText: [
+              '[Image 1] fija identidad, edad, rostro, piel, cabello, vestuario, iluminación y continuidad de Elena.',
+              shot.visualPrompt,
+              'Elena es la única persona que habla.',
+              'El audio de referencia contiene exactamente su parlamento.',
+              'Sincroniza con precisión labios, mandíbula, boca y expresión facial con cada fonema y pausa del audio.',
+              'Mantén la boca claramente visible durante el parlamento.',
+              'Conserva el rostro y la identidad de Elena; no cambies edad, facciones ni cuerpo.',
+              'Una sola toma cinematográfica continua de seis segundos.',
+              'No agregues otra voz, diálogo, música, texto, subtítulos, logos ni marcas de agua.'
+            ].join(' '),
+            audio: true,
+            duration: 6,
+            ratio: '1280:720',
+            references: [{ uri: imageUri }],
+            referenceAudio: [{ type: 'audio', uri: audioUri }]
+          },
+          rawWanPath
+        );
+
+      if (generated.credits !== creditsPerShot) {
+        throw new Error(
+          'Runway devolvió ' + generated.credits +
+          ' créditos; esperábamos exactamente ' + creditsPerShot + '.'
+        );
+      }
+
+      await appendSpend(project.id, {
+        operation: 'video',
+        provider: 'runway-direct',
+        model: generated.model,
+        state: 'succeeded',
+        estimatedUsd: creditsPerShot * 0.01,
+        actualUsd: generated.credits * 0.01,
+        sceneId: currentScene.id,
+        shotId: shot.id,
+        characterId: SCENE4_ELENA_ID_V6,
+        idempotencyKey: spendKey,
+        providerRequestId: generated.taskId,
+        outputAsset: assetRelativePath(project.id, rawWanPath)
+      });
+    } catch (error) {
+      const message = errorText(error);
+      const taskIdMatch = message.match(/taskId=([0-9a-f-]{36})/i);
+
+      await appendSpend(project.id, {
+        operation: 'video',
+        provider: 'runway-direct',
+        model: 'wan3',
+        state: 'failed-unknown',
+        estimatedUsd: creditsPerShot * 0.01,
+        sceneId: currentScene.id,
+        shotId: shot.id,
+        characterId: SCENE4_ELENA_ID_V6,
+        idempotencyKey: spendKey,
+        providerRequestId: taskIdMatch?.[1],
+        error: message
+      });
+      throw error;
+    }
+  }
+
+  const rawProbe = await probeVideo(rawWanPath);
+  if (!rawProbe.hasVideo || !rawProbe.hasAudio) {
+    throw new Error(
+      'WAN 3.0 devolvió un asset incompleto en E4/T' +
+      segment.order +
+      ': video=' + rawProbe.hasVideo +
+      ', audio=' + rawProbe.hasAudio +
+      '. No se publicará.'
     );
   }
 
   await normalizeGeneratedVideoWithEmbeddedAudio(
-    rawLipSyncPath,
+    rawWanPath,
     6,
-    finalLipSyncPath,
+    finalWanPath,
     project.input.aspectRatio
   );
 
   await assertCinematicSceneVideo(
-    finalLipSyncPath,
+    finalWanPath,
     6,
     {
       requireMotion: true,
@@ -274,7 +409,7 @@ for (const segment of SCENE4_VISIBLE_LIPSYNC_SEGMENTS_V6) {
   saveShot.spokenText = segment.text;
   saveShot.speakerId = SCENE4_ELENA_ID_V6;
   saveShot.dialogueLines = [{
-    id: saveShot.id + ':visible-dialogue-v6',
+    id: saveShot.id + ':visible-dialogue-wan3-v6',
     speakerId: SCENE4_ELENA_ID_V6,
     text: segment.text,
     emotion: 'íntima y determinada',
@@ -282,30 +417,30 @@ for (const segment of SCENE4_VISIBLE_LIPSYNC_SEGMENTS_V6) {
     endSeconds: 6
   }];
   saveShot.voiceAsset = assetRelativePath(project.id, masterAudioPath);
-  saveShot.lipSyncAsset = assetRelativePath(project.id, rawLipSyncPath);
-  saveShot.videoAsset = assetRelativePath(project.id, finalLipSyncPath);
-  saveShot.lastProvider = 'OpenAI marin + Fal Sync Lipsync v3';
+  saveShot.lipSyncAsset = assetRelativePath(project.id, rawWanPath);
+  saveShot.videoAsset = assetRelativePath(project.id, finalWanPath);
+  saveShot.lastProvider = 'Runway Direct / WAN 3.0 audio-reference';
   saveShot.lastGenerationState = 'succeeded';
-  saveShot.pipelineVersion = '6.0-scene4-visible-lipsync';
+  saveShot.pipelineVersion = '6.0-scene4-wan3-audio-reference';
   saveShot.status = 'ready';
   saveShot.error = undefined;
+  saveShot.generationCount = (saveShot.generationCount || 0) + 1;
   saveShot.estimatedSpendUsd =
     (saveShot.estimatedSpendUsd || 0) +
-    estimateOperationCost('voice', voiceCostUnits(segment.text)) +
-    estimateOperationCost('lip-sync', 6);
-
-  if (!saveShot.imageAsset) {
-    throw new Error(
-      'E4/T' + segment.order + ' perdió imageAsset.'
-    );
-  }
+    creditsPerShot * 0.01 +
+    (voiceAlreadyExists
+      ? 0
+      : estimateOperationCost(
+          'voice',
+          voiceCostUnits(segment.text)
+        ));
 
   const shotAssets = renderedAssets(
     project.id,
     saveShot.mode,
-    assetAbsolutePath(project.id, saveShot.imageAsset),
+    referenceImagePath,
     masterAudioPath,
-    finalLipSyncPath
+    finalWanPath
   );
 
   await saveShotCheckpoint(
@@ -319,9 +454,15 @@ for (const segment of SCENE4_VISIBLE_LIPSYNC_SEGMENTS_V6) {
     new Date().toISOString() +
       ' ViralCine 6 Safe: E4/T' +
       segment.order +
-      ' convertida a diálogo visible de Elena con OpenAI marin + Fal lip-sync; video Runway reutilizado.'
+      ' generada con Runway WAN 3.0 audio-reference + Elena OpenAI marin. Fal.ai NO usado. Video original preservado: ' +
+      originalVideoAsset +
+      '.'
   );
   await saveProject(project);
+
+  console.log('E4/T' + segment.order + ': WAN 3.0 LISTA');
+  console.log('Créditos: ' + creditsPerShot);
+  console.log('Fal.ai: NO');
 }
 
 project = await getProject(project.id);
@@ -356,9 +497,8 @@ finalScene.videoAsset = assetRelativePath(
 );
 finalScene.status = 'review-required';
 finalScene.error =
-  'T1-T2 tienen diálogo visible de Elena sincronizado; T3-T5 permanecen como montaje silencioso. Revisión humana requerida.';
-finalScene.productionStrategy =
-  'real-cinema-v2';
+  'T1-T2 regeneradas con Runway WAN 3.0 audio-reference y Elena sincronizada; T3-T5 reutilizadas. Fal.ai NO usado. Revisión humana requerida.';
+finalScene.productionStrategy = 'real-cinema-v2';
 
 project.status = 'quality-review';
 project.error = undefined;
@@ -366,7 +506,7 @@ project.progress = {
   phase: 'quality-review',
   percent: 60,
   message:
-    'Escena 4 recompuesta: toda la voz hablada está en T1-T2 con labios sincronizados; T3-T5 quedan silenciosas.',
+    'Escena 4 recompuesta sin Fal: T1-T2 Runway WAN 3.0 con voz/labios; T3-T5 reutilizadas.',
   currentScene: 4,
   totalScenes: project.plan!.scenes.length,
   updatedAt: new Date().toISOString()
@@ -374,21 +514,22 @@ project.progress = {
 
 project.productionLog.push(
   new Date().toISOString() +
-    ' ViralCine 6 Safe: Escena 4 recompuesta sin regenerar Runway; narración exacta convertida en diálogo visible de Elena repartido entre T1-T2 con lip-sync real. T3-T5 silenciosas.'
+    ' ViralCine 6 Safe: Escena 4 recompuesta con Runway WAN 3.0 audio-reference en T1-T2. Fal.ai PROHIBIDO/NO USADO. T3-T5 reutilizadas.'
 );
 
 await saveProject(project);
 
 console.log('\n==================================================');
-console.log(' VIRALCINE 6 SAFE — ESCENA 4 LIP-SYNC LISTA');
+console.log(' VIRALCINE 6 SAFE — ESCENA 4 WAN 3.0 LISTA');
 console.log('==================================================');
-console.log('Runway regenerado: NO');
-console.log('T1: VOZ + LABIOS');
-console.log('T2: VOZ + LABIOS');
-console.log('T3-T5: SILENCIO / MONTAJE');
-console.log('Narración exacta conservada: SI');
+console.log('Fal.ai: NO');
+console.log('T1: Runway WAN 3.0 + voz/labios');
+console.log('T2: Runway WAN 3.0 + voz/labios');
+console.log('T3-T5: REUTILIZADAS');
+console.log('Máximo WAN autorizado: US$1.20');
+console.log('Máximo voz autorizado: US$0.01');
 console.log('Video final: ' + finalScenePath);
-console.log('SCENE4_LIPSYNC_REVIEW_REQUIRED=YES');
+console.log('SCENE4_WAN3_REVIEW_REQUIRED=YES');
 
 function assertProjectReady(value: FilmProject) {
   if (value.input.title.trim().toLocaleUpperCase() !== '15 DÍAS') {
@@ -403,7 +544,13 @@ function assertProjectReady(value: FilmProject) {
     process.env.ALLOW_PAID_PROVIDER_FALLBACK === 'true'
   ) {
     throw new Error(
-      'Las APIs generales deben permanecer bloqueadas en .env.local. Este comando abre únicamente sus llamadas autorizadas.'
+      'Las APIs generales deben permanecer bloqueadas en .env.local. Esta ruta usa solo OpenAI voz explícita y Runway WAN 3.0 explícito.'
+    );
+  }
+
+  if (!process.env.RUNWAYML_API_SECRET?.trim()) {
+    throw new Error(
+      'RUNWAYML_API_SECRET no está configurado.'
     );
   }
 
@@ -412,7 +559,7 @@ function assertProjectReady(value: FilmProject) {
   );
   if (!current || !current.videoAsset) {
     throw new Error(
-      'La Escena 4 original debe estar generada antes del lip-sync.'
+      'La Escena 4 original debe existir antes de esta corrección.'
     );
   }
   if (
@@ -426,24 +573,65 @@ function assertProjectReady(value: FilmProject) {
   }
 }
 
+async function assertWanSpendAvailable(
+  currentProjectId: string,
+  spendKey: string,
+  expectedAsset: string
+) {
+  const previous = await latestSpendForKey(
+    currentProjectId,
+    spendKey
+  );
+
+  if (!previous) return;
+
+  if (
+    previous.state === 'succeeded' &&
+    await exists(expectedAsset)
+  ) {
+    return;
+  }
+
+  if (
+    previous.state === 'reserved' ||
+    previous.state === 'failed-no-charge'
+  ) {
+    return;
+  }
+
+  if (
+    ['submitted', 'succeeded', 'failed-unknown', 'reconciled'].includes(
+      previous.state
+    )
+  ) {
+    throw new Error(
+      'SAFE RETRY BLOCK WAN: existe estado ' +
+      previous.state +
+      ' para ' +
+      spendKey +
+      '. No se reintentará automáticamente.'
+    );
+  }
+}
+
 function sceneByOrder(
   value: FilmProject,
   order: number
 ): FilmScene {
-  const scene = value.plan?.scenes.find(
+  const current = value.plan?.scenes.find(
     (item) => item.order === order
   );
-  if (!scene) {
+  if (!current) {
     throw new Error('No existe Escena ' + order + '.');
   }
-  return scene;
+  return current;
 }
 
 function shotByOrder(
-  scene: FilmScene,
+  current: FilmScene,
   order: number
 ): FilmShot {
-  const shot = scene.shots.find(
+  const shot = current.shots.find(
     (item) => item.order === order
   );
   if (!shot) {
@@ -452,7 +640,7 @@ function shotByOrder(
   return shot;
 }
 
-async function withAuthorizedPaidGate<T>(
+async function withVoicePaidGate<T>(
   run: () => Promise<T>
 ) {
   const oldExternal = process.env.ALLOW_EXTERNAL_API_CALLS;
@@ -460,15 +648,11 @@ async function withAuthorizedPaidGate<T>(
   const oldFallback =
     process.env.ALLOW_PAID_PROVIDER_FALLBACK;
   const oldProduction = process.env.PRODUCTION_MODE;
-  const oldLipSync = process.env.ENABLE_LIPSYNC;
-  const oldLocal = process.env.VIRALCINE_LOCAL_LIPSYNC_ONLY;
 
   process.env.ALLOW_EXTERNAL_API_CALLS = 'true';
   process.env.ALLOW_PAID_GENERATION = 'true';
   process.env.ALLOW_PAID_PROVIDER_FALLBACK = 'false';
   process.env.PRODUCTION_MODE = 'real';
-  process.env.ENABLE_LIPSYNC = 'true';
-  delete process.env.VIRALCINE_LOCAL_LIPSYNC_ONLY;
 
   try {
     return await run();
@@ -480,11 +664,6 @@ async function withAuthorizedPaidGate<T>(
       oldFallback
     );
     restoreEnv('PRODUCTION_MODE', oldProduction);
-    restoreEnv('ENABLE_LIPSYNC', oldLipSync);
-    restoreEnv(
-      'VIRALCINE_LOCAL_LIPSYNC_ONLY',
-      oldLocal
-    );
   }
 }
 
@@ -506,4 +685,8 @@ function restoreEnv(
   } else {
     process.env[name] = value;
   }
+}
+
+function errorText(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
