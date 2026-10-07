@@ -78,7 +78,8 @@
     "safe:scene5:prepare": "node --import tsx scripts/prepare-scene5-v6.ts",
     "safe:scene5:audition-mateo": "node --import tsx scripts/audition-scene5-mateo-v6.ts",
     "safe:scene5:run": "node --import tsx scripts/generate-scene5-v6.ts",
-    "safe:scene5:reconcile-runway400": "node --import tsx scripts/reconcile-scene5-runway400-v6.ts"
+    "safe:scene5:reconcile-runway400": "node --import tsx scripts/reconcile-scene5-runway400-v6.ts",
+    "safe:scene5:fix-mateo-voice": "node --import tsx scripts/fix-scene5-mateo-child-voice-v6.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",
