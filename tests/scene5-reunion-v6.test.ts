@@ -148,3 +148,19 @@ test('productor Escena 5 permanece WAN/Runway-only y con tope US$2.13', async ()
   assert.match(command, /--confirm-scene5-usd-2\.13/);
   assert.match(command, /Fal\.ai: PROHIBIDO \/ NO USADO/);
 });
+
+
+test('productor Escena 5 normaliza speaker reference a 9:16 antes de WAN', async () => {
+  const producer = await readFile(
+    new URL('../lib/engine/scene5-reunion-producer-v6.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(producer, /normalizeReferenceImage/);
+  assert.match(producer, /'-wan-safe-9x16\.png'/);
+  assert.match(
+    producer,
+    /normalizeReferenceImage\([\s\S]*speakerSourceRef[\s\S]*speakerRef[\s\S]*'9:16'/
+  );
+  assert.match(producer, /runway-request-rejected-no-task/);
+});
