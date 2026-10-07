@@ -273,6 +273,30 @@ export async function fitSpeechAudioToExactDuration(
   return outputPath;
 }
 
+export async function createCleanVoicePreserveTiming(
+  audioPath: string,
+  durationSeconds: number,
+  outputPath: string
+) {
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+    throw new Error('Duración inválida para voz limpia.');
+  }
+
+  await run([
+    '-y',
+    '-i', audioPath,
+    '-vn',
+    '-af', 'aresample=48000,apad',
+    '-t', String(durationSeconds),
+    '-ar', '48000',
+    '-ac', '2',
+    '-c:a', 'pcm_s16le',
+    outputPath
+  ]);
+
+  return outputPath;
+}
+
 export async function createYouthfulChildVoicePreserveTiming(
   audioPath: string,
   durationSeconds: number,
