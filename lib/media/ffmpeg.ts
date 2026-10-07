@@ -189,6 +189,81 @@ export async function normalizeGeneratedVideoWithEmbeddedAudio(
   return outputPath;
 }
 
+export async function feminizeEmbeddedVoicePreserveTiming(
+  videoPath: string,
+  durationSeconds: number,
+  outputAudioPath: string,
+  pitchFactor = 1.17
+) {
+  if (!Number.isFinite(pitchFactor) || pitchFactor < 1.08 || pitchFactor > 1.25) {
+    throw new Error(
+      'Factor de feminización fuera del rango seguro 1.08-1.25: ' + pitchFactor
+    );
+  }
+
+  const sampleRate = 48000;
+  const shiftedRate = Math.round(sampleRate * pitchFactor);
+  const tempo = 1 / pitchFactor;
+
+  await run([
+    '-y',
+    '-i', videoPath,
+    '-vn',
+    '-map', '0:a:0',
+    '-af',
+    [
+      'asetrate=' + shiftedRate,
+      'aresample=' + sampleRate,
+      'atempo=' + tempo.toFixed(6),
+      'highpass=f=90',
+      'equalizer=f=180:t=q:w=1:g=-3',
+      'equalizer=f=3200:t=q:w=1:g=2',
+      'alimiter=limit=0.95',
+      'apad'
+    ].join(','),
+    '-t', String(durationSeconds),
+    '-ar', String(sampleRate),
+    '-ac', '2',
+    '-c:a', 'aac',
+    '-b:a', '192k',
+    outputAudioPath
+  ]);
+
+  return outputAudioPath;
+}
+
+export async function replaceAudioPreserveVideo(
+  videoPath: string,
+  audioPath: string,
+  durationSeconds: number,
+  outputPath: string
+) {
+  const probe = await probeVideo(videoPath);
+  if (!probe.hasVideo || !probe.hasAudio) {
+    throw new Error(
+      'El clip fuente debe contener video y audio antes de reemplazar únicamente la voz.'
+    );
+  }
+
+  await run([
+    '-y',
+    '-i', videoPath,
+    '-i', audioPath,
+    '-t', String(durationSeconds),
+    '-map', '0:v:0',
+    '-map', '1:a:0',
+    '-c:v', 'copy',
+    '-c:a', 'aac',
+    '-b:a', '192k',
+    '-ar', '48000',
+    '-ac', '2',
+    '-movflags', '+faststart',
+    outputPath
+  ]);
+
+  return outputPath;
+}
+
 export async function concatenate(clips: string[], outputPath: string) {
   if (!clips.length) throw new Error('No existen clips para componer.');
   const listPath = path.join(path.dirname(outputPath), 'concat-list.txt');
