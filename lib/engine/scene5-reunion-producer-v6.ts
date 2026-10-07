@@ -826,6 +826,13 @@ export async function produceScene5ReunionV6(
       ' ViralCine 6 Safe: Escena 5 recompuesta en 30s; Fal.ai prohibido/no usado; Mateo ash aprobado y usado.'
   );
 
+  const representativeDialogue = shotByOrder(finalScene, 3);
+  if (!representativeDialogue.voiceAsset) {
+    throw new Error(
+      'Escena 5 no tiene voz representativa en T3.'
+    );
+  }
+
   await saveSceneCheckpoint(
     project,
     finalScene,
@@ -833,12 +840,10 @@ export async function produceScene5ReunionV6(
       project.id,
       finalScene.mode,
       familyReference,
-      shotByOrder(finalScene, 3).voiceAsset
-        ? assetAbsolutePath(
-            project.id,
-            shotByOrder(finalScene, 3).voiceAsset!
-          )
-        : undefined,
+      assetAbsolutePath(
+        project.id,
+        representativeDialogue.voiceAsset
+      ),
       finalScenePath
     )
   );
