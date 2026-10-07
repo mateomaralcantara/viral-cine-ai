@@ -50,7 +50,7 @@ test('Escena 5 V6 queda en 6 tomas / 30s con diálogo exacto', () => {
   assert.equal(result.durationSeconds, 30);
   assert.equal(result.dialogueShots, 4);
   assert.equal(result.silentShots, 2);
-  assert.equal(result.maxTotalUsd, 2.05);
+  assert.equal(result.maxTotalUsd, 2.13);
 
   const scene5 = project.plan.scenes.find((scene: any) => scene.order === 5);
   assert.deepEqual(
@@ -109,7 +109,7 @@ test('Escena 5 V6 prohíbe Fal y separa Runway silencioso de WAN hablado', () =>
     }
   }
 
-  assert.equal(SCENE5_SAFE_MAX_USD_V6, 2.05);
+  assert.equal(SCENE5_SAFE_MAX_USD_V6, 2.13);
 });
 
 test('Voice Lock 5.1 incluye voces infantiles candidatas para Mateo y Sofía', () => {
