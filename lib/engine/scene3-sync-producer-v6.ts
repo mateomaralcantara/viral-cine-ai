@@ -1,6 +1,6 @@
 import { access } from 'node:fs/promises';
 import path from 'node:path';
-import type { Character, FilmProject, FilmScene, FilmShot } from '@/lib/domain/schemas';
+import type { FilmProject, FilmScene, FilmShot } from '@/lib/domain/schemas';
 import {
   assetAbsolutePath,
   assetRelativePath,
@@ -8,11 +8,7 @@ import {
   projectAssetDir,
   saveProject
 } from '@/lib/storage/project-store';
-import {
-  generateImage,
-  generateImageWithReferences,
-  generateSpeech
-} from '@/lib/providers/openai-media';
+import { generateSpeech } from '@/lib/providers/openai-media';
 import {
   audioFileToDataUri,
   generateRunwayGrok15AudioDrivenFromEnvironment,
@@ -25,7 +21,6 @@ import {
   concatenate,
   createSilenceAudio,
   extractLastFrame,
-  normalizeReferenceImage,
   normalizeGeneratedVideo,
   normalizeGeneratedVideoWithEmbeddedAudio
 } from '@/lib/media/ffmpeg';
@@ -54,9 +49,8 @@ import {
 import { applyFifteenDaysCoreVoiceLocksV5 } from '@/lib/engine/fifteen-days-voice-lock-v5';
 
 const MAX_LITE_CREDITS = 25;
-const MAX_DIALOGUE_CREDITS = 131;
-const MAX_SCENE_CREDITS = 181;
-const MAX_IMAGE_USD = 0.08;
+const MAX_DIALOGUE_CREDITS = 130;
+const MAX_SCENE_CREDITS = 180;
 const MAX_VOICE_USD = 0.01;
 
 export type Scene3SynchronizedResult = {
@@ -79,8 +73,6 @@ export async function produceScene3SynchronizedV6(
 
   const scene2 = project.plan!.scenes.find((item) => item.order === 2)!;
   const scene3 = project.plan!.scenes.find((item) => item.order === 3)!;
-  const elena = character(project, SCENE3_ELENA_ID_V6);
-  const mariana = character(project, SCENE3_MARIANA_ID_V6);
 
   const scene2Video = scene2.videoAsset
     ? assetAbsolutePath(project.id, scene2.videoAsset)
@@ -88,9 +80,6 @@ export async function produceScene3SynchronizedV6(
   if (!scene2Video || !(await exists(scene2Video))) {
     throw new Error('La Escena 2 aprobada no tiene video local para continuidad.');
   }
-
-  const elenaRef = await requireExistingCharacterReference(project, elena);
-  const marianaRef = await ensureMarianaReference(project, mariana);
 
   project = await getProject(project.id);
   const liveScene3 = project.plan!.scenes.find((item) => item.order === 3)!;
@@ -118,8 +107,6 @@ export async function produceScene3SynchronizedV6(
 
   const t1 = await produceSetupShot(
     project.id,
-    elenaRef,
-    marianaRef,
     continuityFrame
   );
 
@@ -135,7 +122,6 @@ export async function produceScene3SynchronizedV6(
 
   const t2 = await produceDialogueShot(
     project.id,
-    marianaRef,
     t1LastFrame
   );
 
@@ -202,7 +188,7 @@ export async function produceScene3SynchronizedV6(
 
   const credits =
     grokLiteImageToVideoCredits(8, 'auto_720p') +
-    grok15AudioDrivenCredits(8, '720p', 2, 1) +
+    grok15AudioDrivenCredits(8, '720p', 1, 1) +
     grokLiteImageToVideoCredits(8, 'auto_720p');
 
   return {
@@ -215,8 +201,6 @@ export async function produceScene3SynchronizedV6(
 
 async function produceSetupShot(
   projectId: string,
-  elenaRef: string,
-  marianaRef: string,
   continuityFrame: string
 ) {
   let project = await getProject(projectId);
@@ -229,46 +213,7 @@ async function produceSetupShot(
   }
 
   const key = 'scene-003-shot-01';
-  const rawImagePath = path.join(
-    projectAssetDir(project.id, 'images'),
-    key + '-openai-raw.png'
-  );
-  const imagePath = path.join(
-    projectAssetDir(project.id, 'images'),
-    key + '.png'
-  );
-
-  if (!(await exists(rawImagePath))) {
-    await authorizedOpenAIImage(
-      project,
-      scene,
-      shot,
-      'v6safe:e3:t1:composite-image',
-      rawImagePath,
-      async () => {
-        await generateImageWithReferences(
-          [elenaRef, marianaRef, continuityFrame],
-          [
-            shot.visualPrompt,
-            'Crear un único frame cinematográfico horizontal que mantenga exactamente a Elena y Mariana según sus referencias.',
-            'La geografía, luz y entorno deben continuar desde la tercera referencia.',
-            'Mariana se ha sentado a distancia respetuosa de Elena.',
-            'Nadie está hablando. Bocas relajadas y cerradas de forma natural.',
-            'Sin texto, subtítulos, logos ni marcas de agua.'
-          ].join(' '),
-          rawImagePath
-        );
-      }
-    );
-  }
-
-  if (!(await exists(imagePath))) {
-    await normalizeReferenceImage(
-      rawImagePath,
-      imagePath,
-      project.input.aspectRatio
-    );
-  }
+  const imagePath = continuityFrame;
 
   const silencePath = path.join(
     projectAssetDir(project.id, 'audio'),
@@ -363,7 +308,6 @@ async function produceSetupShot(
 
 async function produceDialogueShot(
   projectId: string,
-  marianaRef: string,
   sceneContinuityFrame: string
 ) {
   let project = await getProject(projectId);
@@ -473,7 +417,7 @@ async function produceDialogueShot(
   );
 
   if (!(await exists(rawPath))) {
-    const credits = grok15AudioDrivenCredits(8, '720p', 2, 1);
+    const credits = grok15AudioDrivenCredits(8, '720p', 1, 1);
     if (credits !== MAX_DIALOGUE_CREDITS) {
       throw new Error(
         'SAFE COST GATE T2: costo inesperado ' + credits + ' créditos.'
@@ -498,8 +442,8 @@ async function produceDialogueShot(
         {
           model: 'grok_imagine_1_5',
           promptText: [
-            '[Image 1] define exactamente el rostro, edad, cabello y vestuario de Mariana.',
-            '[Image 2] define la calle, iluminación, encuadre y continuidad de la escena.',
+            '[Image 1] es el último frame aprobado de T1 y define identidades, calle, iluminación y continuidad.',
+            'Mariana es la mujer madura que acaba de sentarse junto a Elena; Elena es la mujer del cuaderno.',
             'Mariana es la única persona que habla.',
             'Su boca, labios y mandíbula permanecen visibles durante todo el parlamento.',
             'La interpretación facial y los movimientos de boca deben seguir el audio de referencia exactamente, palabra por palabra.',
@@ -511,7 +455,6 @@ async function produceDialogueShot(
           ratio: '16:9',
           resolution: '720p',
           references: [
-            { uri: await imageFileToDataUri(marianaRef) },
             { uri: await imageFileToDataUri(sceneContinuityFrame) }
           ],
           referenceAudio: [
@@ -682,133 +625,6 @@ async function produceReactionShot(
   return finalPath;
 }
 
-async function ensureMarianaReference(
-  project: FilmProject,
-  mariana: Character
-) {
-  if (mariana.referenceAsset) {
-    const current = assetAbsolutePath(project.id, mariana.referenceAsset);
-    if (await exists(current)) return current;
-  }
-
-  const output = path.join(
-    projectAssetDir(project.id, 'images'),
-    'character-' + mariana.id + '.png'
-  );
-
-  if (!(await exists(output))) {
-    const scene = scene3(project);
-    const shot = shotByOrder(scene, 1);
-    await authorizedOpenAIImage(
-      project,
-      scene,
-      shot,
-      'v6safe:e3:mariana-character-image',
-      output,
-      async () => {
-        await generateImage(
-          [
-            mariana.imagePrompt,
-            mariana.appearance,
-            'Vestuario: ' + mariana.wardrobe + '.',
-            'Referencia limpia de personaje, fondo neutro, rostro frontal y claramente visible.',
-            'Sin texto ni logotipo.'
-          ].join(' '),
-          output
-        );
-      },
-      mariana.id
-    );
-  }
-
-  const live = await getProject(project.id);
-  const liveMariana = character(live, SCENE3_MARIANA_ID_V6);
-  liveMariana.referenceAsset = assetRelativePath(live.id, output);
-  live.productionLog.push(
-    new Date().toISOString() +
-      ' ViralCine 6 Safe: referencia visual de Mariana fijada para continuidad de Escena 3.'
-  );
-  await saveProject(live);
-  return output;
-}
-
-async function requireExistingCharacterReference(
-  project: FilmProject,
-  person: Character
-) {
-  if (!person.referenceAsset) {
-    throw new Error(
-      person.name +
-        ' no tiene referenceAsset. La continuidad existente debe conservarse; no se autoriza recrearla automáticamente.'
-    );
-  }
-  const absolute = assetAbsolutePath(project.id, person.referenceAsset);
-  await access(absolute);
-  return absolute;
-}
-
-async function authorizedOpenAIImage(
-  project: FilmProject,
-  scene: FilmScene,
-  shot: FilmShot,
-  spendKey: string,
-  outputPath: string,
-  run: () => Promise<void>,
-  characterId?: string
-) {
-  const estimate = estimateOperationCost('image', 1);
-  if (estimate > MAX_IMAGE_USD) {
-    throw new Error(
-      'SAFE COST GATE IMAGEN: estimación US$' +
-        estimate.toFixed(4) +
-        ' supera US$0.08.'
-    );
-  }
-
-  await assertSpendAvailable(project.id, spendKey, outputPath);
-  await appendSpend(project.id, {
-    operation: 'image',
-    provider: 'openai',
-    model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2',
-    state: 'submitted',
-    estimatedUsd: estimate,
-    sceneId: scene.id,
-    shotId: shot.id,
-    characterId,
-    idempotencyKey: spendKey
-  });
-
-  try {
-    await withLegacyPaidGate(run);
-    await appendSpend(project.id, {
-      operation: 'image',
-      provider: 'openai',
-      model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2',
-      state: 'succeeded',
-      estimatedUsd: estimate,
-      sceneId: scene.id,
-      shotId: shot.id,
-      characterId,
-      idempotencyKey: spendKey,
-      outputAsset: assetRelativePath(project.id, outputPath)
-    });
-  } catch (error) {
-    await appendSpend(project.id, {
-      operation: 'image',
-      provider: 'openai',
-      model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2',
-      state: 'failed-unknown',
-      estimatedUsd: estimate,
-      sceneId: scene.id,
-      shotId: shot.id,
-      characterId,
-      idempotencyKey: spendKey,
-      error: errorText(error)
-    });
-    throw error;
-  }
-}
-
 async function markShotReady(
   projectId: string,
   order: number,
@@ -960,12 +776,6 @@ function shotByOrder(scene: FilmScene, order: number) {
   return shot;
 }
 
-function character(project: FilmProject, id: string) {
-  const person = project.plan?.characters.find((item) => item.id === id);
-  if (!person) throw new Error('No existe personaje ' + id + '.');
-  return person;
-}
-
 async function exists(filePath: string) {
   try {
     await access(filePath);
@@ -985,4 +795,4 @@ function errorText(error: unknown) {
 }
 
 export const SCENE3_SAFE_MAX_USD_V6 =
-  MAX_SCENE_CREDITS * 0.01 + MAX_IMAGE_USD * 2 + MAX_VOICE_USD;
+  MAX_SCENE_CREDITS * 0.01 + MAX_VOICE_USD;
