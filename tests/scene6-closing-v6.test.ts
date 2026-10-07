@@ -116,3 +116,18 @@ test('preflight Escena 6 es cero gasto y exige audición de Sofía', async () =>
   assert.doesNotMatch(preflight, /generateRunway/);
   assert.doesNotMatch(preflight, /generateSpeech/);
 });
+
+
+test('audición Sofía usa solo OpenAI voz y remaster infantil local', async () => {
+  const audition = await readFile(
+    new URL('../scripts/audition-scene6-sofia-v6.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(audition, /OpenAI coral/);
+  assert.match(audition, /niña latina de 10 años/i);
+  assert.match(audition, /createYouthfulChildVoicePreserveTiming/);
+  assert.match(audition, /--confirm-sofia-audition-usd-0\.01/);
+  assert.doesNotMatch(audition, /generateRunway/);
+  assert.doesNotMatch(audition, /fal-media/);
+});
