@@ -31,7 +31,8 @@ import {
   createSilenceAudio,
   extractLastFrame,
   normalizeGeneratedVideo,
-  normalizeGeneratedVideoWithEmbeddedAudio
+  normalizeGeneratedVideoWithEmbeddedAudio,
+  normalizeReferenceImage
 } from '@/lib/media/ffmpeg';
 import {
   fitAudioToSlot,
@@ -546,10 +547,27 @@ export async function produceScene5ReunionV6(
       );
     }
 
-    const speakerRef =
+    const speakerSourceRef =
       shot.speakerId === SCENE5_MATEO_ID_V6
         ? refs.mateo
         : refs.elena;
+
+    const speakerRef = path.join(
+      dirs.images,
+      'scene-005-speaker-' +
+        (shot.speakerId === SCENE5_MATEO_ID_V6
+          ? 'mateo'
+          : 'elena') +
+        '-wan-safe-9x16.png'
+    );
+
+    if (!(await exists(speakerRef))) {
+      await normalizeReferenceImage(
+        speakerSourceRef,
+        speakerRef,
+        '9:16'
+      );
+    }
 
     const audio = await ensureDialogueVoice(
       project,
@@ -664,19 +682,32 @@ export async function produceScene5ReunionV6(
         });
       } catch (error) {
         const message = errorText(error);
+        const taskId =
+          message.match(/taskId=([0-9a-f-]{36})/i)?.[1];
+        const rejectedBeforeTask =
+          !taskId &&
+          /Runway HTTP 400/i.test(message) &&
+          /Validation of body failed/i.test(message);
+
         await appendSpend(project.id, {
           operation: 'video',
           provider: 'runway-direct',
           model: 'wan3',
-          state: 'failed-unknown',
+          state: rejectedBeforeTask
+            ? 'failed-no-charge'
+            : 'failed-unknown',
           estimatedUsd: credits * 0.01,
+          actualUsd: rejectedBeforeTask ? 0 : undefined,
           sceneId: currentScene.id,
           shotId: shot.id,
           characterId: shot.speakerId,
           idempotencyKey: spendKey,
-          providerRequestId:
-            message.match(/taskId=([0-9a-f-]{36})/i)?.[1],
-          error: message
+          providerRequestId: taskId,
+          error:
+            (rejectedBeforeTask
+              ? '[runway-request-rejected-no-task] '
+              : '') +
+            message
         });
         throw error;
       }
