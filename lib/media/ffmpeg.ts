@@ -232,6 +232,47 @@ export async function feminizeEmbeddedVoicePreserveTiming(
   return outputAudioPath;
 }
 
+export async function fitSpeechAudioToExactDuration(
+  audioPath: string,
+  targetSeconds: number,
+  outputPath: string
+) {
+  if (!Number.isFinite(targetSeconds) || targetSeconds <= 0) {
+    throw new Error('Duración destino inválida para ajuste de voz.');
+  }
+
+  const probe = await probeVideo(audioPath);
+  if (!probe.hasAudio || !Number.isFinite(probe.durationSeconds)) {
+    throw new Error('No se pudo medir la nueva voz.');
+  }
+
+  const speedFactor = probe.durationSeconds / targetSeconds;
+  if (speedFactor < 0.85 || speedFactor > 1.20) {
+    throw new Error(
+      'La nueva voz se aleja demasiado del timing original: ' +
+        probe.durationSeconds.toFixed(3) +
+        's vs ' +
+        targetSeconds.toFixed(3) +
+        's. No se forzará el sincronismo.'
+    );
+  }
+
+  await run([
+    '-y',
+    '-i', audioPath,
+    '-vn',
+    '-af', 'atempo=' + speedFactor.toFixed(6) + ',apad',
+    '-t', String(targetSeconds),
+    '-ar', '48000',
+    '-ac', '2',
+    '-c:a', 'aac',
+    '-b:a', '192k',
+    outputPath
+  ]);
+
+  return outputPath;
+}
+
 export async function replaceAudioPreserveVideo(
   videoPath: string,
   audioPath: string,
