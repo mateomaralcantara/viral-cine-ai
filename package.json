@@ -70,7 +70,8 @@
     "safe:scene3:restore-female-reference-voice": "node --import tsx scripts/restore-scene3-t2-female-reference-voice-v6.ts",
     "safe:scene3:new-female-voice": "node --import tsx scripts/generate-scene3-t2-new-female-voice-v6.ts",
     "safe:scene4:prepare": "node --import tsx scripts/prepare-scene4-v6.ts",
-    "safe:scene4:run": "node --import tsx scripts/generate-scene4-v6.ts"
+    "safe:scene4:run": "node --import tsx scripts/generate-scene4-v6.ts",
+    "safe:scene4:lipsync": "node --import tsx scripts/lipsync-scene4-v6.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",
