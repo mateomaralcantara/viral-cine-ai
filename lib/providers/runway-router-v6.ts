@@ -175,6 +175,31 @@ export async function dryRunRunwayRouterVideo(
   };
 }
 
+export async function getRunwayTaskDetailsFromEnvironment(
+  taskId: string
+) {
+  const key = process.env.RUNWAYML_API_SECRET?.trim();
+  if (!key || key.length < 8) {
+    throw new Error('Runway API secret no está configurado.');
+  }
+
+  const task = await runwayGet(
+    '/v1/tasks/' + encodeURIComponent(taskId),
+    key
+  );
+
+  return {
+    id: stringValue(task.id) || taskId,
+    status: stringValue(task.status) || 'UNKNOWN',
+    failureCode: stringValue(task.failureCode),
+    failure: stringValue(task.failure),
+    createdAt: stringValue(task.createdAt),
+    output: Array.isArray(task.output)
+      ? task.output.filter((item): item is string => typeof item === 'string')
+      : []
+  };
+}
+
 export async function generateRunwayGrok15AudioDrivenFromEnvironment(
   request: Grok15AudioDrivenRequest,
   outputPath: string,
@@ -255,11 +280,15 @@ export async function generateRunwayGrok15AudioDrivenFromEnvironment(
     }
 
     if (status === 'FAILED' || status === 'CANCELED') {
+      const failureCode = stringValue(task.failureCode);
+      const failure = stringValue(task.failure);
       throw new Error(
         'Runway terminó la tarea con estado ' +
           status +
           '. taskId=' +
-          taskId
+          taskId +
+          (failureCode ? ' failureCode=' + failureCode : '') +
+          (failure ? ' failure=' + failure : '')
       );
     }
   }
