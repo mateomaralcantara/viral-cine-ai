@@ -7,7 +7,7 @@ import {
 loadProjectLocalEnvOverride();
 
 const [projectId, confirmation] = process.argv.slice(2);
-const EXPECTED = '--confirm-scene3-usd-1.98';
+const EXPECTED = '--confirm-scene3-usd-1.81';
 
 if (!projectId || confirmation !== EXPECTED) {
   console.error(
@@ -16,7 +16,7 @@ if (!projectId || confirmation !== EXPECTED) {
   process.exit(1);
 }
 
-if (Math.abs(SCENE3_SAFE_MAX_USD_V6 - 1.98) > 0.0001) {
+if (Math.abs(SCENE3_SAFE_MAX_USD_V6 - 1.81) > 0.0001) {
   throw new Error(
     'El tope interno de Escena 3 cambió a US$' +
       SCENE3_SAFE_MAX_USD_V6.toFixed(2) +
@@ -27,10 +27,10 @@ if (Math.abs(SCENE3_SAFE_MAX_USD_V6 - 1.98) > 0.0001) {
 console.log('\n==================================================');
 console.log(' VIRALCINE 6 SAFE — AUTORIZACION ESCENA 3');
 console.log('==================================================');
-console.log('Tope conservador autorizado: US$1.98');
-console.log('Runway máximo: US$1.81');
+console.log('Tope interno autorizado: US$1.81');
+console.log('Runway máximo: US$1.80');
 console.log('OpenAI imágenes máximo interno: US$0.16');
-console.log('OpenAI voz máximo: US$0.01');
+console.log('OpenAI voz: tope interno US$0.01');
 console.log('Fal.ai: NO');
 console.log('Fallback pagado: NO');
 console.log('Música: NO');
