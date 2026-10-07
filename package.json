@@ -59,7 +59,8 @@
     "scene:15dias": "node --import tsx scripts/scene-review-15-dias-v5.ts",
     "safe:status": "node --import tsx scripts/safe-status-v6.ts",
     "safe:ticket": "node --import tsx scripts/safe-cost-ticket-v6.ts",
-    "safe:compare": "node --import tsx scripts/safe-provider-compare-v6.ts"
+    "safe:compare": "node --import tsx scripts/safe-provider-compare-v6.ts",
+    "safe:scene2:runway": "node --import tsx scripts/generate-scene2-runway-safe-v6.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",
