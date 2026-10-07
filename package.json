@@ -64,7 +64,8 @@
     "safe:scene3:prepare": "node --import tsx scripts/prepare-scene3-sync-v6.ts",
     "safe:scene3:run": "node --import tsx scripts/generate-scene3-sync-v6.ts",
     "safe:runway:task": "node --import tsx scripts/runway-task-diagnostic-v6.ts",
-    "safe:scene3:resume-internal": "node --import tsx scripts/resume-scene3-internal-v6.ts"
+    "safe:scene3:resume-internal": "node --import tsx scripts/resume-scene3-internal-v6.ts",
+    "safe:scene3:resume-wan": "node --import tsx scripts/resume-scene3-wan-v6.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",
