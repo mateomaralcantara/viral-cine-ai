@@ -227,3 +227,17 @@ test('Sofia Voice V2 espera session.started antes de enviar la linea', async () 
   assert.match(script, /delegation_id = \$null/);
   assert.match(script, /content = "Mami, ¿ya terminaste\?"/);
 });
+
+
+test('Sofia Voice V2 usa terminadores PowerShell here-string válidos', async () => {
+  const script = await readFile(
+    new URL('../scripts/CREATE-SOFIA-VOICE-V2.ps1', import.meta.url),
+    'utf8'
+  );
+
+  assert.doesNotMatch(script, /"@\.Trim\(\)/);
+  assert.match(script, /\$VoicePrompt = @"/);
+  assert.match(script, /^"@$/m);
+  assert.match(script, /\$VoicePrompt = \$VoicePrompt\.Trim\(\)/);
+  assert.match(script, /\$SessionInstructions = \$SessionInstructions\.Trim\(\)/);
+});
