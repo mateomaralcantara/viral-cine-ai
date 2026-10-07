@@ -32,6 +32,16 @@ export type GrokLiteImageToVideoRequest = {
   duration: number;
 };
 
+export type Grok15AudioDrivenRequest = {
+  model: 'grok_imagine_1_5';
+  promptText: string;
+  duration: number;
+  ratio: '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '3:2' | '2:3';
+  resolution: '480p' | '720p' | '1080p';
+  references: Array<{ uri: string }>;
+  referenceAudio: Array<{ type: 'audio'; uri: string }>;
+};
+
 export function grokLiteImageToVideoCredits(
   durationSeconds: number,
   ratio: GrokLiteImageToVideoRequest['ratio']
@@ -46,6 +56,64 @@ export function grokLiteImageToVideoCredits(
     14;
 
   return durationSeconds * perSecond + 1;
+}
+
+export async function audioFileToDataUri(filePath: string) {
+  const data = await readFile(filePath);
+  const ext = path.extname(filePath).toLowerCase();
+  const mime =
+    ext === '.mp3'
+      ? 'audio/mpeg'
+      : ext === '.wav'
+        ? 'audio/wav'
+        : ext === '.flac'
+          ? 'audio/flac'
+          : ext === '.m4a'
+            ? 'audio/mp4'
+            : ext === '.aac'
+              ? 'audio/aac'
+              : undefined;
+
+  if (!mime) {
+    throw new Error('Formato de audio no permitido para Runway: ' + ext);
+  }
+
+  const uri = 'data:' + mime + ';base64,' + data.toString('base64');
+
+  if (Buffer.byteLength(uri, 'utf8') > 5 * 1024 * 1024) {
+    throw new Error(
+      'El audio de referencia supera el máximo seguro de 5MB como Data URI.'
+    );
+  }
+
+  return uri;
+}
+
+export function grok15AudioDrivenCredits(
+  durationSeconds: number,
+  resolution: Grok15AudioDrivenRequest['resolution'],
+  imageReferenceCount: number,
+  audioReferenceCount: number
+) {
+  if (!Number.isInteger(durationSeconds) || durationSeconds < 1 || durationSeconds > 15) {
+    throw new Error('Grok 1.5 permite duraciones enteras de 1 a 15 segundos.');
+  }
+  if (imageReferenceCount < 1) {
+    throw new Error('Grok 1.5 audio-driven exige al menos una referencia de imagen.');
+  }
+  if (audioReferenceCount < 1 || audioReferenceCount > 3) {
+    throw new Error('Grok 1.5 audio-driven exige entre 1 y 3 referencias de audio.');
+  }
+  if (resolution === '1080p') {
+    throw new Error('Grok 1.5 con referencias de imagen/audio está limitado a 720p.');
+  }
+
+  const perSecond = resolution === '480p' ? 10 : 16;
+  return (
+    durationSeconds * perSecond +
+    imageReferenceCount +
+    audioReferenceCount
+  );
 }
 
 export async function imageFileToDataUri(filePath: string) {
@@ -105,6 +173,102 @@ export async function dryRunRunwayRouterVideo(
     credits,
     resolvedSettings: record(routing.resolvedSettings)
   };
+}
+
+export async function generateRunwayGrok15AudioDrivenFromEnvironment(
+  request: Grok15AudioDrivenRequest,
+  outputPath: string,
+  timeoutMs = 12 * 60 * 1000
+) {
+  const key = process.env.RUNWAYML_API_SECRET?.trim();
+  if (!key || key.length < 8) {
+    throw new Error('Runway API secret no está configurado.');
+  }
+
+  if (request.model !== 'grok_imagine_1_5') {
+    throw new Error('ViralCine 6 Safe solo autoriza grok_imagine_1_5 en esta ruta.');
+  }
+
+  if (!request.references.length || !request.referenceAudio.length) {
+    throw new Error('La ruta audio-driven requiere imagen y audio de referencia.');
+  }
+
+  const credits = grok15AudioDrivenCredits(
+    request.duration,
+    request.resolution,
+    request.references.length,
+    request.referenceAudio.length
+  );
+
+  const submitted = await runwayRequest(
+    '/v1/text_to_video',
+    request,
+    key
+  );
+
+  const taskId =
+    stringValue(submitted.id) ||
+    stringValue(record(submitted.task).id);
+
+  if (!taskId) {
+    throw new Error('Runway no devolvió task id.');
+  }
+
+  const started = Date.now();
+
+  while (Date.now() - started < timeoutMs) {
+    await sleep(5000);
+
+    const task = await runwayGet(
+      '/v1/tasks/' + encodeURIComponent(taskId),
+      key
+    );
+    const status = stringValue(task.status);
+
+    if (status === 'SUCCEEDED') {
+      const output = Array.isArray(task.output)
+        ? task.output.find((item) => typeof item === 'string')
+        : undefined;
+
+      if (typeof output !== 'string') {
+        throw new Error('Runway terminó la tarea sin URL de salida.');
+      }
+
+      const media = await fetch(output);
+      if (!media.ok) {
+        throw new Error(
+          'No se pudo descargar el video de Runway: HTTP ' + media.status
+        );
+      }
+
+      await writeFile(
+        outputPath,
+        Buffer.from(await media.arrayBuffer())
+      );
+
+      return {
+        taskId,
+        model: request.model,
+        credits,
+        outputPath
+      };
+    }
+
+    if (status === 'FAILED' || status === 'CANCELED') {
+      throw new Error(
+        'Runway terminó la tarea con estado ' +
+          status +
+          '. taskId=' +
+          taskId
+      );
+    }
+  }
+
+  throw new Error(
+    'Timeout esperando Runway. taskId=' +
+      taskId +
+      '. No reintentes automáticamente; consulta la tarea primero.'
+  );
 }
 
 export async function generateRunwayGrokLiteFromEnvironment(
