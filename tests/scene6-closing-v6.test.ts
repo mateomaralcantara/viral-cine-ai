@@ -176,3 +176,20 @@ test('Sofía clean local elimina pitch-shift y no llama proveedores', async () =
   assert.doesNotMatch(fixer, /generateRunway/);
   assert.doesNotMatch(fixer, /fal-media/);
 });
+
+
+test('audiciones Sofía girl usan tres voces directas sin pitch-shift ni video', async () => {
+  const audition = await readFile(
+    new URL('../scripts/audition-scene6-sofia-girl-v6.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(audition, /\['coral', 'nova', 'shimmer'\]/);
+  assert.match(audition, /niña latina REAL de 10 años/i);
+  assert.match(audition, /Procesamiento posterior: NO/);
+  assert.match(audition, /Pitch shift: NO/);
+  assert.match(audition, /--confirm-sofia-girl-auditions-usd-0\.01/);
+  assert.doesNotMatch(audition, /createYouthfulChildVoicePreserveTiming/);
+  assert.doesNotMatch(audition, /generateRunway/);
+  assert.doesNotMatch(audition, /fal-media/);
+});
