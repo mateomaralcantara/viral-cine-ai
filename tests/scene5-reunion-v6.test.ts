@@ -122,7 +122,7 @@ test('Voice Lock 5.1 incluye voces infantiles candidatas para Mateo y Sofía', (
   );
 
   assert.equal(mateo?.provider, 'openai');
-  assert.equal(mateo?.voiceId, 'ash');
+  assert.equal(mateo?.voiceId, 'alloy');
   assert.match(mateo?.instructions || '', /niño latino de 7 años/i);
 
   assert.equal(sofia?.provider, 'openai');
@@ -178,19 +178,20 @@ test('productor Escena 5 aplica tope acumulado entre reanudaciones', async () =>
 });
 
 
-test('fix de Mateo E5 reemplaza solo audio local en T3/T5', async () => {
+test('ruta antigua de Mateo ash queda bloqueada', async () => {
   const fixer = await readFile(
     new URL('../scripts/fix-scene5-mateo-child-voice-v6.ts', import.meta.url),
     'utf8'
   );
+  const audition = await readFile(
+    new URL('../scripts/audition-scene5-mateo-v6.ts', import.meta.url),
+    'utf8'
+  );
 
-  assert.match(fixer, /replaceAudioPreserveVideo/);
-  assert.match(fixer, /scene-005-shot-03-master\.wav/);
-  assert.match(fixer, /scene-005-shot-05-master\.wav/);
-  assert.match(fixer, /Gasto nuevo: US\$0/);
-  assert.doesNotMatch(fixer, /generateRunway/);
-  assert.doesNotMatch(fixer, /generateSpeech/);
-  assert.doesNotMatch(fixer, /fal-media/);
+  assert.match(fixer, /DEPRECATED/);
+  assert.match(fixer, /Mateo vuelva a sonar adulto/);
+  assert.match(audition, /DEPRECATED/);
+  assert.match(audition, /nunca voz adulta/);
 });
 
 
