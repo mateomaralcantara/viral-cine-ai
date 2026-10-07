@@ -25,6 +25,7 @@ import {
   concatenate,
   createSilenceAudio,
   extractLastFrame,
+  normalizeReferenceImage,
   normalizeGeneratedVideo,
   normalizeGeneratedVideoWithEmbeddedAudio
 } from '@/lib/media/ffmpeg';
@@ -228,32 +229,44 @@ async function produceSetupShot(
   }
 
   const key = 'scene-003-shot-01';
+  const rawImagePath = path.join(
+    projectAssetDir(project.id, 'images'),
+    key + '-openai-raw.png'
+  );
   const imagePath = path.join(
     projectAssetDir(project.id, 'images'),
     key + '.png'
   );
 
-  if (!(await exists(imagePath))) {
+  if (!(await exists(rawImagePath))) {
     await authorizedOpenAIImage(
       project,
       scene,
       shot,
       'v6safe:e3:t1:composite-image',
-      imagePath,
+      rawImagePath,
       async () => {
         await generateImageWithReferences(
           [elenaRef, marianaRef, continuityFrame],
           [
             shot.visualPrompt,
-            'Crear un único frame cinematográfico 16:9 que mantenga exactamente a Elena y Mariana según sus referencias.',
+            'Crear un único frame cinematográfico horizontal que mantenga exactamente a Elena y Mariana según sus referencias.',
             'La geografía, luz y entorno deben continuar desde la tercera referencia.',
             'Mariana se ha sentado a distancia respetuosa de Elena.',
             'Nadie está hablando. Bocas relajadas y cerradas de forma natural.',
             'Sin texto, subtítulos, logos ni marcas de agua.'
           ].join(' '),
-          imagePath
+          rawImagePath
         );
       }
+    );
+  }
+
+  if (!(await exists(imagePath))) {
+    await normalizeReferenceImage(
+      rawImagePath,
+      imagePath,
+      project.input.aspectRatio
     );
   }
 
