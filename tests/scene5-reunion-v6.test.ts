@@ -176,3 +176,19 @@ test('productor Escena 5 aplica tope acumulado entre reanudaciones', async () =>
   assert.match(producer, /SAFE CUMULATIVE COST GATE E5/);
   assert.match(producer, /SCENE5_SAFE_MAX_USD_V6/);
 });
+
+
+test('fix de Mateo E5 reemplaza solo audio local en T3/T5', async () => {
+  const fixer = await readFile(
+    new URL('../scripts/fix-scene5-mateo-child-voice-v6.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(fixer, /replaceAudioPreserveVideo/);
+  assert.match(fixer, /scene-005-shot-03-master\.wav/);
+  assert.match(fixer, /scene-005-shot-05-master\.wav/);
+  assert.match(fixer, /Gasto nuevo: US\$0/);
+  assert.doesNotMatch(fixer, /generateRunway/);
+  assert.doesNotMatch(fixer, /generateSpeech/);
+  assert.doesNotMatch(fixer, /fal-media/);
+});
