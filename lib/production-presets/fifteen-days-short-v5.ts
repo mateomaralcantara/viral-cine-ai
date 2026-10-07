@@ -152,8 +152,9 @@ const defs: ShortSceneDef[] = [
 ];
 
 function scene(def: ShortSceneDef, index: number): FilmScene {
-  const falOnlyProviders: RealMotionShotSpec['preferredProviders'] = [
-    'fal-video'
+  const safeProviders: RealMotionShotSpec['preferredProviders'] = [
+    'runway',
+    'wan'
   ];
 
   const pilotShots: FilmShot[] = def.usePilotShots
@@ -162,7 +163,7 @@ function scene(def: ShortSceneDef, index: number): FilmScene {
         motionSpec: shot.motionSpec
           ? {
               ...shot.motionSpec,
-              preferredProviders: [...falOnlyProviders]
+              preferredProviders: [...safeProviders]
             }
           : undefined
       }))
@@ -209,7 +210,7 @@ function genericMotion(scene: FilmScene, shot: FilmShot): RealMotionShotSpec {
     environmentMotion: 'Movimiento ambiental leve y coherente con la localización; nada compite con el sujeto principal.',
     cameraMotion: shot.camera,
     shotClass: shot.spokenText.trim() ? 'dialogue' : 'standard',
-    preferredProviders: ['fal-video'],
+    preferredProviders: ['runway', 'wan'],
     minMotionScore: 8,
     minIdentityScore: 9,
     minContinuityScore: 9,
@@ -233,7 +234,7 @@ export function buildFifteenDaysShortPlanV5(): FilmPlan {
       version: '5.0-real-motion-v1',
       finalMode: 'real-motion',
       allowStillFallbackFinal: false,
-      providerOrder: ['fal-video', 'wan'],
+      providerOrder: ['runway', 'wan'],
       circuitBreaker: { failureThreshold: 3, cooldownSeconds: 900 },
       pilotShotIds: [],
       characterBible: FIFTEEN_DAYS_CHARACTER_BIBLE_V5,
@@ -262,7 +263,7 @@ export function buildFifteenDaysShortPlanV5(): FilmPlan {
       shot.motionSpec = shot.motionSpec || genericMotion(filmScene, shot);
       shot.motionSpec = {
         ...shot.motionSpec,
-        preferredProviders: ['fal-video'],
+        preferredProviders: ['runway', 'wan'],
         allowStillFallbackFinal: false
       };
       shot.pipelineVersion = '5.0-real-motion-short';
