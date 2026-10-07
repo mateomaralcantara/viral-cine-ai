@@ -273,6 +273,52 @@ export async function fitSpeechAudioToExactDuration(
   return outputPath;
 }
 
+export async function createYouthfulChildVoicePreserveTiming(
+  audioPath: string,
+  durationSeconds: number,
+  outputPath: string,
+  pitchFactor = 1.14
+) {
+  if (!Number.isFinite(pitchFactor) || pitchFactor < 1.05 || pitchFactor > 1.22) {
+    throw new Error(
+      'Factor de voz infantil fuera del rango seguro 1.05-1.22: ' + pitchFactor
+    );
+  }
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+    throw new Error('Duración inválida para voz infantil.');
+  }
+
+  const sampleRate = 48000;
+  const shiftedRate = Math.round(sampleRate * pitchFactor);
+  const tempo = 1 / pitchFactor;
+
+  await run([
+    '-y',
+    '-i', audioPath,
+    '-vn',
+    '-af',
+    [
+      'asetrate=' + shiftedRate,
+      'aresample=' + sampleRate,
+      'atempo=' + tempo.toFixed(6),
+      'highpass=f=120',
+      'equalizer=f=180:t=q:w=1:g=-5',
+      'equalizer=f=320:t=q:w=1:g=-2',
+      'equalizer=f=2800:t=q:w=1:g=2.5',
+      'equalizer=f=5200:t=q:w=1:g=1.5',
+      'alimiter=limit=0.92',
+      'apad'
+    ].join(','),
+    '-t', String(durationSeconds),
+    '-ar', String(sampleRate),
+    '-ac', '2',
+    '-c:a', 'pcm_s16le',
+    outputPath
+  ]);
+
+  return outputPath;
+}
+
 export async function replaceAudioPreserveVideo(
   videoPath: string,
   audioPath: string,
