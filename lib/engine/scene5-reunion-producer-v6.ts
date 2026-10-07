@@ -24,6 +24,7 @@ import {
   appendSpend,
   estimateOperationCost,
   latestSpendForKey,
+  readSpendLedger,
   voiceCostUnits
 } from '@/lib/engine/spend-ledger';
 import {
@@ -251,6 +252,12 @@ export async function produceScene5ReunionV6(
       'referencia familiar E5/T1'
     );
 
+    await assertScene5CumulativeBudget(
+      project.id,
+      referenceEstimate,
+      'referencia familiar'
+    );
+
     await appendSpend(project.id, {
       operation: 'image',
       provider: 'openai',
@@ -382,6 +389,12 @@ export async function produceScene5ReunionV6(
       await assertRetryAvailable(
         project.id,
         spendKey,
+        'E5/T' + order + ' Grok Lite'
+      );
+
+      await assertScene5CumulativeBudget(
+        project.id,
+        credits * 0.01,
         'E5/T' + order + ' Grok Lite'
       );
 
@@ -613,6 +626,12 @@ export async function produceScene5ReunionV6(
       await assertRetryAvailable(
         project.id,
         spendKey,
+        'E5/T' + order + ' WAN 3.0'
+      );
+
+      await assertScene5CumulativeBudget(
+        project.id,
+        credits * 0.01,
         'E5/T' + order + ' WAN 3.0'
       );
 
@@ -982,6 +1001,12 @@ async function ensureDialogueVoice(
       'voz E5/T' + shot.order
     );
 
+    await assertScene5CumulativeBudget(
+      project.id,
+      estimate,
+      'voz E5/T' + shot.order
+    );
+
     await appendSpend(project.id, {
       operation: 'voice',
       provider: 'openai',
@@ -1197,6 +1222,309 @@ async function assertRetryAvailable(
       previous.state +
       '. No se reintentará automáticamente.'
   );
+}
+
+async function assertScene5CumulativeBudget(
+  projectId: string,
+  nextUsd: number,
+  label: string
+) {
+  const ledger = await readSpendLedger(projectId);
+  const actual = ledger
+    .filter(
+      (entry) =>
+        entry.sceneId === 'scene-15d-short-05' &&
+        entry.state === 'succeeded'
+    )
+    .reduce(
+      (sum, entry) =>
+        sum +
+        (typeof entry.actualUsd === 'number'
+          ? entry.actualUsd
+          : 0),
+      0
+    );
+
+  if (actual + nextUsd > SCENE5_SAFE_MAX_USD_V6 + 0.0001) {
+    throw new Error(
+      'SAFE CUMULATIVE COST GATE E5: ya hay US
+  const oldExternal =
+    process.env.ALLOW_EXTERNAL_API_CALLS;
+  const oldPaid =
+    process.env.ALLOW_PAID_GENERATION;
+  const oldFallback =
+    process.env.ALLOW_PAID_PROVIDER_FALLBACK;
+  const oldProduction =
+    process.env.PRODUCTION_MODE;
+
+  process.env.ALLOW_EXTERNAL_API_CALLS = 'true';
+  process.env.ALLOW_PAID_GENERATION = 'true';
+  process.env.ALLOW_PAID_PROVIDER_FALLBACK = 'false';
+  process.env.PRODUCTION_MODE = 'real';
+
+  try {
+    return await run();
+  } finally {
+    restoreEnv(
+      'ALLOW_EXTERNAL_API_CALLS',
+      oldExternal
+    );
+    restoreEnv(
+      'ALLOW_PAID_GENERATION',
+      oldPaid
+    );
+    restoreEnv(
+      'ALLOW_PAID_PROVIDER_FALLBACK',
+      oldFallback
+    );
+    restoreEnv('PRODUCTION_MODE', oldProduction);
+  }
+}
+
+function sceneByOrder(
+  project: FilmProject,
+  order: number
+): FilmScene {
+  const scene = project.plan?.scenes.find(
+    (item) => item.order === order
+  );
+  if (!scene) {
+    throw new Error(
+      'No existe Escena ' + order + '.'
+    );
+  }
+  return scene;
+}
+
+function shotByOrder(
+  scene: FilmScene,
+  order: number
+): FilmShot {
+  const shot = scene.shots.find(
+    (item) => item.order === order
+  );
+  if (!shot) {
+    throw new Error(
+      'No existe E5/T' + order + '.'
+    );
+  }
+  return shot;
+}
+
+async function exists(filePath: string) {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function restoreEnv(
+  name: string,
+  value: string | undefined
+) {
+  if (value === undefined) {
+    delete process.env[name];
+  } else {
+    process.env[name] = value;
+  }
+}
+
+function errorText(error: unknown) {
+  return error instanceof Error
+    ? error.message
+    : String(error);
+}
+ +
+        actual.toFixed(4) +
+        ' confirmados; ' +
+        label +
+        ' añadiría US
+  const oldExternal =
+    process.env.ALLOW_EXTERNAL_API_CALLS;
+  const oldPaid =
+    process.env.ALLOW_PAID_GENERATION;
+  const oldFallback =
+    process.env.ALLOW_PAID_PROVIDER_FALLBACK;
+  const oldProduction =
+    process.env.PRODUCTION_MODE;
+
+  process.env.ALLOW_EXTERNAL_API_CALLS = 'true';
+  process.env.ALLOW_PAID_GENERATION = 'true';
+  process.env.ALLOW_PAID_PROVIDER_FALLBACK = 'false';
+  process.env.PRODUCTION_MODE = 'real';
+
+  try {
+    return await run();
+  } finally {
+    restoreEnv(
+      'ALLOW_EXTERNAL_API_CALLS',
+      oldExternal
+    );
+    restoreEnv(
+      'ALLOW_PAID_GENERATION',
+      oldPaid
+    );
+    restoreEnv(
+      'ALLOW_PAID_PROVIDER_FALLBACK',
+      oldFallback
+    );
+    restoreEnv('PRODUCTION_MODE', oldProduction);
+  }
+}
+
+function sceneByOrder(
+  project: FilmProject,
+  order: number
+): FilmScene {
+  const scene = project.plan?.scenes.find(
+    (item) => item.order === order
+  );
+  if (!scene) {
+    throw new Error(
+      'No existe Escena ' + order + '.'
+    );
+  }
+  return scene;
+}
+
+function shotByOrder(
+  scene: FilmScene,
+  order: number
+): FilmShot {
+  const shot = scene.shots.find(
+    (item) => item.order === order
+  );
+  if (!shot) {
+    throw new Error(
+      'No existe E5/T' + order + '.'
+    );
+  }
+  return shot;
+}
+
+async function exists(filePath: string) {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function restoreEnv(
+  name: string,
+  value: string | undefined
+) {
+  if (value === undefined) {
+    delete process.env[name];
+  } else {
+    process.env[name] = value;
+  }
+}
+
+function errorText(error: unknown) {
+  return error instanceof Error
+    ? error.message
+    : String(error);
+}
+ +
+        nextUsd.toFixed(4) +
+        ' y superaría el máximo total US
+  const oldExternal =
+    process.env.ALLOW_EXTERNAL_API_CALLS;
+  const oldPaid =
+    process.env.ALLOW_PAID_GENERATION;
+  const oldFallback =
+    process.env.ALLOW_PAID_PROVIDER_FALLBACK;
+  const oldProduction =
+    process.env.PRODUCTION_MODE;
+
+  process.env.ALLOW_EXTERNAL_API_CALLS = 'true';
+  process.env.ALLOW_PAID_GENERATION = 'true';
+  process.env.ALLOW_PAID_PROVIDER_FALLBACK = 'false';
+  process.env.PRODUCTION_MODE = 'real';
+
+  try {
+    return await run();
+  } finally {
+    restoreEnv(
+      'ALLOW_EXTERNAL_API_CALLS',
+      oldExternal
+    );
+    restoreEnv(
+      'ALLOW_PAID_GENERATION',
+      oldPaid
+    );
+    restoreEnv(
+      'ALLOW_PAID_PROVIDER_FALLBACK',
+      oldFallback
+    );
+    restoreEnv('PRODUCTION_MODE', oldProduction);
+  }
+}
+
+function sceneByOrder(
+  project: FilmProject,
+  order: number
+): FilmScene {
+  const scene = project.plan?.scenes.find(
+    (item) => item.order === order
+  );
+  if (!scene) {
+    throw new Error(
+      'No existe Escena ' + order + '.'
+    );
+  }
+  return scene;
+}
+
+function shotByOrder(
+  scene: FilmScene,
+  order: number
+): FilmShot {
+  const shot = scene.shots.find(
+    (item) => item.order === order
+  );
+  if (!shot) {
+    throw new Error(
+      'No existe E5/T' + order + '.'
+    );
+  }
+  return shot;
+}
+
+async function exists(filePath: string) {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function restoreEnv(
+  name: string,
+  value: string | undefined
+) {
+  if (value === undefined) {
+    delete process.env[name];
+  } else {
+    process.env[name] = value;
+  }
+}
+
+function errorText(error: unknown) {
+  return error instanceof Error
+    ? error.message
+    : String(error);
+}
+ +
+        SCENE5_SAFE_MAX_USD_V6.toFixed(2) +
+        '.'
+    );
+  }
 }
 
 async function withPaidGate<T>(
