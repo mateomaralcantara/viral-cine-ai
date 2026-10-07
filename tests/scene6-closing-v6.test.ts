@@ -210,3 +210,20 @@ test('Sofia Voice V2 queda aislada a voice-create + Live y sin video', async () 
   assert.doesNotMatch(script, /generateRunway/);
   assert.doesNotMatch(script, /fal-media/);
 });
+
+
+test('Sofia Voice V2 espera session.started antes de enviar la linea', async () => {
+  const script = await readFile(
+    new URL('../scripts/CREATE-SOFIA-VOICE-V2.ps1', import.meta.url),
+    'utf8'
+  );
+
+  const startedIndex = script.indexOf('if ($event.type -eq "session.started")');
+  const commentaryIndex = script.indexOf('type = "session.commentary.append"');
+
+  assert.ok(startedIndex >= 0);
+  assert.ok(commentaryIndex > startedIndex);
+  assert.doesNotMatch(script, /input = @\(/);
+  assert.match(script, /delegation_id = \$null/);
+  assert.match(script, /content = "Mami, ¿ya terminaste\?"/);
+});
