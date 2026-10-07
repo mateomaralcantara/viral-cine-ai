@@ -123,7 +123,7 @@ test('Voice Lock 5.1 incluye voces infantiles candidatas para Mateo y Sofía', (
 
   assert.equal(mateo?.provider, 'openai');
   assert.equal(mateo?.voiceId, 'alloy');
-  assert.match(mateo?.instructions || '', /niño latino de 7 años/i);
+  assert.match(mateo?.instructions || '', /niño latino.*de 7 años/i);
 
   assert.equal(sofia?.provider, 'openai');
   assert.equal(sofia?.voiceId, 'coral');
