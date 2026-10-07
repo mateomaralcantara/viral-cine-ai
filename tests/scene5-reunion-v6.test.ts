@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import {
   buildFifteenDaysShortPlanV5
 } from '@/lib/production-presets/fifteen-days-short-v5';
@@ -127,4 +128,23 @@ test('Voice Lock 5.1 incluye voces infantiles candidatas para Mateo y Sofía', (
   assert.equal(sofia?.provider, 'openai');
   assert.equal(sofia?.voiceId, 'coral');
   assert.match(sofia?.instructions || '', /niña latina de 10 años/i);
+});
+
+
+test('productor Escena 5 permanece WAN/Runway-only y con tope US$2.13', async () => {
+  const producer = await readFile(
+    new URL('../lib/engine/scene5-reunion-producer-v6.ts', import.meta.url),
+    'utf8'
+  );
+  const command = await readFile(
+    new URL('../scripts/generate-scene5-v6.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.doesNotMatch(producer, /providers\/fal-media/);
+  assert.doesNotMatch(producer, /applyAudioFirstLipSync/);
+  assert.match(producer, /generateRunwayWan3AudioReferenceFromEnvironment/);
+  assert.match(producer, /generateRunwayGrokLiteFromEnvironment/);
+  assert.match(command, /--confirm-scene5-usd-2\.13/);
+  assert.match(command, /Fal\.ai: PROHIBIDO \/ NO USADO/);
 });
