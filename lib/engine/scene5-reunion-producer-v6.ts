@@ -214,7 +214,7 @@ export async function produceScene5ReunionV6(
   project.error = undefined;
   project.productionLog.push(
     new Date().toISOString() +
-      ' ViralCine 6 Safe: Escena 5 inicia producción Runway/WAN-only; Mateo ash aprobado por revisión humana; Fal.ai prohibido.'
+      ' ViralCine 6 Safe: Escena 5 inicia producción Runway/WAN-only; Mateo true-child obligatorio; base OpenAI alloy; Fal.ai prohibido.'
   );
   project = await saveProject(project);
 
@@ -873,7 +873,7 @@ export async function produceScene5ReunionV6(
 
   project.productionLog.push(
     new Date().toISOString() +
-      ' ViralCine 6 Safe: Escena 5 recompuesta en 30s; Fal.ai prohibido/no usado; Mateo ash aprobado y usado.'
+      ' ViralCine 6 Safe: Escena 5 recompuesta en 30s; Fal.ai prohibido/no usado; Mateo true-child obligatorio; base alloy.'
   );
 
   const representativeDialogue = shotByOrder(finalScene, 3);
@@ -942,10 +942,10 @@ async function ensureDialogueVoice(
 
   if (
     shot.speakerId === SCENE5_MATEO_ID_V6 &&
-    character.voiceId !== 'ash'
+    character.voiceId !== 'alloy'
   ) {
     throw new Error(
-      'Mateo debe conservar la voz aprobada OpenAI ash.'
+      'Mateo debe conservar la base infantil canónica OpenAI alloy; el master final exige remaster true-child.'
     );
   }
   if (
