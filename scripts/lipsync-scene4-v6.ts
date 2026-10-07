@@ -358,7 +358,7 @@ finalScene.status = 'review-required';
 finalScene.error =
   'T1-T2 tienen diálogo visible de Elena sincronizado; T3-T5 permanecen como montaje silencioso. Revisión humana requerida.';
 finalScene.productionStrategy =
-  'real-cinema-v2-visible-lipsync';
+  'real-cinema-v2';
 
 project.status = 'quality-review';
 project.error = undefined;
