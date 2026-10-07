@@ -193,3 +193,20 @@ test('audiciones Sofía girl usan tres voces directas sin pitch-shift ni video',
   assert.doesNotMatch(audition, /generateRunway/);
   assert.doesNotMatch(audition, /fal-media/);
 });
+
+
+test('Sofia Voice V2 queda aislada a voice-create + Live y sin video', async () => {
+  const script = await readFile(
+    new URL('../scripts/CREATE-SOFIA-VOICE-V2.ps1', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(script, /ViralCine Sofia Voice V2/);
+  assert.match(script, /fictional synthetic Latin American Spanish-speaking girl around 10 years old/i);
+  assert.match(script, /https:\/\/api\.openai\.com\/v1\/audio\/voices/);
+  assert.match(script, /wss:\/\/api\.openai\.com\/v1\/live\/sessions/);
+  assert.match(script, /--confirm-sofia-v2-usd-0\.01/);
+  assert.match(script, /live_max_estimated_usd = 0\.0067/);
+  assert.doesNotMatch(script, /generateRunway/);
+  assert.doesNotMatch(script, /fal-media/);
+});
