@@ -192,3 +192,19 @@ test('fix de Mateo E5 reemplaza solo audio local en T3/T5', async () => {
   assert.doesNotMatch(fixer, /generateSpeech/);
   assert.doesNotMatch(fixer, /fal-media/);
 });
+
+
+test('Mateo true-child usa alloy + remaster local sin regenerar video', async () => {
+  const fixer = await readFile(
+    new URL('../scripts/fix-scene5-mateo-true-child-v6.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(fixer, /voiceProvider|OpenAI alloy|alloy/);
+  assert.match(fixer, /prepubescente latino de 7 años/i);
+  assert.match(fixer, /createYouthfulChildVoicePreserveTiming/);
+  assert.match(fixer, /scene-005-shot-03-true-child-final\.mp4/);
+  assert.match(fixer, /scene-005-shot-05-true-child-final\.mp4/);
+  assert.doesNotMatch(fixer, /generateRunway/);
+  assert.doesNotMatch(fixer, /fal-media/);
+});
