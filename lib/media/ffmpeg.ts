@@ -264,6 +264,24 @@ export async function copyMedia(source: string, destination: string) {
   return destination;
 }
 
+export async function extractLastFrame(
+  videoPath: string,
+  outputPath: string,
+  aspectRatio: ProjectInput['aspectRatio']
+) {
+  const { width, height } = dimensions(aspectRatio);
+  await run([
+    '-y',
+    '-sseof', '-0.12',
+    '-i', videoPath,
+    '-frames:v', '1',
+    '-vf',
+    'scale=' + width + ':' + height + ':force_original_aspect_ratio=increase,crop=' + width + ':' + height,
+    outputPath
+  ]);
+  return outputPath;
+}
+
 export async function createSceneContactSheet(videoPath: string, durationSeconds: number, outputPath: string) {
   const timestamps = [0.2, 0.5, 0.8].map((position) => Math.max(0, durationSeconds * position));
   await run([
