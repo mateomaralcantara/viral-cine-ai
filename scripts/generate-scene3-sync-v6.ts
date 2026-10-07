@@ -29,7 +29,6 @@ console.log(' VIRALCINE 6 SAFE — AUTORIZACION ESCENA 3');
 console.log('==================================================');
 console.log('Tope interno autorizado: US$1.81');
 console.log('Runway máximo: US$1.80');
-console.log('OpenAI imágenes máximo interno: US$0.16');
 console.log('OpenAI voz: tope interno US$0.01');
 console.log('Fal.ai: NO');
 console.log('Fallback pagado: NO');
