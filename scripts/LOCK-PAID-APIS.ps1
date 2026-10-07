@@ -22,6 +22,7 @@ $desired = [ordered]@{
     "ALLOW_PAID_GENERATION"         = "false"
     "ALLOW_PAID_PROVIDER_FALLBACK" = "false"
     "STRICT_SCENE_QUALITY"          = "false"
+    "SAFE_MAX_SINGLE_CALL_USD"        = "0.50"
 }
 
 $lines = @(Get-Content $envFile)
@@ -62,5 +63,6 @@ Write-Host "ALLOW_EXTERNAL_API_CALLS=false" -ForegroundColor Green
 Write-Host "ALLOW_PAID_GENERATION=false" -ForegroundColor Green
 Write-Host "ALLOW_PAID_PROVIDER_FALLBACK=false" -ForegroundColor Green
 Write-Host "STRICT_SCENE_QUALITY=false" -ForegroundColor Green
+Write-Host "SAFE_MAX_SINGLE_CALL_USD=0.50" -ForegroundColor Green
 Write-Host ""
 Write-Host "Todas las llamadas pagadas quedan bloqueadas hasta autorización explícita." -ForegroundColor Yellow
