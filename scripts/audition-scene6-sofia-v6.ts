@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { access } from 'node:fs/promises';
+import { access, mkdir } from 'node:fs/promises';
 import { loadProjectLocalEnvOverride } from '@/lib/env/local-env';
 import {
   assetRelativePath,
@@ -23,7 +23,7 @@ import {
 loadProjectLocalEnvOverride();
 
 const [projectId, confirmation] = process.argv.slice(2);
-const EXPECTED = '--confirm-sofia-audition-usd-0.01';
+const EXPECTED = '--confirm-sofia-audition-retry-usd-0.01';
 
 if (!projectId || confirmation !== EXPECTED) {
   console.error(
@@ -87,6 +87,8 @@ const audioDir = path.join(
   'scene6-v6'
 );
 
+await mkdir(audioDir, { recursive: true });
+
 const raw = path.join(
   audioDir,
   'scene-006-sofia-audition-coral-raw.mp3'
@@ -97,7 +99,7 @@ const youthful = path.join(
   'scene-006-sofia-audition-true-child.wav'
 );
 
-const spendKey = 'v6safe:e6:sofia-audition:coral-true-child:1';
+const spendKey = 'v6safe:e6:sofia-audition:coral-true-child:2';
 
 if (!(await exists(raw))) {
   const previous = await latestSpendForKey(project.id, spendKey);
