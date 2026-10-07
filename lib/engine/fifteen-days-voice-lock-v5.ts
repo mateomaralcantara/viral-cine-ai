@@ -73,11 +73,11 @@ export const FIFTEEN_DAYS_CORE_VOICE_LOCKS_V5: VoiceLockEntry[] = [
     id: IDS.mateo,
     label: 'Mateo',
     provider: 'openai',
-    voiceId: 'ash',
+    voiceId: 'alloy',
     language: 'es-LATAM',
     exactDialogue: true,
     instructions:
-      'Español latino natural. Interpretar como niño latino de 7 años: voz infantil masculina ligera, espontánea, curiosa y cálida, sin impostación adulta ni tono grave. Habla exactamente el texto de entrada. No traduzcas, no parafrasees, no agregues, no omitas y no sustituyas ninguna palabra. Las preguntas deben sonar genuinas, simples y emocionadas, nunca teatrales.'
+      'Español latino natural. Mateo es un niño latino PREPUBESCENTE de 7 años y debe sonar inequívocamente como niño real: timbre pequeño, ligero, juvenil, masculino infantil, espontáneo, curioso y cálido. Prohibida cualquier resonancia de pecho adulta, voz grave masculina, tono de adolescente, locutor o impostación adulta. Habla exactamente el texto de entrada. No traduzcas, no parafrasees, no agregues, no omitas y no sustituyas ninguna palabra. Las preguntas deben sonar genuinas, simples e inocentes, nunca teatrales. En masters finales de Mateo se exige además el remaster local true-child aprobado.'
   }
 ];
 
@@ -106,7 +106,7 @@ export function applyFifteenDaysCoreVoiceLocksV5(project: FilmProject) {
 
   project.productionLog.push(
     new Date().toISOString() +
-      ' Voice Lock 5.1 aplicado: Narrador/Elena=OpenAI marin, Raúl=OpenAI onyx, Mariana=OpenAI shimmer, Sofía=OpenAI coral, Mateo=OpenAI ash; español latino exacto y traducción/paráfrasis prohibidas.'
+      ' Voice Lock 5.1 aplicado: Narrador/Elena=OpenAI marin, Raúl=OpenAI onyx, Mariana=OpenAI shimmer, Sofía=OpenAI coral, Mateo=OpenAI alloy + true-child remaster obligatorio; español latino exacto y traducción/paráfrasis prohibidas.'
   );
 
   return project;
