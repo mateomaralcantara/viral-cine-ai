@@ -26,7 +26,9 @@ Además, un proveedor puede fallar después de iniciar un proceso técnico y dej
 - Montaje local con FFmpeg.
 - Revisión humana de la escena completa.
 
-Proveedor propuesto: Runway Dev con Grok Imagine Video 1.5 Lite a 720p para pruebas.
+Proveedor propuesto para preview: Runway Dev con `gen4_turbo` a 720p.
+
+Snapshot de precio del 2026-10-06: 5 créditos por segundo; Runway indica US$0.01 por crédito. Una toma de 8 segundos tiene un costo máximo local calculado de 40 créditos = US$0.40. El precio se muestra siempre antes de habilitar una llamada y debe sustituirse por un dry-run/estimatedCost del proveedor cuando esa capa quede integrada.
 
 ### Modo Final
 
@@ -89,3 +91,14 @@ Runway Dev se propone porque dispone de:
 - outputs con task ID recuperable.
 
 La integración debe permanecer desactivada hasta que el Safe Cost Gate esté terminado y probado sin red.
+
+
+## Snapshot de precios
+
+- Fecha: 2026-10-06.
+- Fuente oficial: https://docs.dev.runwayml.com/guides/pricing/
+- Preview inicial: `gen4_turbo` = 5 créditos/segundo.
+- Crédito: US$0.01.
+- Tope local por llamada por defecto: US$0.50.
+
+Los precios son datos externos y pueden cambiar. ViralCine 6 Safe no debe autorizar una generación usando silenciosamente un precio antiguo.
