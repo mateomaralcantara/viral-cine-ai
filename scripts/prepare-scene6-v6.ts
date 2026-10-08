@@ -65,8 +65,8 @@ planScene6ClosingV6(project);
 const validation = validateScene6ClosingV6(project);
 project = await saveProject(project);
 
-const wanCredits = wan3VideoCredits(4, '1280:720') * 2;
-const runwayCredits = grokLiteImageToVideoCredits(4, 'auto_720p');
+const wanCredits = wan3VideoCredits(4, '1280:720');
+const runwayCredits = grokLiteImageToVideoCredits(4, 'auto_720p') * 2;
 const videoCredits = wanCredits + runwayCredits;
 const videoUsd = videoCredits * 0.01;
 
@@ -91,15 +91,15 @@ console.log('\n==================================================');
 console.log(' VIRALCINE 6 SAFE — ESCENA 6 / PREPRODUCCION');
 console.log('==================================================');
 console.log('Escena 5 aprobada: SI');
-console.log('Escena 6: Ese capítulo sí · 12s');
+console.log('Escena 6: Esta es nuestra casa · 12s');
 console.log('');
 console.log('ARQUITECTURA');
-console.log('T1 · 4s · Sofía: “Mami, ¿ya terminaste?” · WAN 3.0 audio-reference');
-console.log('T2 · 4s · Elena: “Ese capítulo sí.” · WAN 3.0 audio-reference');
-console.log('T3 · 4s · salida familiar silenciosa · Runway/Grok Lite');
+console.log('T1 · 4s · reacción silenciosa de Sofía · Runway/Grok Lite');
+console.log('T2 · 4s · Elena: “¿Ves? Te lo prometí… esta es nuestra casa.” · WAN 3.0 audio-reference');
+console.log('T3 · 4s · abrazo familiar silencioso dentro de la casa · Runway/Grok Lite');
 console.log('');
 console.log('VOCES');
-console.log('Sofía: OpenAI coral · CANDIDATA, requiere audición humana');
+console.log('Sofía: SIN DIÁLOGO · no requiere voz');
 console.log('Elena: OpenAI marin · aprobada');
 console.log('');
 console.log('REFERENCIAS');
@@ -108,8 +108,99 @@ for (const ref of refs) {
 }
 console.log('');
 console.log('COSTO SI SE AUTORIZA DESPUES');
-console.log('T1-T2 WAN: ' + wanCredits + ' créditos = US$' + (wanCredits * 0.01).toFixed(2));
-console.log('T3 Grok Lite: ' + runwayCredits + ' créditos = US$' + (runwayCredits * 0.01).toFixed(2));
+console.log('T2 WAN: ' + wanCredits + ' créditos = US
+console.log('Video total: US$' + SCENE6_MAX_VIDEO_USD_V6.toFixed(2));
+console.log('Voces máximo: US$' + SCENE6_MAX_VOICE_USD_V6.toFixed(2));
+console.log('Tope total provisional: US$' + SCENE6_SAFE_MAX_USD_V6.toFixed(2));
+console.log('');
+console.log('Fal.ai: PROHIBIDO / NO USADO');
+console.log('Generación ejecutada: NO');
+console.log('APIs externas: NO');
+console.log('Gasto de este preflight: US$0');
+console.log('SCENE6_SOFIA_AUDITION_REQUIRED=NO');
+console.log('SCENE6_ELENA_APPROVED_VOICE=marin');
+console.log('SCENE6_PREPARE=PASS');
+
+async function referenceStatus(
+  currentProject: typeof project,
+  characterId: string,
+  stateId: string
+) {
+  const character = currentProject.plan!.characters.find((item) => item.id === characterId);
+  const bible = currentProject.plan!.realMotion?.characterBible.find((item) => item.characterId === characterId);
+  const state = bible?.states.find((item) => item.id === stateId);
+
+  const candidates = [
+    state?.referenceAsset,
+    bible?.bodyReferenceAsset,
+    bible?.masterReferenceAsset,
+    character?.referenceAsset
+  ].filter((value): value is string => Boolean(value));
+
+  for (const asset of candidates) {
+    try {
+      await access(assetAbsolutePath(currentProject.id, asset));
+      return {
+        label: character?.name || characterId,
+        ready: true,
+        asset
+      };
+    } catch {}
+  }
+
+  return {
+    label: character?.name || characterId,
+    ready: false,
+    asset: ''
+  };
+}
+ + (wanCredits * 0.01).toFixed(2));
+console.log('T1+T3 Grok Lite: ' + runwayCredits + ' créditos = US
+console.log('Video total: US$' + SCENE6_MAX_VIDEO_USD_V6.toFixed(2));
+console.log('Voces máximo: US$' + SCENE6_MAX_VOICE_USD_V6.toFixed(2));
+console.log('Tope total provisional: US$' + SCENE6_SAFE_MAX_USD_V6.toFixed(2));
+console.log('');
+console.log('Fal.ai: PROHIBIDO / NO USADO');
+console.log('Generación ejecutada: NO');
+console.log('APIs externas: NO');
+console.log('Gasto de este preflight: US$0');
+console.log('SCENE6_SOFIA_AUDITION_REQUIRED=YES');
+console.log('SCENE6_PREPARE=PASS');
+
+async function referenceStatus(
+  currentProject: typeof project,
+  characterId: string,
+  stateId: string
+) {
+  const character = currentProject.plan!.characters.find((item) => item.id === characterId);
+  const bible = currentProject.plan!.realMotion?.characterBible.find((item) => item.characterId === characterId);
+  const state = bible?.states.find((item) => item.id === stateId);
+
+  const candidates = [
+    state?.referenceAsset,
+    bible?.bodyReferenceAsset,
+    bible?.masterReferenceAsset,
+    character?.referenceAsset
+  ].filter((value): value is string => Boolean(value));
+
+  for (const asset of candidates) {
+    try {
+      await access(assetAbsolutePath(currentProject.id, asset));
+      return {
+        label: character?.name || characterId,
+        ready: true,
+        asset
+      };
+    } catch {}
+  }
+
+  return {
+    label: character?.name || characterId,
+    ready: false,
+    asset: ''
+  };
+}
+ + (runwayCredits * 0.01).toFixed(2));
 console.log('Video total: US$' + SCENE6_MAX_VIDEO_USD_V6.toFixed(2));
 console.log('Voces máximo: US$' + SCENE6_MAX_VOICE_USD_V6.toFixed(2));
 console.log('Tope total provisional: US$' + SCENE6_SAFE_MAX_USD_V6.toFixed(2));
