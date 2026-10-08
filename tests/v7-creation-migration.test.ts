@@ -158,6 +158,9 @@ test('asset legacy V6 se resuelve zero-copy desde el proyecto original', async (
     createdAt: '2026-10-08T00:00:00.000Z'
   });
 
-  const resolved = resolveV7AssetAbsolutePath(film, asset).replaceAll('\\\\', '/');
-  assert.ok(resolved.includes('/projects/' + film.legacyProjectId + '/video/legacy.mp4'));
+  const resolved = resolveV7AssetAbsolutePath(film, asset)
+    .split(String.fromCharCode(92))
+    .join('/');
+  const expected = ['/projects', film.legacyProjectId, 'video', 'legacy.mp4'].join('/');
+  assert.ok(resolved.includes(expected));
 });
