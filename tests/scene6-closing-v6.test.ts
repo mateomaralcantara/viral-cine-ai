@@ -422,3 +422,36 @@ test('Sofia Voice V3 ElevenLabs preflight usa .env.local y regex PowerShell vali
   assert.match(script, /\$ApiKey = Get-DotEnvValue 'ELEVENLABS_API_KEY'/);
   assert.doesNotMatch(script, /\$env:ELEVENLABS_API_KEY/);
 });
+
+
+test('Sofia Voice V3 design usa un solo POST, 104 creditos y no guarda voz ni genera TTS', async () => {
+  const script = await readFile(
+    new URL('../scripts/DESIGN-SOFIA-VOICE-V3-ELEVENLABS.ps1', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(script, /--confirm-sofia-v3-104-credits/);
+  assert.match(script, /preview_characters = 104/);
+  assert.match(script, /max_authorized_credits = 104/);
+  assert.match(script, /expected_previews = 3/);
+  assert.match(script, /eleven_ttv_v3/);
+  assert.match(script, /https:\/\/api\.elevenlabs\.io\/v1\/text-to-voice\/design/);
+  assert.match(script, /Invoke-RestMethod/);
+  assert.match(script, /RETRY BLOQUEADO/);
+  assert.match(script, /failed-unknown/);
+  assert.doesNotMatch(script, /\/v1\/text-to-speech\//);
+  assert.doesNotMatch(script, /https:\/\/api\.elevenlabs\.io\/v1\/text-to-voice'\s/);
+});
+
+test('Sofia Voice V3 design conserva texto de preview fijo en 104 caracteres', async () => {
+  const script = await readFile(
+    new URL('../scripts/DESIGN-SOFIA-VOICE-V3-ELEVENLABS.ps1', import.meta.url),
+    'utf8'
+  );
+
+  const expected = 'Mami, ¿ya terminaste? Ven, quiero enseñarte algo. Hoy hice un dibujo para ti y quiero saber si te gusta.';
+  assert.equal(expected.length, 104);
+  assert.match(script, /\$PreviewText\.Length -ne 104/);
+  assert.match(script, /A realistic fictional Latina girl around 10 years old/);
+  assert.match(script, /Avoid adult female chest resonance/);
+});
