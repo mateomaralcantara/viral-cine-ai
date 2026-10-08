@@ -551,3 +551,23 @@ test('reconciliador Sofia V3 agrega propiedades nuevas de PSCustomObject con Add
   assert.match(script, /Add-Member -NotePropertyName 'reconciled_at'/);
   assert.match(script, /Add-Member -NotePropertyName 'reconciliation_note'/);
 });
+
+
+test('preflight Escena 6 no contiene bloques duplicados ni strings de costo truncados', async () => {
+  const preflight = await readFile(
+    new URL('../scripts/prepare-scene6-v6.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.equal(
+    (preflight.match(/async function referenceStatus/g) || []).length,
+    1
+  );
+  assert.equal(
+    (preflight.match(/SCENE6_PREPARE=PASS/g) || []).length,
+    1
+  );
+  assert.match(preflight, /T2 WAN:/);
+  assert.match(preflight, /T1\+T3 Grok Lite:/);
+  assert.doesNotMatch(preflight, /SCENE6_SOFIA_AUDITION_REQUIRED=YES/);
+});
