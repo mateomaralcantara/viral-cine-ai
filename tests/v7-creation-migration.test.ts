@@ -75,3 +75,89 @@ test('política de migración declara V7 como único producto activo', () => {
   assert.equal(V6_MIGRATION_POLICY.reuseV6SpecificSceneProducers, false);
   assert.equal(V6_MIGRATION_POLICY.strategy, 'replace-module-by-module-in-v7');
 });
+
+
+test('migración incluye proyectos V6 draft sin plan', async () => {
+  const { FilmProjectSchema } = await import('../lib/domain/schemas');
+  const { buildV7MigrationBundle } = await import('../lib/v7/migration/migrate-v6-catalog');
+
+  const legacy = FilmProjectSchema.parse({
+    id: '11111111-2222-4333-8444-555555555555',
+    createdAt: '2026-10-08T00:00:00.000Z',
+    updatedAt: '2026-10-08T00:00:00.000Z',
+    status: 'draft',
+    input: {
+      title: 'Proyecto V6 sin plan',
+      premise: 'Historia suficientemente extensa para migrar un borrador V6 a un proyecto V7.',
+      durationMinutes: 5,
+      genre: 'Drama',
+      audience: 'General',
+      visualStyle: 'Cinematográfico',
+      language: 'es',
+      aspectRatio: '16:9',
+      budgetUsd: 25,
+      burnSubtitles: false,
+      generateMusic: true
+    },
+    supportVoices: [],
+    progress: {
+      phase: 'draft',
+      percent: 0,
+      message: 'Proyecto creado',
+      updatedAt: '2026-10-08T00:00:00.000Z'
+    },
+    productionLog: []
+  });
+
+  const migrated = buildV7MigrationBundle(legacy);
+  assert.equal(migrated.film.legacyProjectId, legacy.id);
+  assert.equal(migrated.film.durationMinutes, 5);
+  assert.equal(migrated.creationInput?.quality, 'cine');
+  assert.equal(migrated.workflow?.stages[0].status, 'approved');
+  assert.equal(migrated.workflow?.stages[1].status, 'ready');
+});
+
+test('asset legacy V6 se resuelve zero-copy desde el proyecto original', async () => {
+  const { AssetSchema } = await import('../lib/v7/domain/asset');
+  const { FilmV7Schema } = await import('../lib/v7/domain/film');
+  const { resolveV7AssetAbsolutePath } = await import('../lib/v7/storage/asset-resolver');
+
+  const film = FilmV7Schema.parse({
+    id: 'film-zero-copy',
+    title: 'Zero Copy',
+    premise: 'Prueba de referencia legacy sin duplicar los archivos originales.',
+    durationMinutes: 5,
+    genre: 'Drama',
+    audience: '',
+    visualStyle: '',
+    language: 'es',
+    aspectRatio: '16:9',
+    budgetUsd: 0,
+    acts: [{
+      id: 'act-zero-copy',
+      filmId: 'film-zero-copy',
+      order: 1,
+      title: 'Acto',
+      dramaticObjective: '',
+      sequences: []
+    }],
+    characters: [],
+    legacyProjectId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+    createdAt: '2026-10-08T00:00:00.000Z',
+    updatedAt: '2026-10-08T00:00:00.000Z',
+    metadata: {}
+  });
+  const asset = AssetSchema.parse({
+    id: 'asset-zero-copy',
+    filmId: film.id,
+    type: 'video',
+    storagePath: 'video/legacy.mp4',
+    source: 'legacy-v6',
+    version: 1,
+    approved: true,
+    createdAt: '2026-10-08T00:00:00.000Z'
+  });
+
+  const resolved = resolveV7AssetAbsolutePath(film, asset).replaceAll('\\\\', '/');
+  assert.ok(resolved.includes('/projects/' + film.legacyProjectId + '/video/legacy.mp4'));
+});

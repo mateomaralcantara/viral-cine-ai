@@ -24,9 +24,7 @@ export async function migrateV6CatalogToV7(): Promise<V6CatalogMigrationResult> 
 
   for (const project of projects) {
     try {
-      const bundle = project.plan
-        ? migratePlannedProject(project)
-        : migrateDraftProject(project);
+      const bundle = buildV7MigrationBundle(project);
 
       if (await v7FilmBundleExists(bundle.film.id)) {
         result.skipped.push({
@@ -55,6 +53,12 @@ export async function migrateV6CatalogToV7(): Promise<V6CatalogMigrationResult> 
   }
 
   return result;
+}
+
+export function buildV7MigrationBundle(project: FilmProject) {
+  return project.plan
+    ? migratePlannedProject(project)
+    : migrateDraftProject(project);
 }
 
 function migratePlannedProject(project: FilmProject) {
