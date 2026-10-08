@@ -132,15 +132,18 @@ const defs: ShortSceneDef[] = [
     }
   },
   {
-    title: 'Ese capítulo sí',
+    title: 'Esta es nuestra casa',
     durationSeconds: 12,
     act: 3,
     summary:
-      'Elena guarda el cuaderno original, toma a sus hijos de la mano y sale. No cerró su historia; cerró solamente aquel capítulo.',
-    dialogue: 'Sofía: Mami, ¿ya terminaste?\nElena: Ese capítulo sí.',
+      'Sofía observa en silencio el hogar recuperado. Elena le recuerda la promesa cumplida y los tres se abrazan dentro de la casa.',
+    dialogue: 'Elena: ¿Ves? Te lo prometí… esta es nuestra casa.',
     dialogueTurns: [
-      { speakerId: IDS.sofia, text: 'Mami, ¿ya terminaste?', emotion: 'natural y curiosa' },
-      { speakerId: IDS.elena, text: 'Ese capítulo sí.', emotion: 'serena' }
+      {
+        speakerId: IDS.elena,
+        text: '¿Ves? Te lo prometí… esta es nuestra casa.',
+        emotion: 'emocionada, serena y contenida'
+      }
     ],
     characterIds: [IDS.elena, IDS.sofia, IDS.mateo],
     states: {
@@ -225,7 +228,7 @@ export function buildFifteenDaysShortPlanV5(): FilmPlan {
     logline:
       'Una madre que lo pierde casi todo transforma un cuaderno escrito en la calle en el primer paso para recuperar su voz y a sus hijos.',
     synopsis:
-      'En dos minutos y medio, Elena pasa de recoger una moneda en la calle a recordar la ruptura que inició su caída. Cuando Mariana descubre que aún escribe, le propone quince días de disciplina. Elena termina y publica su historia; la primera venta simboliza una posibilidad, no riqueza. Meses después, el verdadero triunfo llega cuando sus hijos vuelven a casa. El corto termina con Elena guardando el cuaderno y aceptando que terminó aquel capítulo, no su historia.',
+      'En dos minutos y medio, Elena pasa de recoger una moneda en la calle a recordar la ruptura que inició su caída. Cuando Mariana descubre que aún escribe, le propone quince días de disciplina. Elena termina y publica su historia; la primera venta simboliza una posibilidad, no riqueza. Meses después, el verdadero triunfo llega cuando sus hijos vuelven a casa. El corto termina con Elena cumpliendo frente a sus hijos la promesa de recuperar un hogar: “¿Ves? Te lo prometí… esta es nuestra casa.”',
     creativeDirection:
       'Cortometraje de 150 segundos. Ritmo emocional rápido pero no videoclipero. Cada toma debe comunicar una sola acción clara. La transformación de Elena ocurre mediante postura, vestuario, luz y actuación, nunca cambiando de actriz. El reencuentro familiar es el clímax.',
     musicPrompt:
