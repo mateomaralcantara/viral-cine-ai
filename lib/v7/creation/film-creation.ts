@@ -74,7 +74,7 @@ export function preflightV7FilmCreation(input: unknown): V7CreationPreflight {
 export function createV7FilmDraft(
   input: V7FilmCreationInput,
   now = new Date().toISOString(),
-  id = randomUUID()
+  id: string = randomUUID()
 ) {
   const parsed = V7FilmCreationInputSchema.parse(input);
   const film: FilmV7 = FilmV7Schema.parse({

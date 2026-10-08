@@ -10,7 +10,7 @@ import {
   Gauge,
   Languages,
   LoaderCircle,
-  Migration,
+  GitMerge,
   ShieldCheck,
   Sparkles,
   WalletCards
@@ -352,14 +352,14 @@ export default function V7StudioHome() {
 
           <div className="panel rounded-3xl p-5">
             <div className="flex items-center gap-3">
-              <Migration className="h-5 w-5 text-violet-300" />
+              <GitMerge className="h-5 w-5 text-violet-300" />
               <h3 className="font-black">Migrar catálogo V6</h3>
             </div>
             <p className="mt-2 text-sm leading-6 text-slate-400">
               Importa todos tus proyectos anteriores a V7 sin borrar, copiar ni sobrescribir los originales.
             </p>
             <button className="button-secondary mt-4 w-full" disabled={migrating} onClick={migrateLegacy}>
-              {migrating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Migration className="h-4 w-4" />}
+              {migrating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <GitMerge className="h-4 w-4" />}
               {migrating ? 'Migrando…' : 'MIGRAR V6 → V7'}
             </button>
             {migrationMessage && <div className="mt-3 text-xs leading-5 text-slate-400">{migrationMessage}</div>}
