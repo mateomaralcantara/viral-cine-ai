@@ -43,8 +43,8 @@ export function buildMasterExportPlan(project: FilmProject): MasterExportPlan {
       const label = 'E' + scene.order + '/T' + shot.order;
       if (shot.status !== 'ready') blockers.push(label + ': estado=' + shot.status + '.');
       if (!shot.videoAsset) blockers.push(label + ': falta videoAsset oficial.');
-      if (!shot.pipelineVersion?.startsWith('4.2-')) {
-        blockers.push(label + ': pipeline no es 4.2 (' + (shot.pipelineVersion || 'SIN PIPELINE') + ').');
+      if (!isApprovedMasterPipeline(shot.pipelineVersion)) {
+        blockers.push(label + ': pipeline no aprobado para master (' + (shot.pipelineVersion || 'SIN PIPELINE') + ').');
       }
     }
   }
@@ -58,7 +58,7 @@ export function buildMasterExportPlan(project: FilmProject): MasterExportPlan {
     readyShots: rows.filter((row) =>
       row.status === 'ready' &&
       Boolean(row.videoAsset) &&
-      Boolean(row.pipelineVersion?.startsWith('4.2-'))
+      isApprovedMasterPipeline(row.pipelineVersion)
     ).length,
     expectedDurationSeconds: round(rows.reduce((sum, row) => sum + row.durationSeconds, 0)),
     degradedLipSyncShots: rows.filter((row) => row.degradedLipSync).length,
@@ -69,4 +69,16 @@ export function buildMasterExportPlan(project: FilmProject): MasterExportPlan {
 
 function round(value: number) {
   return Math.round(value * 1000) / 1000;
+}
+
+
+function isApprovedMasterPipeline(version?: string) {
+  return Boolean(
+    version &&
+    (
+      version.startsWith('4.2-') ||
+      version.startsWith('5.0-') ||
+      version.startsWith('6.0-')
+    )
+  );
 }
