@@ -505,7 +505,7 @@ test('Sofia V3 HTTP errors quedan failed-unknown con detalle y riesgo de 104 cre
   assert.match(script, /error_detail/);
   assert.match(script, /request_id/);
   assert.match(script, /trace_id/);
-  assert.match(script, /credits_risk_max = 104/);
+  assert.match(script, /Add-Member -NotePropertyName 'credits_risk_max' -NotePropertyValue 104 -Force/);
   assert.match(script, /state = 'failed-unknown'/);
   assert.doesNotMatch(script, /failed-no-charge-assumed/);
 });
