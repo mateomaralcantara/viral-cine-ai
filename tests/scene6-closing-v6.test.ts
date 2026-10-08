@@ -777,3 +777,34 @@ test('package expone prepare y run de Scene 6B Repair', async () => {
     'node --import tsx scripts/generate-scene6b-repair-v6.ts'
   );
 });
+
+
+test('Scene 6B normaliza referencias Grok a ratios válidos antes de llamar Runway', async () => {
+  const producer = await readFile(
+    new URL('../lib/engine/scene6b-repair-producer-v6.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(producer, /sofia-identity-grok-safe-9x16\.png/);
+  assert.match(producer, /family-grok-safe-16x9\.png/);
+  assert.match(
+    producer,
+    /normalizeReferenceImage\(\s*refs\.sofia,\s*sofiaGrokRef,\s*'9:16'\s*\)/
+  );
+  assert.match(
+    producer,
+    /normalizeReferenceImage\(\s*familyReference,\s*familyGrokRef,\s*'16:9'\s*\)/
+  );
+  assert.match(
+    producer,
+    /promptImage:\s*await imageFileToDataUri\(sofiaGrokRef\)/
+  );
+  assert.match(
+    producer,
+    /promptImage:\s*await imageFileToDataUri\(\s*familyGrokRef\s*\)/
+  );
+  assert.doesNotMatch(
+    producer,
+    /promptImage:\s*await imageFileToDataUri\(refs\.sofia\)/
+  );
+});
