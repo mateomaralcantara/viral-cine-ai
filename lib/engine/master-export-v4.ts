@@ -76,6 +76,7 @@ function isApprovedMasterPipeline(version?: string) {
   return Boolean(
     version &&
     (
+      version === '4.0-audio-first' ||
       version.startsWith('4.2-') ||
       version.startsWith('5.0-') ||
       version.startsWith('6.0-')
