@@ -199,7 +199,7 @@ test('audiciones Sofía girl usan tres voces directas sin pitch-shift ni video',
 
 test('Sofia Voice V2 queda aislada a voice-create + Live y sin video', async () => {
   const script = await readFile(
-    new URL('../scripts/CREATE-SOFIA-VOICE-V2.ps1', import.meta.url),
+    new URL('../scripts/CREATE-SOFIA-VOICE-V2B.ps1', import.meta.url),
     'utf8'
   );
 
@@ -208,42 +208,36 @@ test('Sofia Voice V2 queda aislada a voice-create + Live y sin video', async () 
   assert.match(script, /https:\/\/api\.openai\.com\/v1\/audio\/voices/);
   assert.match(script, /wss:\/\/api\.openai\.com\/v1\/live\/sessions/);
   assert.match(script, /--confirm-sofia-v2-usd-0\.01/);
-  assert.match(script, /live_max_estimated_usd = 0\.0067/);
+  assert.match(script, /live_max_estimated_usd = 0\.0084/);
   assert.doesNotMatch(script, /generateRunway/);
   assert.doesNotMatch(script, /fal-media/);
 });
 
-
-test('Sofia Voice V2 espera session.started antes de enviar la linea', async () => {
+test('Sofia Voice V2B espera session.started antes de enviar la linea', async () => {
   const script = await readFile(
-    new URL('../scripts/CREATE-SOFIA-VOICE-V2.ps1', import.meta.url),
+    new URL('../scripts/CREATE-SOFIA-VOICE-V2B.ps1', import.meta.url),
     'utf8'
   );
 
-  const startedIndex = script.indexOf('if ($event.type -eq "session.started")');
-  const commentaryIndex = script.indexOf('type = "session.commentary.append"');
+  const startedIndex = script.indexOf("if ($event.type -eq 'session.started')");
+  const instructionIndex = script.indexOf("type = 'session.instructions.append'");
 
   assert.ok(startedIndex >= 0);
-  assert.ok(commentaryIndex > startedIndex);
-  assert.doesNotMatch(script, /input = @\(/);
+  assert.ok(instructionIndex > startedIndex);
   assert.match(script, /delegation_id = \$null/);
-  assert.match(script, /content = "Mami, ¿ya terminaste\?"/);
+  assert.match(script, /Immediately say the following line exactly and in full/);
 });
 
-
-test('Sofia Voice V2 usa terminadores PowerShell here-string válidos', async () => {
-  const script = await readFile(
+test('launcher Sofia Voice V2 solo redirige a V2B', async () => {
+  const launcher = await readFile(
     new URL('../scripts/CREATE-SOFIA-VOICE-V2.ps1', import.meta.url),
     'utf8'
   );
 
-  assert.doesNotMatch(script, /"@\.Trim\(\)/);
-  assert.match(script, /\$VoicePrompt = @"/);
-  assert.match(script, /^"@$/m);
-  assert.match(script, /\$VoicePrompt = \$VoicePrompt\.Trim\(\)/);
-  assert.match(script, /\$SessionInstructions = \$SessionInstructions\.Trim\(\)/);
+  assert.match(launcher, /CREATE-SOFIA-VOICE-V2B\.ps1/);
+  assert.doesNotMatch(launcher, /api\.openai\.com/);
+  assert.doesNotMatch(launcher, /ClientWebSocket/);
 });
-
 
 test('Sofia Voice V2B es parser-safe y conserva el guard de gasto', async () => {
   const script = await readFile(
