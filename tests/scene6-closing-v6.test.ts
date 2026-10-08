@@ -808,3 +808,69 @@ test('Scene 6B normaliza referencias Grok a ratios válidos antes de llamar Runw
     /promptImage:\s*await imageFileToDataUri\(refs\.sofia\)/
   );
 });
+
+
+test('Scene 6B T1 review queda aislada a una sola llamada Grok Lite de US$0.13', async () => {
+  const producer = await readFile(
+    new URL('../lib/engine/scene6b-t1-review-producer-v6.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.equal(
+    (producer.match(/generateRunwayGrokLiteFromEnvironment\(/g) || []).length,
+    1
+  );
+  assert.match(producer, /MAX_CREDITS = 13/);
+  assert.match(producer, /MAX_USD = 0\.13/);
+  assert.match(producer, /sofia-identity-grok-safe-9x16\.png/);
+  assert.match(
+    producer,
+    /promptImage:\s*await imageFileToDataUri\(sofiaSafeRef\)/
+  );
+  assert.match(producer, /única persona visible es Sofía/);
+  assert.match(producer, /transformación en la madre/);
+  assert.doesNotMatch(producer, /generateRunwayWan3AudioReferenceFromEnvironment/);
+  assert.doesNotMatch(producer, /generateSpeech\(/);
+  assert.doesNotMatch(producer, /fal-media/);
+});
+
+test('Scene 6B T1 review solo permite retry del 400 confirmado sin cobro', async () => {
+  const producer = await readFile(
+    new URL('../lib/engine/scene6b-t1-review-producer-v6.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(producer, /SPEND_KEY = 'v6safe:e6b:t1:grok-lite:1'/);
+  assert.match(producer, /previous\.state === 'failed-no-charge'/);
+  assert.match(producer, /\(previous\.actualUsd \?\? 0\) === 0/);
+  assert.match(producer, /!previous\.providerRequestId/);
+  assert.match(producer, /SAFE RETRY BLOCK E6B\/T1/);
+});
+
+test('launcher T1 review exige confirmación exacta US$0.13 y excluye T2/T3', async () => {
+  const launcher = await readFile(
+    new URL('../scripts/generate-scene6b-t1-review-v6.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(launcher, /--confirm-scene6b-t1-usd-0\.13/);
+  assert.match(launcher, /Máximo: US\$0\.13/);
+  assert.match(launcher, /T2: NO/);
+  assert.match(launcher, /T3: NO/);
+  assert.match(launcher, /Voz: NO/);
+  assert.match(launcher, /T1_REVIEW_REQUIRED=YES/);
+});
+
+test('package expone comando aislado safe:scene6b:t1', async () => {
+  const pkg = JSON.parse(
+    await readFile(
+      new URL('../package.json', import.meta.url),
+      'utf8'
+    )
+  );
+
+  assert.equal(
+    pkg.scripts['safe:scene6b:t1'],
+    'node --import tsx scripts/generate-scene6b-t1-review-v6.ts'
+  );
+});
