@@ -210,6 +210,30 @@ export async function produceScene6BRepairV6(
     );
   }
 
+  const sofiaGrokRef = path.join(
+    dirs.images,
+    'sofia-identity-grok-safe-9x16.png'
+  );
+  if (!(await exists(sofiaGrokRef))) {
+    await normalizeReferenceImage(
+      refs.sofia,
+      sofiaGrokRef,
+      '9:16'
+    );
+  }
+
+  const familyGrokRef = path.join(
+    dirs.images,
+    'family-grok-safe-16x9.png'
+  );
+  if (!(await exists(familyGrokRef))) {
+    await normalizeReferenceImage(
+      familyReference,
+      familyGrokRef,
+      '16:9'
+    );
+  }
+
   let totalRunwayCredits = 0;
 
   // T1 — Sofía sola. Nunca se usa una referencia con Elena.
@@ -269,7 +293,7 @@ export async function produceScene6BRepairV6(
             {
               model: GROK_MODEL,
               promptImage:
-                await imageFileToDataUri(refs.sofia),
+                await imageFileToDataUri(sofiaGrokRef),
               promptText:
                 buildIdentityIsolatedSilentPrompt(t1),
               ratio: GROK_RATIO,
@@ -542,7 +566,7 @@ export async function produceScene6BRepairV6(
               model: GROK_MODEL,
               promptImage:
                 await imageFileToDataUri(
-                  familyReference
+                  familyGrokRef
                 ),
               promptText:
                 buildRearFamilyHugPrompt(t3),
