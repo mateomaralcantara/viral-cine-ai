@@ -372,3 +372,20 @@ test('auditoria local de auth Sofia V2B no toca red ni imprime la clave', async 
   assert.doesNotMatch(script, /ClientWebSocket/);
   assert.doesNotMatch(script, /Write-Host \$key/);
 });
+
+
+test('comparador local de claves OpenAI usa huellas y no imprime secretos', async () => {
+  const script = await readFile(
+    new URL('../scripts/COMPARE-OPENAI-KEY-SOURCES.ps1', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(script, /SHA256/);
+  assert.match(script, /KEY_SOURCE_RESULT=DIFFERENT_KEYS/);
+  assert.match(script, /NETWORK_CALLS=NO/);
+  assert.match(script, /COST_USD=0/);
+  assert.doesNotMatch(script, /Invoke-RestMethod/);
+  assert.doesNotMatch(script, /ClientWebSocket/);
+  assert.doesNotMatch(script, /Write-Host \$processKey/);
+  assert.doesNotMatch(script, /Write-Host \$fileKey/);
+});
