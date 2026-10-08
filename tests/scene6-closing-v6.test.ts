@@ -330,3 +330,45 @@ test('Sofia Voice V2B no contiene una segunda copia concatenada', async () => {
     2
   );
 });
+
+
+test('Sofia Voice V2B bloquea retry tras 401 y lo clasifica sin cobro', async () => {
+  const script = await readFile(
+    new URL('../scripts/CREATE-SOFIA-VOICE-V2B.ps1', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(script, /sofia-voice-v2-auth-block\.json/);
+  assert.match(script, /http_401_unauthorized/);
+  assert.match(script, /charged_assumption_usd = 0\.0/);
+  assert.match(script, /retry_allowed = \$false/);
+  assert.match(script, /AUTH BLOCK ACTIVO/);
+});
+
+test('reconciliador Sofia V2B 401 no llama red ni proveedores', async () => {
+  const script = await readFile(
+    new URL('../scripts/RECONCILE-SOFIA-VOICE-V2B-401.ps1', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(script, /failed-no-charge/);
+  assert.match(script, /voice_created = \$false/);
+  assert.match(script, /live_started = \$false/);
+  assert.match(script, /charged_assumption_usd = 0\.0/);
+  assert.doesNotMatch(script, /Invoke-RestMethod/);
+  assert.doesNotMatch(script, /ClientWebSocket/);
+});
+
+test('auditoria local de auth Sofia V2B no toca red ni imprime la clave', async () => {
+  const script = await readFile(
+    new URL('../scripts/CHECK-SOFIA-VOICE-V2B-AUTH-LOCAL.ps1', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(script, /NETWORK_CALLS=NO/);
+  assert.match(script, /COST_USD=0/);
+  assert.match(script, /sk-proj-/);
+  assert.doesNotMatch(script, /Invoke-RestMethod/);
+  assert.doesNotMatch(script, /ClientWebSocket/);
+  assert.doesNotMatch(script, /Write-Host \$key/);
+});
