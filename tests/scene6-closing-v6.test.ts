@@ -725,7 +725,7 @@ test('Scene 6B T2 jamás usa frame de Sofía como referencia WAN', async () => {
   );
 
   assert.match(producer, /references: \[\s*\{\s*uri:\s*await imageFileToDataUri\(\s*elenaWanRef/);
-  assert.match(producer, /SOLO ELENA/);
+  assert.match(producer, /la única persona visible es Elena/);
   assert.match(producer, /No mostrar a Sofía/);
   assert.match(producer, /No transformar a Elena en niña/);
 });
