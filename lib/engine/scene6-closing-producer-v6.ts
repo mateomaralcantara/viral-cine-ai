@@ -541,17 +541,9 @@ export async function produceScene6ClosingV6(
   scene6 = sceneByOrder(project, 6);
   const shot3 = shotByOrder(scene6, 3);
 
-  const t3Continuity = path.join(
-    dirs.images,
-    'scene-006-shot-03-continuity.jpg'
-  );
-  if (!(await exists(t3Continuity))) {
-    await extractLastFrame(
-      t2Final,
-      t3Continuity,
-      project.input.aspectRatio
-    );
-  }
+  // Para el abrazo final reutilizamos el frame familiar aprobado
+  // de Escena 5: conserva a Elena, Sofía y Mateo sin crear imagen nueva.
+  const t3Continuity = t1Reference;
 
   const t3Raw = path.join(
     dirs.video,
