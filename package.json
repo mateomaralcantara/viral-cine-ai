@@ -86,7 +86,8 @@
     "safe:scene6:audition-sofia": "node --import tsx scripts/audition-scene6-sofia-v6.ts",
     "safe:scene6:reconcile-sofia-audition": "node --import tsx scripts/reconcile-scene6-sofia-audition-v6.ts",
     "safe:scene6:sofia-clean-local": "node --import tsx scripts/fix-scene6-sofia-clean-local-v6.ts",
-    "safe:scene6:audition-sofia-girl": "node --import tsx scripts/audition-scene6-sofia-girl-v6.ts"
+    "safe:scene6:audition-sofia-girl": "node --import tsx scripts/audition-scene6-sofia-girl-v6.ts",
+    "safe:scene6:sofia-v3-preflight": "powershell -ExecutionPolicy Bypass -File ./scripts/PREFLIGHT-SOFIA-VOICE-V3-ELEVENLABS.ps1"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",
