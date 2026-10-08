@@ -156,7 +156,8 @@ if (plan.degradedLipSyncShots > 0) {
     ' toma(s) usan fallback local de lip-sync; revisar visualmente antes de publicar.'
   );
 }
-console.log('FINAL_VIDEO_ASSET=' + project.finalVideoAsset);\nconsole.log('MASTER_EXPORT_RUN=PASS');
+console.log('FINAL_VIDEO_ASSET=' + project.finalVideoAsset);
+console.log('MASTER_EXPORT_RUN=PASS');
 
 async function fileExists(filePath: string) {
   try {
