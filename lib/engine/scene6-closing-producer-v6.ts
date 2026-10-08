@@ -283,7 +283,7 @@ export async function produceScene6ClosingV6(
     });
 
     try {
-      const generated = await withPaidGate(() =>
+      const generated = await withPaidGate(async () =>
         generateRunwayGrokLiteFromEnvironment(
           {
             model: GROK_MODEL,
@@ -441,7 +441,7 @@ export async function produceScene6ClosingV6(
     });
 
     try {
-      const generated = await withPaidGate(() =>
+      const generated = await withPaidGate(async () =>
         generateRunwayWan3AudioReferenceFromEnvironment(
           {
             model: 'wan3',
@@ -600,7 +600,7 @@ export async function produceScene6ClosingV6(
     });
 
     try {
-      const generated = await withPaidGate(() =>
+      const generated = await withPaidGate(async () =>
         generateRunwayGrokLiteFromEnvironment(
           {
             model: GROK_MODEL,
@@ -822,7 +822,7 @@ async function ensureElenaVoice(
     });
 
     try {
-      await withPaidGate(() =>
+      await withPaidGate(async () =>
         generateSpeech(
           shot.spokenText,
           character.voiceInstructions,
