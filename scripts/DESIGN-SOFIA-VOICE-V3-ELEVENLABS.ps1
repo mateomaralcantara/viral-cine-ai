@@ -54,7 +54,7 @@ if (Test-Path $AttemptPath) {
     if ($attempt.state -in @('submitted','failed-unknown','failed-no-charge-assumed')) { throw ('RETRY BLOQUEADO. Estado previo: ' + $attempt.state + '. Reconcilia antes de repetir.') }
 }
 
-$PreviewText = 'Mami, ¿ya terminaste? Ven, quiero enseñarte algo. Hoy hice un dibujo para ti y quiero saber si te gusta.'
+$PreviewText = 'Mami, ' + [char]0x00BF + 'ya terminaste? Ven, quiero ense' + [char]0x00F1 + 'arte algo. Hoy hice un dibujo para ti y quiero saber si te gusta.'
 if ($PreviewText.Length -ne 104) { throw ('PREVIEW TEXT CAMBIO. Esperados 104 caracteres; actual: ' + $PreviewText.Length) }
 
 $VoiceDescription = [string]::Join(' ', @(
