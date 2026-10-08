@@ -687,7 +687,7 @@ export async function produceScene6BRepairV6(
   finalScene.error =
     'Scene 6B Repair lista. Revisar separación de identidades, Elena sola en T2 y abrazo trasero sin rostros.';
   finalScene.productionStrategy =
-    'real-cinema-v2-scene6b-repair';
+    'real-cinema-v2';
 
   project.status = 'quality-review';
   project.error = undefined;
