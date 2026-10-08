@@ -15,7 +15,7 @@ import {
   Sparkles,
   WalletCards
 } from 'lucide-react';
-import V7FilmLibrary, { type V7LibraryV7LibraryFilmSummary } from '@/components/V7FilmLibrary';
+import V7FilmLibrary, { type V7LibraryFilmSummary } from '@/components/V7FilmLibrary';
 
 type CreateResponse = {
   ok?: boolean;
