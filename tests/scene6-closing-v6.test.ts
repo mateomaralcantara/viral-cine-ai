@@ -808,3 +808,52 @@ test('Scene 6B normaliza referencias Grok a ratios válidos antes de llamar Runw
     /promptImage:\s*await imageFileToDataUri\(refs\.sofia\)/
   );
 });
+
+
+test('aprobación final Scene 6B congela master sin llamar proveedores', async () => {
+  const approval = await readFile(
+    new URL('../scripts/approve-scene6b-final-v6.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(approval, /--approve-scene6b-final/);
+  assert.match(approval, /scene-006b-repair-v6\.mp4/);
+  assert.match(approval, /scene6\.status = 'ready'/);
+  assert.match(approval, /scene6\.qualityOverrideApproved = true/);
+  assert.match(approval, /phase: 'film-complete'/);
+  assert.match(approval, /percent: 100/);
+  assert.match(approval, /MASTER_FROZEN=YES/);
+  assert.match(approval, /SCENE6B_APPROVED=YES/);
+  assert.match(approval, /FILM_COMPLETE=YES/);
+  assert.doesNotMatch(approval, /generateRunway/);
+  assert.doesNotMatch(approval, /generateSpeech\(/);
+  assert.doesNotMatch(approval, /generateImage/);
+  assert.doesNotMatch(approval, /fal-media/);
+});
+
+test('aprobación final Scene 6B conserva reparto exacto de las tres tomas', async () => {
+  const approval = await readFile(
+    new URL('../scripts/approve-scene6b-final-v6.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(approval, /SCENE6_SOFIA_ID_V6/);
+  assert.match(approval, /SCENE6_ELENA_ID_V6/);
+  assert.match(approval, /SCENE6_MATEO_ID_V6/);
+  assert.match(approval, /SCENE6B_DIALOGUE_V6/);
+  assert.match(approval, /6\.0-scene6b-repair/);
+});
+
+test('package expone safe:scene6b:approve', async () => {
+  const pkg = JSON.parse(
+    await readFile(
+      new URL('../package.json', import.meta.url),
+      'utf8'
+    )
+  );
+
+  assert.equal(
+    pkg.scripts['safe:scene6b:approve'],
+    'node --import tsx scripts/approve-scene6b-final-v6.ts'
+  );
+});
