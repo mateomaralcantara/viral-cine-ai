@@ -455,3 +455,17 @@ test('Sofia Voice V3 design conserva texto de preview fijo en 104 caracteres', a
   assert.match(script, /A realistic fictional Latina girl around 10 years old/);
   assert.match(script, /Avoid adult female chest resonance/);
 });
+
+
+test('Sofia Voice V3 preview evita mojibake en PowerShell 5.1 y conserva 104 caracteres', async () => {
+  const script = await readFile(
+    new URL('../scripts/DESIGN-SOFIA-VOICE-V3-ELEVENLABS.ps1', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(script, /\[char\]0x00BF/);
+  assert.match(script, /\[char\]0x00F1/);
+  assert.match(script, /\$PreviewText\.Length -ne 104/);
+  assert.doesNotMatch(script, /\$PreviewText = 'Mami, ¿/);
+  assert.doesNotMatch(script, /enseñarte algo/);
+});
