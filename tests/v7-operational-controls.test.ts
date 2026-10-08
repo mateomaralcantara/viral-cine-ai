@@ -102,7 +102,8 @@ test('Rights Guard bloquea una voz sin consentimiento o licencia', () => {
     ...unknown,
     id: 'rights-2',
     status: 'consented',
-    consentReference: 'consent/elena-v1'
+    consentReference: 'consent/elena-v1',
+    createdAt: '2026-10-08T00:01:00.000Z'
   });
   assert.doesNotThrow(
     () => assertRightsReady([unknown, consented], [{ subjectType: 'voice', subjectId: 'voice-elena' }])
