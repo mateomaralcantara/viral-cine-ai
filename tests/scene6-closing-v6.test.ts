@@ -517,7 +517,7 @@ test('reconciliador Sofia V3 HTTP 400 es local y bloquea retry', async () => {
   );
 
   assert.match(script, /failed-unknown/);
-  assert.match(script, /credits_risk_max = 104/);
+  assert.match(script, /Add-Member -NotePropertyName 'credits_risk_max' -NotePropertyValue 104 -Force/);
   assert.match(script, /retry_allowed = \$false/);
   assert.match(script, /voice_previews_confirmed = 0/);
   assert.doesNotMatch(script, /Invoke-RestMethod/);
