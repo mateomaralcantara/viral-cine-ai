@@ -51,7 +51,7 @@ if (Test-Path $ManifestPath) {
 
 if (Test-Path $AttemptPath) {
     $attempt = Get-Content $AttemptPath -Raw | ConvertFrom-Json
-    if ($attempt.state -in @('submitted','failed-unknown','failed-no-charge-assumed')) { throw ('RETRY BLOQUEADO. Estado previo: ' + $attempt.state + '. Reconcilia antes de repetir.') }
+    if ($attempt.state -in @('submitted','failed-unknown')) { throw ('RETRY BLOQUEADO. Estado previo: ' + $attempt.state + '. Reconcilia antes de repetir.') }
 }
 
 $PreviewText = 'Mami, ' + [char]0x00BF + 'ya terminaste? Ven, quiero ense' + [char]0x00F1 + 'arte algo. Hoy hice un dibujo para ti y quiero saber si te gusta.'
