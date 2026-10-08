@@ -571,3 +571,68 @@ test('preflight Escena 6 no contiene bloques duplicados ni strings de costo trun
   assert.match(preflight, /T1\+T3 Grok Lite:/);
   assert.doesNotMatch(preflight, /SCENE6_SOFIA_AUDITION_REQUIRED=YES/);
 });
+
+
+test('productor Escena 6 queda limitado a 1 WAN, 2 Grok Lite, marin y sin imagen nueva', async () => {
+  const producer = await readFile(
+    new URL('../lib/engine/scene6-closing-producer-v6.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(producer, /MAX_TOTAL_VIDEO_CREDITS = 66/);
+  assert.match(producer, /MAX_WAN_4S_CREDITS = 40/);
+  assert.match(producer, /MAX_GROK_4S_CREDITS = 13/);
+  assert.match(producer, /grokLiteImageToVideoCredits\(4, GROK_RATIO\) \* 2/);
+  assert.match(producer, /wan3VideoCredits\(4, WAN_RATIO\)/);
+  assert.match(producer, /voiceId !== 'marin'/);
+  assert.match(producer, /generateSpeech\(/);
+  assert.match(producer, /generateRunwayWan3AudioReferenceFromEnvironment/);
+  assert.match(producer, /generateRunwayGrokLiteFromEnvironment/);
+  assert.doesNotMatch(producer, /generateImageWithReferences/);
+  assert.doesNotMatch(producer, /fal-media/);
+  assert.match(producer, /delete process\.env\.FAL_KEY/);
+});
+
+test('productor Escena 6 reutiliza Escena 5 como continuidad familiar y bloquea retries ambiguos', async () => {
+  const producer = await readFile(
+    new URL('../lib/engine/scene6-closing-producer-v6.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(producer, /scene-005-wan3-reunion-v6-mateo-true-child\.mp4/);
+  assert.match(producer, /const t3Continuity = t1Reference/);
+  assert.match(producer, /failed-unknown/);
+  assert.match(producer, /failed-no-charge/);
+  assert.match(producer, /No se reintentará automáticamente/);
+  assert.match(producer, /SCENE6_SAFE_MAX_USD_V6/);
+  assert.match(producer, /SAFE CUMULATIVE COST GATE E6/);
+});
+
+test('launcher Escena 6 exige autorización exacta US$0.67 y no autoriza más', async () => {
+  const launcher = await readFile(
+    new URL('../scripts/generate-scene6-v6.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(launcher, /--confirm-scene6-usd-0\.67/);
+  assert.match(launcher, /SCENE6_SAFE_MAX_USD_V6 - 0\.67/);
+  assert.match(launcher, /Máximo total autorizado: US\$0\.67/);
+  assert.match(launcher, /Sofía: SIN DIÁLOGO/);
+  assert.match(launcher, /Imagen OpenAI nueva: NO/);
+  assert.match(launcher, /Fallback pagado automático: NO/);
+  assert.match(launcher, /Retry automático tras estado dudoso: NO/);
+});
+
+test('package expone safe:scene6:run con launcher protegido', async () => {
+  const pkg = JSON.parse(
+    await readFile(
+      new URL('../package.json', import.meta.url),
+      'utf8'
+    )
+  );
+
+  assert.equal(
+    pkg.scripts['safe:scene6:run'],
+    'node --import tsx scripts/generate-scene6-v6.ts'
+  );
+});
