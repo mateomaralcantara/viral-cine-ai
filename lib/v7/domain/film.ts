@@ -7,7 +7,7 @@ export const FilmV7Schema = z.object({
   id: EntityIdSchema,
   title: z.string().trim().min(1).max(240),
   premise: z.string().max(20000).default(''),
-  durationMinutes: z.number().min(5).max(180),
+  durationMinutes: z.number().min(1).max(180),
   genre: z.string().trim().min(1).max(160).default('Drama'),
   audience: z.string().max(2000).default(''),
   visualStyle: z.string().max(4000).default(''),
@@ -23,24 +23,13 @@ export const FilmV7Schema = z.object({
   updatedAt: TimestampSchema,
   metadata: z.record(z.unknown()).default({})
 }).superRefine((film, ctx) => {
-  const sceneCount = film.acts.flatMap((act) => act.sequences.flatMap((sequence) => sequence.scenes)).length;
-  if (sceneCount > 200) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['acts'],
-      message: 'ViralCine 7 admite hasta 200 escenas por película.'
-    });
+  const scenes = film.acts.flatMap((act) => act.sequences.flatMap((sequence) => sequence.scenes));
+  if (scenes.length > 200) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['acts'], message: 'ViralCine 7 admite hasta 200 escenas por película.' });
   }
-  const shotCount = film.acts.flatMap((act) =>
-    act.sequences.flatMap((sequence) => sequence.scenes.flatMap((scene) => scene.shots))
-  ).length;
+  const shotCount = scenes.reduce((sum, scene) => sum + scene.shots.length, 0);
   if (shotCount > 2000) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['acts'],
-      message: 'ViralCine 7 admite hasta 2,000 shots por película.'
-    });
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['acts'], message: 'ViralCine 7 admite hasta 2,000 shots por película.' });
   }
 });
-
 export type FilmV7 = z.infer<typeof FilmV7Schema>;
