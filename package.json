@@ -86,6 +86,7 @@
     "safe:scene6:run": "node --import tsx scripts/generate-scene6-v6.ts",
     "safe:scene6b:prepare": "node --import tsx scripts/prepare-scene6b-repair-v6.ts",
     "safe:scene6b:run": "node --import tsx scripts/generate-scene6b-repair-v6.ts",
+    "safe:scene6b:t1": "node --import tsx scripts/generate-scene6b-t1-review-v6.ts",
     "safe:scene6:audition-sofia": "node --import tsx scripts/audition-scene6-sofia-v6.ts",
     "safe:scene6:reconcile-sofia-audition": "node --import tsx scripts/reconcile-scene6-sofia-audition-v6.ts",
     "safe:scene6:sofia-clean-local": "node --import tsx scripts/fix-scene6-sofia-clean-local-v6.ts",
