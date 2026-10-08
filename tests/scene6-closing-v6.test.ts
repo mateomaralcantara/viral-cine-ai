@@ -52,9 +52,9 @@ test('Escena 6 V6 queda en 3 tomas / 12s con diálogo exacto', () => {
 
   assert.equal(result.shots, 3);
   assert.equal(result.durationSeconds, 12);
-  assert.equal(result.dialogueShots, 2);
-  assert.equal(result.silentShots, 1);
-  assert.equal(result.maxTotalUsd, 0.94);
+  assert.equal(result.dialogueShots, 1);
+  assert.equal(result.silentShots, 2);
+  assert.equal(result.maxTotalUsd, 0.67);
 
   const scene6 = project.plan.scenes.find((scene: any) => scene.order === 6);
 
@@ -70,7 +70,7 @@ test('Escena 6 V6 queda en 3 tomas / 12s con diálogo exacto', () => {
   );
 });
 
-test('Escena 6 V6 prioriza WAN para diálogo y Runway para cierre silencioso', () => {
+test('Escena 6 V6 usa WAN solo para Elena y Runway para las dos tomas silenciosas', () => {
   const project = projectFixture();
 
   planScene6ClosingV6(project);
@@ -88,7 +88,31 @@ test('Escena 6 V6 prioriza WAN para diálogo y Runway para cierre silencioso', (
     }
   }
 
-  assert.equal(SCENE6_SAFE_MAX_USD_V6, 0.94);
+  assert.equal(SCENE6_SAFE_MAX_USD_V6, 0.67);
+});
+
+test('Escena 6 oficial deja a Sofía en silencio y Elena dice la promesa exacta', () => {
+  const project = projectFixture();
+
+  planScene6ClosingV6(project);
+  validateScene6ClosingV6(project);
+
+  const scene6 = project.plan.scenes.find((scene: any) => scene.order === 6);
+  const [t1, t2, t3] = [...scene6.shots].sort((a: any, b: any) => a.order - b.order);
+
+  assert.equal(scene6.title, 'Esta es nuestra casa');
+  assert.equal(t1.spokenText, '');
+  assert.equal(t1.speakerId, undefined);
+  assert.equal(t1.motionSpec.preferredProviders[0], 'runway');
+
+  assert.equal(t2.speakerId, 'char-v5-elena-0001');
+  assert.equal(t2.spokenText, '¿Ves? Te lo prometí… esta es nuestra casa.');
+  assert.equal(t2.motionSpec.preferredProviders[0], 'wan');
+
+  assert.equal(t3.spokenText, '');
+  assert.equal(t3.motionSpec.preferredProviders[0], 'runway');
+
+  assert.doesNotMatch(scene6.dialogue, /Mami, ¿ya terminaste\?/);
 });
 
 test('aprobación Escena 5 exige master true-child y no llama proveedores', async () => {
@@ -107,13 +131,14 @@ test('aprobación Escena 5 exige master true-child y no llama proveedores', asyn
   assert.doesNotMatch(approval, /fal-media/);
 });
 
-test('preflight Escena 6 es cero gasto y exige audición de Sofía', async () => {
+test('preflight Escena 6 es cero gasto y ya no exige audición de Sofía', async () => {
   const preflight = await readFile(
     new URL('../scripts/prepare-scene6-v6.ts', import.meta.url),
     'utf8'
   );
 
-  assert.match(preflight, /SCENE6_SOFIA_AUDITION_REQUIRED=YES/);
+  assert.match(preflight, /SCENE6_SOFIA_AUDITION_REQUIRED=NO/);
+  assert.match(preflight, /SCENE6_ELENA_APPROVED_VOICE=marin/);
   assert.match(preflight, /Gasto de este preflight: US\$0/);
   assert.doesNotMatch(preflight, /generateRunway/);
   assert.doesNotMatch(preflight, /generateSpeech/);
