@@ -107,18 +107,34 @@ try {
 }
 catch {
     $status = $null
+    $detail = $null
+    $requestId = $null
+    $traceId = $null
+
     try { $status = [int]$_.Exception.Response.StatusCode } catch {}
-    if ($status -in @(400,401,403,404,422)) {
-        $Attempt.state = 'failed-no-charge-assumed'
-        $Attempt.http_status = $status
-        $Attempt.failed_at = (Get-Date).ToUniversalTime().ToString('o')
-        $Attempt | ConvertTo-Json -Depth 6 | Set-Content -Path $AttemptPath -Encoding UTF8
-        throw ('ELEVENLABS VOICE DESIGN RECHAZADO HTTP ' + $status + '. NO HAGAS RETRY.')
+    try { $detail = [string]$_.ErrorDetails.Message } catch {}
+    try { $requestId = [string]$_.Exception.Response.Headers['request-id'] } catch {}
+    try { $traceId = [string]$_.Exception.Response.Headers['x-trace-id'] } catch {}
+
+    if ([string]::IsNullOrWhiteSpace($detail)) {
+        $detail = [string]$_.Exception.Message
     }
+
+    if ($detail.Length -gt 2000) {
+        $detail = $detail.Substring(0, 2000)
+    }
+
     $Attempt.state = 'failed-unknown'
+    $Attempt.http_status = $status
+    $Attempt.error_detail = $detail
+    $Attempt.request_id = $requestId
+    $Attempt.trace_id = $traceId
     $Attempt.failed_at = (Get-Date).ToUniversalTime().ToString('o')
+    $Attempt.credits_risk_max = 104
+    $Attempt.retry_allowed = $false
     $Attempt | ConvertTo-Json -Depth 6 | Set-Content -Path $AttemptPath -Encoding UTF8
-    throw ('ELEVENLABS VOICE DESIGN FALLIDO O AMBIGUO. NO HAGAS RETRY. ' + $_.Exception.Message)
+
+    throw ('ELEVENLABS VOICE DESIGN RECHAZADO/FALLIDO HTTP ' + $status + '. ESTADO=failed-unknown. NO HAGAS RETRY. Detalle: ' + $detail)
 }
 
 $Previews = @($Response.previews)
