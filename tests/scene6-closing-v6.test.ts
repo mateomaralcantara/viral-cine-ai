@@ -636,3 +636,144 @@ test('package expone safe:scene6:run con launcher protegido', async () => {
     'node --import tsx scripts/generate-scene6-v6.ts'
   );
 });
+
+
+test('Scene 6B Repair aísla identidades por toma y conserva el diálogo exacto', async () => {
+  const spec = await import(
+    new URL('../lib/engine/scene6b-repair-spec-v6.ts', import.meta.url).href
+  );
+  const shots = spec.buildScene6BRepairShotsV6('scene-15d-short-06');
+  const result = spec.validateScene6BRepairShotsV6(shots);
+
+  assert.equal(result.shots, 3);
+  assert.equal(result.durationSeconds, 12);
+  assert.equal(result.maxVideoUsd, 0.66);
+  assert.equal(result.authorizedMaxUsd, 0.67);
+
+  assert.deepEqual(shots[0].characterIds, ['char-v5-sofia-0004']);
+  assert.equal(shots[0].spokenText, '');
+  assert.match(shots[0].visualPrompt, /SOLO SOFÍA EN CUADRO/);
+
+  assert.deepEqual(shots[1].characterIds, ['char-v5-elena-0001']);
+  assert.equal(shots[1].speakerId, 'char-v5-elena-0001');
+  assert.equal(
+    shots[1].spokenText,
+    '¿Ves? Te lo prometí… esta es nuestra casa.'
+  );
+  assert.match(shots[1].visualPrompt, /SOLO ELENA EN CUADRO/);
+
+  assert.deepEqual(
+    shots[2].characterIds,
+    [
+      'char-v5-elena-0001',
+      'char-v5-sofia-0004',
+      'char-v5-mateo-0005'
+    ]
+  );
+  assert.equal(shots[2].spokenText, '');
+  assert.match(shots[2].visualPrompt, /VISTO DESDE ATRÁS/);
+  assert.match(shots[2].visualPrompt, /Ningún rostro debe ser visible/);
+});
+
+test('Scene 6B producer usa solo 2 Grok + 1 WAN y reutiliza la voz marin existente', async () => {
+  const producer = await readFile(
+    new URL('../lib/engine/scene6b-repair-producer-v6.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.equal(
+    (producer.match(/generateRunwayGrokLiteFromEnvironment\(/g) || []).length,
+    2
+  );
+  assert.equal(
+    (producer.match(/generateRunwayWan3AudioReferenceFromEnvironment\(/g) || []).length,
+    1
+  );
+  assert.match(producer, /MAX_TOTAL_VIDEO_CREDITS = 66/);
+  assert.match(producer, /MAX_GROK_4S_CREDITS = 13/);
+  assert.match(producer, /MAX_WAN_4S_CREDITS = 40/);
+  assert.match(
+    producer,
+    /scene-006-shot-02-elena-master\.wav/
+  );
+  assert.doesNotMatch(producer, /generateSpeech\(/);
+  assert.doesNotMatch(producer, /generateImageWithReferences/);
+  assert.doesNotMatch(producer, /fal-media/);
+  assert.match(producer, /delete process\.env\.FAL_KEY/);
+});
+
+test('Scene 6B usa presupuesto independiente e6b y preserva el master anterior', async () => {
+  const producer = await readFile(
+    new URL('../lib/engine/scene6b-repair-producer-v6.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(producer, /v6safe:e6b:t1:grok-lite:1/);
+  assert.match(producer, /v6safe:e6b:t2:wan3-audio-reference:1/);
+  assert.match(producer, /v6safe:e6b:t3:grok-lite:1/);
+  assert.match(producer, /startsWith\(\s*'v6safe:e6b:'/);
+  assert.match(producer, /scene-006-home-promise-v6\.mp4/);
+  assert.match(producer, /scene-006b-repair-v6\.mp4/);
+  assert.match(producer, /previousSceneVideo/);
+  assert.match(producer, /No se reintentará automáticamente/);
+});
+
+test('Scene 6B T2 jamás usa frame de Sofía como referencia WAN', async () => {
+  const producer = await readFile(
+    new URL('../lib/engine/scene6b-repair-producer-v6.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(producer, /references: \[\s*\{\s*uri:\s*await imageFileToDataUri\(\s*elenaWanRef/);
+  assert.match(producer, /SOLO ELENA/);
+  assert.match(producer, /No mostrar a Sofía/);
+  assert.match(producer, /No transformar a Elena en niña/);
+});
+
+test('Scene 6B preflight exige assets existentes y no llama proveedores', async () => {
+  const preflight = await readFile(
+    new URL('../scripts/prepare-scene6b-repair-v6.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(preflight, /scene-006-home-promise-v6\.mp4/);
+  assert.match(preflight, /scene-006-shot-02-elena-master\.wav/);
+  assert.match(preflight, /scene-005-shot-01-family-reference\.png/);
+  assert.match(preflight, /SCENE6B_PREPARE=PASS/);
+  assert.match(preflight, /Gasto de este preflight: US\$0/);
+  assert.doesNotMatch(preflight, /generateRunway/);
+  assert.doesNotMatch(preflight, /generateSpeech/);
+});
+
+test('Scene 6B launcher exige autorización exacta US$0.67 aunque el máximo real sea US$0.66', async () => {
+  const launcher = await readFile(
+    new URL('../scripts/generate-scene6b-repair-v6.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(launcher, /--confirm-scene6b-usd-0\.67/);
+  assert.match(launcher, /SCENE6B_AUTHORIZED_MAX_USD_V6 - 0\.67/);
+  assert.match(launcher, /SCENE6B_MAX_VIDEO_USD_V6 - 0\.66/);
+  assert.match(launcher, /Máximo real esperado: US\$0\.66/);
+  assert.match(launcher, /Máximo autorizado: US\$0\.67/);
+  assert.match(launcher, /Voz OpenAI nueva: NO/);
+  assert.match(launcher, /Master Scene 6 anterior: PRESERVADO/);
+});
+
+test('package expone prepare y run de Scene 6B Repair', async () => {
+  const pkg = JSON.parse(
+    await readFile(
+      new URL('../package.json', import.meta.url),
+      'utf8'
+    )
+  );
+
+  assert.equal(
+    pkg.scripts['safe:scene6b:prepare'],
+    'node --import tsx scripts/prepare-scene6b-repair-v6.ts'
+  );
+  assert.equal(
+    pkg.scripts['safe:scene6b:run'],
+    'node --import tsx scripts/generate-scene6b-repair-v6.ts'
+  );
+});
