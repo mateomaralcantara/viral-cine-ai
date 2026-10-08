@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import {
   buildFifteenDaysShortPlanV5
 } from '@/lib/production-presets/fifteen-days-short-v5';
@@ -240,4 +242,55 @@ test('Sofia Voice V2 usa terminadores PowerShell here-string válidos', async ()
   assert.match(script, /^"@$/m);
   assert.match(script, /\$VoicePrompt = \$VoicePrompt\.Trim\(\)/);
   assert.match(script, /\$SessionInstructions = \$SessionInstructions\.Trim\(\)/);
+});
+
+
+test('Sofia Voice V2B es parser-safe y conserva el guard de gasto', async () => {
+  const script = await readFile(
+    new URL('../scripts/CREATE-SOFIA-VOICE-V2B.ps1', import.meta.url),
+    'utf8'
+  );
+
+  assert.doesNotMatch(script, /@"/);
+  assert.doesNotMatch(script, /"@/);
+  assert.match(script, /--confirm-sofia-v2-usd-0\.01/);
+  assert.match(script, /live_max_estimated_usd = 0\.0084/);
+  assert.match(script, /session\.instructions\.append/);
+  assert.match(script, /session\.output_audio\.delta/);
+  assert.match(script, /LIVE RETRY BLOQUEADO/);
+  assert.doesNotMatch(script, /generateRunway/);
+  assert.doesNotMatch(script, /fal-media/);
+});
+
+test('PowerShell parser acepta Sofia Voice V2B en Windows', () => {
+  if (process.platform !== 'win32') return;
+
+  const filePath = fileURLToPath(
+    new URL('../scripts/CREATE-SOFIA-VOICE-V2B.ps1', import.meta.url)
+  );
+  const escaped = filePath.replaceAll("'", "''");
+  const command = [
+    '$tokens = $null',
+    '$errors = $null',
+    "[System.Management.Automation.Language.Parser]::ParseFile('" +
+      escaped +
+      "', [ref]$tokens, [ref]$errors) | Out-Null",
+    'if ($errors.Count -gt 0) {',
+    '  $errors | ForEach-Object { Write-Error $_.Message }',
+    '  exit 1',
+    '}',
+    'exit 0'
+  ].join('; ');
+
+  const result = spawnSync(
+    'powershell.exe',
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command],
+    { encoding: 'utf8' }
+  );
+
+  assert.equal(
+    result.status,
+    0,
+    'PowerShell parser fallo:\n' + result.stdout + '\n' + result.stderr
+  );
 });
