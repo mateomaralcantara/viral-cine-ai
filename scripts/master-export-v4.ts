@@ -6,8 +6,10 @@ import { concatenate } from '@/lib/media/ffmpeg';
 import { probeVideo } from '@/lib/media/probe';
 import {
   assetAbsolutePath,
+  assetRelativePath,
   getProject,
-  projectAssetDir
+  projectAssetDir,
+  saveProject
 } from '@/lib/storage/project-store';
 
 loadProjectLocalEnvOverride();
@@ -70,8 +72,8 @@ if (blockers.length) {
 
 const exportDir = projectAssetDir(project.id, 'exports');
 await mkdir(exportDir, { recursive: true });
-const baseName = safeName(project.input.title) + '-MASTER-4.2';
-const outputPath = path.join(exportDir, baseName + '.mp4');
+const baseName = safeName(project.input.title) + '-MASTER-FINAL';
+const outputPath = path.join(exportDir, 'pelicula-final.mp4');
 const manifestPath = path.join(exportDir, baseName + '.manifest.json');
 
 const clips = plan.rows.map((row) => assetAbsolutePath(project.id, row.videoAsset!));
@@ -98,7 +100,7 @@ const manifest = {
   generatedAt: new Date().toISOString(),
   projectId: project.id,
   title: project.input.title,
-  pipeline: '4.2-master',
+  pipeline: 'approved-master-4.2-6.0',
   totalShots: plan.totalShots,
   expectedDurationSeconds: plan.expectedDurationSeconds,
   actualDurationSeconds: Math.round(media.durationSeconds * 1000) / 1000,
@@ -120,8 +122,27 @@ const manifest = {
 };
 await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
 
+project.finalVideoAsset = assetRelativePath(project.id, outputPath);
+project.status = 'ready';
+project.error = undefined;
+project.progress = {
+  phase: 'master-exported',
+  percent: 100,
+  message: 'Película final exportada y lista para ver o descargar.',
+  currentScene: project.plan?.scenes.length,
+  totalScenes: project.plan?.scenes.length,
+  updatedAt: new Date().toISOString()
+};
+project.productionLog.push(
+  new Date().toISOString() +
+    ' MASTER FINAL EXPORTADO: ' +
+    project.finalVideoAsset +
+    '. Montaje local FFmpeg; APIs externas NO.'
+);
+await saveProject(project);
+
 console.log('\n==================================================');
-console.log(' MASTER 4.2 — PASS');
+console.log(' MASTER FINAL — PASS');
 console.log('==================================================');
 console.log('Tomas concatenadas: ' + plan.totalShots);
 console.log('Duración final: ' + media.durationSeconds.toFixed(3) + 's');
@@ -135,7 +156,7 @@ if (plan.degradedLipSyncShots > 0) {
     ' toma(s) usan fallback local de lip-sync; revisar visualmente antes de publicar.'
   );
 }
-console.log('MASTER_EXPORT_RUN=PASS');
+console.log('FINAL_VIDEO_ASSET=' + project.finalVideoAsset);\nconsole.log('MASTER_EXPORT_RUN=PASS');
 
 async function fileExists(filePath: string) {
   try {
