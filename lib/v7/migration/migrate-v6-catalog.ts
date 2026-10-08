@@ -65,6 +65,16 @@ function migratePlannedProject(project: FilmProject) {
   const adapted = adaptLegacyProjectToV7(project);
   return {
     ...adapted,
+    creationInput: {
+      title: project.input.title,
+      story: project.input.premise,
+      durationMinutes: project.input.durationMinutes,
+      genre: project.input.genre,
+      aspectRatio: project.input.aspectRatio,
+      language: project.input.language,
+      budgetUsd: project.input.budgetUsd,
+      quality: 'cine' as const
+    },
     workflow: workflowFromLegacy(project)
   };
 }
