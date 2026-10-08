@@ -389,3 +389,36 @@ test('comparador local de claves OpenAI usa huellas y no imprime secretos', asyn
   assert.doesNotMatch(script, /Write-Host \$processKey/);
   assert.doesNotMatch(script, /Write-Host \$fileKey/);
 });
+
+
+test('Sofia Voice V3 ElevenLabs preflight es read-only y no genera media', async () => {
+  const script = await readFile(
+    new URL('../scripts/PREFLIGHT-SOFIA-VOICE-V3-ELEVENLABS.ps1', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(script, /GET https:\/\/api\.elevenlabs\.io\/v2\/voices/i);
+  assert.match(script, /ELEVENLABS_API_KEY/);
+  assert.match(script, /voice_design_executed = \$false/);
+  assert.match(script, /tts_executed = \$false/);
+  assert.match(script, /video_executed = \$false/);
+  assert.match(script, /generation_cost_assumption_usd = 0\.0/);
+  assert.doesNotMatch(script, /text-to-voice\/design/);
+  assert.doesNotMatch(script, /text-to-speech/);
+  assert.doesNotMatch(script, /Runway/i);
+  assert.doesNotMatch(script, /Fal\.ai/i);
+});
+
+test('Sofia Voice V3 ElevenLabs preflight usa .env.local y regex PowerShell valido', async () => {
+  const script = await readFile(
+    new URL('../scripts/PREFLIGHT-SOFIA-VOICE-V3-ELEVENLABS.ps1', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(
+    script,
+    /\$pattern = '\^\\s\*' \+ \[regex\]::Escape\(\$Name\) \+ '\\s\*=\\s\*\(\.\*\)\\s\*\$'/
+  );
+  assert.match(script, /\$ApiKey = Get-DotEnvValue 'ELEVENLABS_API_KEY'/);
+  assert.doesNotMatch(script, /\$env:ELEVENLABS_API_KEY/);
+});
