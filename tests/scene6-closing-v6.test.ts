@@ -469,3 +469,47 @@ test('Sofia Voice V3 preview evita mojibake en PowerShell 5.1 y conserva 104 car
   assert.doesNotMatch(script, /\$PreviewText = 'Mami, ¿/);
   assert.doesNotMatch(script, /enseñarte algo/);
 });
+
+
+test('Sofia V3 HTTP errors quedan failed-unknown con detalle y riesgo de 104 creditos', async () => {
+  const script = await readFile(
+    new URL('../scripts/DESIGN-SOFIA-VOICE-V3-ELEVENLABS.ps1', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(script, /error_detail/);
+  assert.match(script, /request_id/);
+  assert.match(script, /trace_id/);
+  assert.match(script, /credits_risk_max = 104/);
+  assert.match(script, /state = 'failed-unknown'/);
+  assert.doesNotMatch(script, /failed-no-charge-assumed/);
+});
+
+test('reconciliador Sofia V3 HTTP 400 es local y bloquea retry', async () => {
+  const script = await readFile(
+    new URL('../scripts/RECONCILE-SOFIA-V3-HTTP400.ps1', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(script, /failed-unknown/);
+  assert.match(script, /credits_risk_max = 104/);
+  assert.match(script, /retry_allowed = \$false/);
+  assert.match(script, /voice_previews_confirmed = 0/);
+  assert.doesNotMatch(script, /Invoke-RestMethod/);
+  assert.doesNotMatch(script, /Invoke-WebRequest/);
+});
+
+test('auditoria Sofia V3 consulta solo uso de ElevenLabs y no genera media', async () => {
+  const script = await readFile(
+    new URL('../scripts/AUDIT-SOFIA-V3-ELEVENLABS-USAGE.ps1', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(script, /v1\/user\/subscription/);
+  assert.match(script, /usage-by-product-over-time/);
+  assert.match(script, /group_by = @\('product_type'\)/);
+  assert.match(script, /GENERATION_EXECUTED=NO/);
+  assert.match(script, /RETRY_EXECUTED=NO/);
+  assert.doesNotMatch(script, /text-to-voice\/design/);
+  assert.doesNotMatch(script, /text-to-speech/);
+});
