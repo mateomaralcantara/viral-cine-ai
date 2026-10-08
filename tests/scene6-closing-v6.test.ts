@@ -513,3 +513,16 @@ test('auditoria Sofia V3 consulta solo uso de ElevenLabs y no genera media', asy
   assert.doesNotMatch(script, /text-to-voice\/design/);
   assert.doesNotMatch(script, /text-to-speech/);
 });
+
+
+test('reconciliador Sofia V3 agrega propiedades nuevas de PSCustomObject con Add-Member', async () => {
+  const script = await readFile(
+    new URL('../scripts/RECONCILE-SOFIA-V3-HTTP400.ps1', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(script, /Add-Member -NotePropertyName 'credits_risk_max'/);
+  assert.match(script, /Add-Member -NotePropertyName 'voice_previews_confirmed'/);
+  assert.match(script, /Add-Member -NotePropertyName 'reconciled_at'/);
+  assert.match(script, /Add-Member -NotePropertyName 'reconciliation_note'/);
+});
