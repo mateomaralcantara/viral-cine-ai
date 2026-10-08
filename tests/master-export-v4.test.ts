@@ -91,7 +91,7 @@ function fixture(): FilmProject {
   } as FilmProject;
 }
 
-test('master plan ordena y acepta tomas 4.2 listas', () => {
+test('master plan ordena y acepta tomas aprobadas listas', () => {
   const result = buildMasterExportPlan(fixture());
   assert.equal(result.totalShots, 2);
   assert.equal(result.readyShots, 2);
@@ -107,4 +107,28 @@ test('master plan bloquea una toma no promovida a 4.2', () => {
   assert.equal(result.readyShots, 1);
   assert.equal(result.blockers.length, 1);
   assert.match(result.blockers[0], /E1\/T2/);
+});
+
+
+test('master plan acepta pipelines 5.0 y 6.0 aprobados', () => {
+  const project = fixture();
+  project.plan!.scenes[0].shots[0].pipelineVersion = '5.0-real-motion-v1';
+  project.plan!.scenes[0].shots[1].pipelineVersion = '6.0-scene6b-repair';
+  const result = buildMasterExportPlan(project);
+  assert.equal(result.readyShots, 2);
+  assert.deepEqual(result.blockers, []);
+});
+
+test('master export registra pelicula-final.mp4 para UI y descarga', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile(
+    new URL('../scripts/master-export-v4.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(source, /path\.join\(exportDir, 'pelicula-final\.mp4'\)/);
+  assert.match(source, /project\.finalVideoAsset = assetRelativePath/);
+  assert.match(source, /phase: 'master-exported'/);
+  assert.match(source, /saveProject\(project\)/);
+  assert.match(source, /FINAL_VIDEO_ASSET=/);
 });
