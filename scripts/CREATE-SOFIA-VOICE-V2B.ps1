@@ -100,6 +100,7 @@ New-Item -ItemType Directory -Force -Path $BaseDir | Out-Null
 
 $MetaPath = Join-Path $BaseDir 'sofia-voice-v2.json'
 $CreateAttemptPath = Join-Path $BaseDir 'sofia-voice-v2-create-attempt.json'
+$AuthBlockPath = Join-Path $BaseDir 'sofia-voice-v2-auth-block.json'
 $RawPcm = Join-Path $BaseDir 'sofia-voice-v2-audition.pcm'
 $WavPath = Join-Path $BaseDir 'sofia-voice-v2-audition.wav'
 
@@ -124,6 +125,10 @@ $ScriptHint = [string]::Join(' ', @(
 
 $Metadata = $null
 $VoiceId = $null
+
+if (Test-Path $AuthBlockPath) {
+    throw 'SOFIA V2B AUTH BLOCK ACTIVO. Corrige la credencial/acceso y limpia el bloqueo de forma controlada antes de reintentar.'
+}
 
 if (Test-Path $MetaPath) {
     try {
