@@ -15,25 +15,11 @@ import {
   Sparkles,
   WalletCards
 } from 'lucide-react';
-
-type FilmSummary = {
-  id: string;
-  title: string;
-  durationMinutes: number;
-  genre: string;
-  aspectRatio: string;
-  language: string;
-  budgetUsd: number;
-  quality: string;
-  legacyProjectId?: string;
-  nextStage?: string | null;
-  nextStageLabel?: string | null;
-  updatedAt: string;
-};
+import V7FilmLibrary, { type V7LibraryV7LibraryFilmSummary } from '@/components/V7FilmLibrary';
 
 type CreateResponse = {
   ok?: boolean;
-  film?: FilmSummary;
+  film?: V7LibraryFilmSummary;
   error?: string;
   preflight?: {
     errors?: string[];
@@ -45,7 +31,7 @@ const durationPresets = [5, 15, 30, 60, 90, 120];
 const genres = ['Drama', 'Acción', 'Comedia', 'Suspenso', 'Terror', 'Romance', 'Documental', 'Histórica', 'Ciencia ficción'];
 
 export default function V7StudioHome() {
-  const [films, setFilms] = useState<FilmSummary[]>([]);
+  const [films, setFilms] = useState<V7LibraryFilmSummary[]>([]);
   const [loadingFilms, setLoadingFilms] = useState(true);
   const [creating, setCreating] = useState(false);
   const [migrating, setMigrating] = useState(false);
@@ -77,7 +63,7 @@ export default function V7StudioHome() {
     setLoadingFilms(true);
     try {
       const response = await fetch('/api/v7/films', { cache: 'no-store' });
-      const body = await response.json() as { ok?: boolean; films?: FilmSummary[] };
+      const body = await response.json() as { ok?: boolean; films?: V7LibraryFilmSummary[] };
       setFilms(body.films || []);
     } finally {
       setLoadingFilms(false);
@@ -380,49 +366,7 @@ export default function V7StudioHome() {
         </aside>
       </section>
 
-      <section className="panel mt-6 rounded-3xl p-5 md:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-xl font-black">Películas V7</h2>
-            <p className="mt-1 text-sm text-slate-500">Proyectos nativos y migrados.</p>
-          </div>
-          <button className="button-secondary" onClick={refreshFilms} disabled={loadingFilms}>
-            {loadingFilms ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-            Actualizar
-          </button>
-        </div>
-
-        <div className="mt-5 grid gap-3 lg:grid-cols-2">
-          {!loadingFilms && films.length === 0 && (
-            <div className="rounded-2xl border border-dashed border-white/10 p-6 text-sm text-slate-500">
-              Aún no hay películas V7. Crea una arriba o migra tu catálogo V6.
-            </div>
-          )}
-          {films.map((film) => (
-            <a
-              key={film.id}
-              href={'/v7/films/' + encodeURIComponent(film.id)}
-              className="rounded-2xl border border-white/10 bg-black/20 p-4 transition hover:border-violet-400/30 hover:bg-white/[.03]"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="font-black">{film.title}</div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    {film.durationMinutes} min · {film.genre} · {film.aspectRatio} · {String(film.quality).toUpperCase()}
-                  </div>
-                </div>
-                {film.legacyProjectId
-                  ? <span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-[10px] font-black text-amber-300">MIGRADA</span>
-                  : <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-[10px] font-black text-emerald-300">V7 NATIVA</span>
-                }
-              </div>
-              <div className="mt-3 text-xs font-bold text-violet-300">
-                {film.nextStageLabel ? 'Siguiente: ' + film.nextStageLabel : 'Abrir proyecto'}
-              </div>
-            </a>
-          ))}
-        </div>
-      </section>
+      <V7FilmLibrary films={films} loading={loadingFilms} onRefresh={() => { void refreshFilms(); }} />
 
       <footer className="py-6 text-center text-xs text-slate-600">
         <a href="/legacy-v6" className="hover:text-slate-400">ViralCine 6 legacy</a>
