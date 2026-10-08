@@ -169,6 +169,35 @@ if (-not $VoiceId) {
         $voice = Invoke-RestMethod -Uri 'https://api.openai.com/v1/audio/voices' -Method Post -Headers @{ Authorization = ('Bearer ' + $ApiKey) } -ContentType 'application/json' -Body $body
     }
     catch {
+        $statusCode = $null
+
+        try {
+            $statusCode = [int]$_.Exception.Response.StatusCode
+        }
+        catch {}
+
+        if ($statusCode -eq 401) {
+            [ordered]@{
+                state = 'failed-no-charge'
+                reason = 'http_401_unauthorized'
+                original_started_at = (Get-Date).ToUniversalTime().ToString('o')
+                reconciled_at = (Get-Date).ToUniversalTime().ToString('o')
+                voice_created = $false
+                live_started = $false
+                charged_assumption_usd = 0.0
+                retry_allowed = $false
+            } | ConvertTo-Json -Depth 5 | Set-Content -Path $CreateAttemptPath -Encoding UTF8
+
+            [ordered]@{
+                blocked = $true
+                reason = 'http_401_unauthorized'
+                created_at = (Get-Date).ToUniversalTime().ToString('o')
+                required_action = 'Fix project-scoped OpenAI API authentication and custom-voice access before retry.'
+            } | ConvertTo-Json -Depth 5 | Set-Content -Path $AuthBlockPath -Encoding UTF8
+
+            throw 'OPENAI VOICE CREATE 401 UNAUTHORIZED. Voz creada: NO. Live iniciado: NO. Retry bloqueado hasta corregir autenticacion.'
+        }
+
         throw ('OPENAI VOICE CREATE FALLIDO O AMBIGUO. NO HAGAS RETRY. ' + $_.Exception.Message)
     }
 
