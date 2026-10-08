@@ -1,0 +1,59 @@
+name: ViralCine 7 Feature Film OS CI
+
+on:
+  push:
+    branches:
+      - feat/viralcine-7-feature-film-os
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  verify-v7:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ALLOW_EXTERNAL_API_CALLS: 'false'
+      ALLOW_PAID_GENERATION: 'false'
+      ALLOW_PAID_PROVIDER_FALLBACK: 'false'
+      STRICT_SCENE_QUALITY: 'false'
+      PRODUCTION_MODE: demo
+      REAL_CINEMA_PIPELINE: 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          ffmpeg -version | head -n 1
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck V6 + V7
+        run: npm run typecheck
+
+      - name: Tests V6 + V7
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
+      - name: Safety assertion
+        run: |
+          test "$ALLOW_EXTERNAL_API_CALLS" = "false"
+          test "$ALLOW_PAID_GENERATION" = "false"
+          test "$ALLOW_PAID_PROVIDER_FALLBACK" = "false"
+          echo "V7_CI_PAID_APIS_LOCKED=YES"
