@@ -4,19 +4,22 @@ export const SCENE6_ELENA_ID_V6 = 'char-v5-elena-0001';
 export const SCENE6_SOFIA_ID_V6 = 'char-v5-sofia-0004';
 export const SCENE6_MATEO_ID_V6 = 'char-v5-mateo-0005';
 
-export const SCENE6_TITLE_V6 = 'Ese capítulo sí';
+export const SCENE6_TITLE_V6 = 'Esta es nuestra casa';
 export const SCENE6_DURATION_SECONDS_V6 = 12;
 
 export const SCENE6_DIALOGUE_V6 = [
-  { order: 1, speakerId: SCENE6_SOFIA_ID_V6, text: 'Mami, ¿ya terminaste?' },
-  { order: 2, speakerId: SCENE6_ELENA_ID_V6, text: 'Ese capítulo sí.' }
+  {
+    order: 2,
+    speakerId: SCENE6_ELENA_ID_V6,
+    text: '¿Ves? Te lo prometí… esta es nuestra casa.'
+  }
 ] as const;
 
-export const SCENE6_WAN_DIALOGUE_SECONDS_V6 = 8;
-export const SCENE6_RUNWAY_SILENT_SECONDS_V6 = 4;
-export const SCENE6_MAX_VIDEO_USD_V6 = 0.93;
+export const SCENE6_WAN_DIALOGUE_SECONDS_V6 = 4;
+export const SCENE6_RUNWAY_SILENT_SECONDS_V6 = 8;
+export const SCENE6_MAX_VIDEO_USD_V6 = 0.66;
 export const SCENE6_MAX_VOICE_USD_V6 = 0.01;
-export const SCENE6_SAFE_MAX_USD_V6 = 0.94;
+export const SCENE6_SAFE_MAX_USD_V6 = 0.67;
 
 export function planScene6ClosingV6(project: FilmProject) {
   if (!project.plan) throw new Error('El proyecto no tiene plan.');
@@ -33,7 +36,10 @@ export function planScene6ClosingV6(project: FilmProject) {
     );
   }
 
-  if (scene.title !== SCENE6_TITLE_V6) {
+  if (
+    scene.title !== SCENE6_TITLE_V6 &&
+    scene.title !== 'Ese capítulo sí'
+  ) {
     throw new Error(
       'Escena 6 inesperada. Se esperaba "' +
         SCENE6_TITLE_V6 +
@@ -58,20 +64,17 @@ export function planScene6ClosingV6(project: FilmProject) {
     );
   }
 
+  scene.title = SCENE6_TITLE_V6;
   scene.durationSeconds = 12;
+  scene.summary =
+    'Sofía observa en silencio el hogar recuperado. Elena cumple su promesa y los tres se abrazan dentro de la casa.';
   scene.dialogue =
-    'Sofía: Mami, ¿ya terminaste?\n' +
-    'Elena: Ese capítulo sí.';
+    'Elena: ¿Ves? Te lo prometí… esta es nuestra casa.';
   scene.dialogueTurns = [
     {
-      speakerId: SCENE6_SOFIA_ID_V6,
-      text: 'Mami, ¿ya terminaste?',
-      emotion: 'natural y curiosa'
-    },
-    {
       speakerId: SCENE6_ELENA_ID_V6,
-      text: 'Ese capítulo sí.',
-      emotion: 'serena'
+      text: '¿Ves? Te lo prometí… esta es nuestra casa.',
+      emotion: 'emocionada, serena y contenida'
     }
   ];
   scene.productionStrategy = 'real-cinema-v2';
@@ -81,7 +84,7 @@ export function planScene6ClosingV6(project: FilmProject) {
 
   project.productionLog.push(
     new Date().toISOString() +
-      ' ViralCine 6 Safe: Escena 6 “Ese capítulo sí” planificada en 3 tomas / 12s; T1-T2 WAN audio-reference, T3 cierre silencioso Runway; Fal.ai prohibido.'
+      ' ViralCine 6 Safe: Escena 6 “Esta es nuestra casa” planificada en 3 tomas / 12s; T1 reacción silenciosa Runway, T2 Elena WAN audio-reference, T3 abrazo familiar silencioso Runway; Fal.ai prohibido.'
   );
 
   return scene;
@@ -127,8 +130,8 @@ export function validateScene6ClosingV6(project: FilmProject) {
   return {
     shots: 3,
     durationSeconds: 12,
-    dialogueShots: 2,
-    silentShots: 1,
+    dialogueShots: 1,
+    silentShots: 2,
     maxVideoUsd: SCENE6_MAX_VIDEO_USD_V6,
     maxVoiceUsd: SCENE6_MAX_VOICE_USD_V6,
     maxTotalUsd: SCENE6_SAFE_MAX_USD_V6
@@ -140,27 +143,27 @@ function buildShots(sceneId: string): FilmShot[] {
     shot({
       id: sceneId + '-v6-shot-01',
       order: 1,
-      title: 'Mami, ¿ya terminaste?',
+      title: 'La mirada de Sofía',
       durationSeconds: 4,
       visualPrompt:
-        'Continuidad exacta de la casa recuperada. Sofía, niña latina de 10 años, mira a Elena mientras Elena guarda el cuaderno original. Sofía es la única hablante; su rostro y boca permanecen visibles. Mateo aparece silencioso al borde o al fondo.',
+        'Continuidad exacta de la casa recuperada. Sofía, niña latina de 10 años, recorre con la mirada el interior de la casa y luego mira a Elena con emoción contenida. Elena permanece cerca y Mateo al fondo. Nadie habla. Una sola acción emocional, natural y realista.',
       camera:
-        'Primer plano infantil natural de Sofía a la altura de sus ojos; cámara estable, boca visible, sin cortes.',
-      spokenText: 'Mami, ¿ya terminaste?',
-      speakerId: SCENE6_SOFIA_ID_V6,
+        'Primer plano natural de Sofía a la altura de sus ojos; cámara estable con desplazamiento mínimo, sin cortes y sin articulación de diálogo.',
+      spokenText: '',
+      speakerId: undefined,
       characterIds: [SCENE6_SOFIA_ID_V6, SCENE6_ELENA_ID_V6, SCENE6_MATEO_ID_V6],
-      provider: 'wan'
+      provider: 'runway'
     }),
     shot({
       id: sceneId + '-v6-shot-02',
       order: 2,
-      title: 'Ese capítulo sí',
+      title: 'Esta es nuestra casa',
       durationSeconds: 4,
       visualPrompt:
-        'Elena termina de guardar el cuaderno y mira a Sofía con serenidad. Elena es la única hablante. Mantener exactamente rostro, edad, vestuario y luz de Vida recuperada.',
+        'Elena mira directamente a Sofía dentro del hogar recuperado. Elena es la única hablante. Su expresión mezcla alivio, orgullo y emoción contenida. Mantener exactamente rostro, edad, vestuario y luz de Vida recuperada.',
       camera:
         'Primer plano íntimo de Elena, push-in físico mínimo, labios visibles, sin cortes.',
-      spokenText: 'Ese capítulo sí.',
+      spokenText: '¿Ves? Te lo prometí… esta es nuestra casa.',
       speakerId: SCENE6_ELENA_ID_V6,
       characterIds: [SCENE6_ELENA_ID_V6, SCENE6_SOFIA_ID_V6],
       provider: 'wan'
@@ -168,12 +171,12 @@ function buildShots(sceneId: string): FilmShot[] {
     shot({
       id: sceneId + '-v6-shot-03',
       order: 3,
-      title: 'Salir juntos',
+      title: 'Hogar',
       durationSeconds: 4,
       visualPrompt:
-        'Elena toma a Sofía y Mateo de la mano y los tres salen juntos de la casa. El cuaderno queda guardado. Una sola acción: caminar hacia la salida. Nadie habla. Cierre cálido, sencillo y contenido; sin triunfo ostentoso.',
+        'Elena reúne a Sofía y Mateo y los tres se abrazan dentro de la casa recuperada. Nadie habla. Una sola acción: abrazo familiar sincero y contenido. La cámara revela el hogar alrededor de ellos; sin triunfo ostentoso.',
       camera:
-        'Plano medio amplio desde atrás y ligeramente lateral; pequeño dolly de acompañamiento hacia la salida, sin cortes.',
+        'Plano medio que se abre suavemente a plano amplio, pequeño dolly hacia atrás, sin cortes.',
       spokenText: '',
       speakerId: undefined,
       characterIds: [SCENE6_ELENA_ID_V6, SCENE6_SOFIA_ID_V6, SCENE6_MATEO_ID_V6],
@@ -209,10 +212,7 @@ function shot(input: {
             id: input.id + '-line',
             speakerId: input.speakerId,
             text: input.spokenText,
-            emotion:
-              input.speakerId === SCENE6_SOFIA_ID_V6
-                ? 'natural, infantil y curiosa'
-                : 'serena',
+            emotion: 'emocionada, serena y contenida',
             startSeconds: 0,
             endSeconds: input.durationSeconds
           }]
