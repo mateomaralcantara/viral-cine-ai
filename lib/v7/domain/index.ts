@@ -14,4 +14,7 @@ export * from './audit';
 export * from './version';
 export * from './timeline';
 export * from './library';
+export * from './spend';
+export * from './rights';
+export * from './permission';
 export * from './film';
