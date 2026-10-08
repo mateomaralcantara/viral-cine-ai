@@ -182,7 +182,7 @@ function shot(input: {
           }]
         : [],
     motionSpec: {
-      version: '6.0-scene6b-repair',
+      version: '5.0-real-motion-v1',
       intention:
         input.spokenText
           ? 'Aislar a Elena para diálogo visible sin mezcla de identidad.'
