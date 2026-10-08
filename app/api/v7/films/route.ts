@@ -5,6 +5,7 @@ import {
   preflightV7FilmCreation,
   V7FilmCreationInputSchema
 } from '@/lib/v7/creation/film-creation';
+import { summarizeV7FilmLibraryItem } from '@/lib/v7/library/library-view';
 import {
   listV7FilmBundles,
   readV7FilmBundle,
@@ -19,7 +20,7 @@ export async function GET() {
   const bundles = await listV7FilmBundles();
   return NextResponse.json({
     ok: true,
-    films: bundles.map((bundle) => summarize(bundle)),
+    films: bundles.map(summarizeV7FilmLibraryItem),
     externalApis: false,
     apiCostUsd: 0
   });
@@ -56,7 +57,7 @@ export async function POST(request: Request) {
         ok: true,
         idempotentReplay: true,
         preflight,
-        film: summarize(existing),
+        film: summarizeV7FilmLibraryItem(existing),
         workflow: existing.workflow,
         externalApis: false,
         apiCostUsd: 0
@@ -77,7 +78,7 @@ export async function POST(request: Request) {
       ok: true,
       idempotentReplay: false,
       preflight,
-      film: summarize(stored),
+      film: summarizeV7FilmLibraryItem(stored),
       workflow: stored.workflow,
       externalApis: false,
       apiCostUsd: 0
@@ -92,37 +93,4 @@ export async function POST(request: Request) {
 
 function stableFilmId(requestId: string) {
   return 'film-' + createHash('sha256').update(requestId).digest('hex').slice(0, 24);
-}
-
-function summarize(bundle: Awaited<ReturnType<typeof readV7FilmBundle>>) {
-  const sequences = bundle.film.acts.flatMap((act) => act.sequences);
-  const scenes = sequences.flatMap((sequence) => sequence.scenes);
-  const shots = scenes.flatMap((scene) => scene.shots);
-  const takes = shots.flatMap((shot) => shot.takes);
-  const nextStage = bundle.workflow?.stages.find((stage) =>
-    stage.status === 'ready' || stage.status === 'in-progress'
-  );
-
-  return {
-    id: bundle.film.id,
-    title: bundle.film.title,
-    story: bundle.film.premise,
-    durationMinutes: bundle.film.durationMinutes,
-    genre: bundle.film.genre,
-    aspectRatio: bundle.film.aspectRatio,
-    language: bundle.film.language,
-    budgetUsd: bundle.film.budgetUsd,
-    quality: bundle.creationInput?.quality ?? bundle.film.metadata.qualityPreset ?? 'cine',
-    acts: bundle.film.acts.length,
-    sequences: sequences.length,
-    scenes: scenes.length,
-    shots: shots.length,
-    takes: takes.length,
-    characters: bundle.film.characters.length,
-    legacyProjectId: bundle.film.legacyProjectId,
-    nextStage: nextStage?.id ?? null,
-    nextStageLabel: nextStage?.label ?? null,
-    updatedAt: bundle.film.updatedAt,
-    savedAt: bundle.savedAt
-  };
 }
