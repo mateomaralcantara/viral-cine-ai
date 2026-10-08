@@ -22,10 +22,11 @@ if ($attempt.state -notin @('failed-no-charge-assumed','failed-unknown')) {
 
 $attempt.state = 'failed-unknown'
 $attempt.retry_allowed = $false
-$attempt.credits_risk_max = 104
-$attempt.voice_previews_confirmed = 0
-$attempt.reconciled_at = (Get-Date).ToUniversalTime().ToString('o')
-$attempt.reconciliation_note = 'HTTP 400 occurred after POST. No previews confirmed. Treat up to 104 credits as at risk until usage analytics confirms otherwise.'
+
+$attempt | Add-Member -NotePropertyName 'credits_risk_max' -NotePropertyValue 104 -Force
+$attempt | Add-Member -NotePropertyName 'voice_previews_confirmed' -NotePropertyValue 0 -Force
+$attempt | Add-Member -NotePropertyName 'reconciled_at' -NotePropertyValue ((Get-Date).ToUniversalTime().ToString('o')) -Force
+$attempt | Add-Member -NotePropertyName 'reconciliation_note' -NotePropertyValue 'HTTP 400 occurred after POST. No previews confirmed. Treat up to 104 credits as at risk until usage analytics confirms otherwise.' -Force
 
 $attempt | ConvertTo-Json -Depth 8 | Set-Content -Path $AttemptPath -Encoding UTF8
 
