@@ -100,7 +100,7 @@ test('master plan ordena y acepta tomas aprobadas listas', () => {
   assert.deepEqual(result.blockers, []);
 });
 
-test('master plan bloquea una toma no promovida a 4.2', () => {
+test('master plan bloquea pipeline legacy no aprobado', () => {
   const project = fixture();
   project.plan!.scenes[0].shots[1].pipelineVersion = '3.3-legacy';
   const result = buildMasterExportPlan(project);
@@ -131,4 +131,23 @@ test('master export registra pelicula-final.mp4 para UI y descarga', async () =>
   assert.match(source, /phase: 'master-exported'/);
   assert.match(source, /saveProject\(project\)/);
   assert.match(source, /FINAL_VIDEO_ASSET=/);
+});
+
+
+test('master plan acepta exactamente el pipeline 4.0-audio-first aprobado', () => {
+  const project = fixture();
+  project.plan!.scenes[0].shots[0].pipelineVersion = '4.0-audio-first';
+  project.plan!.scenes[0].shots[1].pipelineVersion = '4.0-audio-first';
+  const result = buildMasterExportPlan(project);
+  assert.equal(result.readyShots, 2);
+  assert.deepEqual(result.blockers, []);
+});
+
+test('master plan no abre toda la familia 4.0: bloquea variantes desconocidas', () => {
+  const project = fixture();
+  project.plan!.scenes[0].shots[0].pipelineVersion = '4.0-legacy-unknown';
+  const result = buildMasterExportPlan(project);
+  assert.equal(result.readyShots, 1);
+  assert.equal(result.blockers.length, 1);
+  assert.match(result.blockers[0], /pipeline no aprobado para master/);
 });
