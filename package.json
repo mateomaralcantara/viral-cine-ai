@@ -1,16 +1,16 @@
 {
   "name": "viralcine-studio-pro",
-  "version": "4.2.0",
+  "version": "7.0.0",
   "private": true,
   "type": "module",
-  "description": "Estudio privado de producción audiovisual larga con pipeline audio-first, voces persistentes, video IA real, lip-sync y montaje FFmpeg.",
+  "description": "ViralCine 7 Feature Film OS: creación audiovisual modular para cortos y largometrajes con continuidad, Voice DNA, QA, versionado y producción segura.",
   "scripts": {
     "dev": "next dev --webpack",
-    "worker": "node --import tsx scripts/worker.ts",
-    "studio": "concurrently -n WEB,WORKER -c cyan,magenta \"next dev --webpack\" \"node --import tsx scripts/worker.ts\"",
+    "worker": "node --import tsx scripts/worker-v7.ts",
+    "studio": "next dev --webpack",
     "build": "next build",
     "start": "next start",
-    "studio:prod": "concurrently -n WEB,WORKER -c cyan,magenta \"next start\" \"node --import tsx scripts/worker.ts\"",
+    "studio:prod": "next start",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts",
     "smoke": "node --import tsx scripts/smoke-pipeline.ts",
@@ -94,7 +94,12 @@
     "safe:scene6:sofia-v3-preflight": "powershell -ExecutionPolicy Bypass -File ./scripts/PREFLIGHT-SOFIA-VOICE-V3-ELEVENLABS.ps1",
     "safe:scene6:sofia-v3-design": "powershell -ExecutionPolicy Bypass -File ./scripts/DESIGN-SOFIA-VOICE-V3-ELEVENLABS.ps1",
     "safe:scene6:sofia-v3-reconcile-400": "powershell -ExecutionPolicy Bypass -File ./scripts/RECONCILE-SOFIA-V3-HTTP400.ps1",
-    "safe:scene6:sofia-v3-usage-audit": "powershell -ExecutionPolicy Bypass -File ./scripts/AUDIT-SOFIA-V3-ELEVENLABS-USAGE.ps1"
+    "safe:scene6:sofia-v3-usage-audit": "powershell -ExecutionPolicy Bypass -File ./scripts/AUDIT-SOFIA-V3-ELEVENLABS-USAGE.ps1",
+    "worker:v6-legacy": "node --import tsx scripts/worker.ts",
+    "studio:v6-legacy": "concurrently -n WEB,WORKER -c cyan,magenta \"next dev --webpack\" \"node --import tsx scripts/worker.ts\"",
+    "studio:prod:v6-legacy": "concurrently -n WEB,WORKER -c cyan,magenta \"next start\" \"node --import tsx scripts/worker.ts\"",
+    "migrate:v7": "node --import tsx scripts/migrate-v6-to-v7.ts",
+    "verify:v7": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",

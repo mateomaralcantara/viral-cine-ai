@@ -104,7 +104,7 @@ export default function V7FeatureFilmOS() {
         <div className="flex flex-wrap items-start justify-between gap-5">
           <div>
             <a href="/" className="mb-5 inline-flex items-center gap-2 text-sm font-bold text-slate-400 hover:text-white">
-              <ArrowLeft className="h-4 w-4" /> ViralCine 6
+              <ArrowLeft className="h-4 w-4" /> ViralCine 7
             </a>
             <div className="flex items-center gap-3 text-violet-300">
               <BrainCircuit className="h-6 w-6" />
@@ -112,7 +112,7 @@ export default function V7FeatureFilmOS() {
             </div>
             <h1 className="mt-3 text-3xl font-black md:text-5xl">ViralCine 7</h1>
             <p className="mt-3 max-w-3xl leading-7 text-slate-400">
-              Arquitectura paralela para cortos y largometrajes: Film → Act → Sequence → Scene → Shot → Take,
+              Arquitectura principal para cortos y largometrajes: Film → Act → Sequence → Scene → Shot → Take,
               continuidad persistente, Voice DNA, jobs, QA jerárquico, timeline y versionado.
             </p>
           </div>
