@@ -288,3 +288,20 @@ test('PowerShell parser acepta Sofia Voice V2B en Windows', () => {
     'PowerShell parser fallo:\n' + result.stdout + '\n' + result.stderr
   );
 });
+
+
+test('Sofia Voice V2B reconoce flags SAFE en .env.local con regex PowerShell correcto', async () => {
+  const script = await readFile(
+    new URL('../scripts/CREATE-SOFIA-VOICE-V2B.ps1', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(
+    script,
+    /\$pattern = '\^\\s\*' \+ \[regex\]::Escape\(\$Name\) \+ '\\s\*=\\s\*\(\.\*\)\\s\*\$'/
+  );
+  assert.doesNotMatch(script, /\^\\\\s\*/);
+  assert.match(script, /Get-DotEnvValue 'ALLOW_EXTERNAL_API_CALLS'/);
+  assert.match(script, /Get-DotEnvValue 'ALLOW_PAID_GENERATION'/);
+  assert.match(script, /Get-DotEnvValue 'ALLOW_PAID_PROVIDER_FALLBACK'/);
+});
