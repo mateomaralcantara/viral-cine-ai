@@ -17,7 +17,7 @@ function Get-DotEnvValue {
     param([string]$Name)
 
     $value = $null
-    $pattern = '^\\s*' + [regex]::Escape($Name) + '\\s*=\\s*(.*)\\s*$'
+    $pattern = '^\s*' + [regex]::Escape($Name) + '\s*=\s*(.*)\s*$'
 
     foreach ($line in Get-Content $EnvFile) {
         if ($line -match $pattern) {
