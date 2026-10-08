@@ -305,3 +305,28 @@ test('Sofia Voice V2B reconoce flags SAFE en .env.local con regex PowerShell cor
   assert.match(script, /Get-DotEnvValue 'ALLOW_PAID_GENERATION'/);
   assert.match(script, /Get-DotEnvValue 'ALLOW_PAID_PROVIDER_FALLBACK'/);
 });
+
+
+test('Sofia Voice V2B no contiene una segunda copia concatenada', async () => {
+  const script = await readFile(
+    new URL('../scripts/CREATE-SOFIA-VOICE-V2B.ps1', import.meta.url),
+    'utf8'
+  );
+
+  assert.equal(
+    (script.match(/function Get-DotEnvValue/g) || []).length,
+    1
+  );
+  assert.equal(
+    (script.match(/function Assert-SafeLock/g) || []).length,
+    1
+  );
+  assert.equal(
+    (script.match(/\$pattern =/g) || []).length,
+    1
+  );
+  assert.equal(
+    (script.match(/Start-Process -FilePath \$WavPath/g) || []).length,
+    2
+  );
+});
