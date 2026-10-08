@@ -108,7 +108,18 @@ for (const ref of refs) {
 }
 console.log('');
 console.log('COSTO SI SE AUTORIZA DESPUES');
-console.log('T2 WAN: ' + wanCredits + ' créditos = US
+console.log(
+  'T2 WAN: ' +
+    wanCredits +
+    ' créditos = US$' +
+    (wanCredits * 0.01).toFixed(2)
+);
+console.log(
+  'T1+T3 Grok Lite: ' +
+    runwayCredits +
+    ' créditos = US$' +
+    (runwayCredits * 0.01).toFixed(2)
+);
 console.log('Video total: US$' + SCENE6_MAX_VIDEO_USD_V6.toFixed(2));
 console.log('Voces máximo: US$' + SCENE6_MAX_VOICE_USD_V6.toFixed(2));
 console.log('Tope total provisional: US$' + SCENE6_SAFE_MAX_USD_V6.toFixed(2));
@@ -126,99 +137,12 @@ async function referenceStatus(
   characterId: string,
   stateId: string
 ) {
-  const character = currentProject.plan!.characters.find((item) => item.id === characterId);
-  const bible = currentProject.plan!.realMotion?.characterBible.find((item) => item.characterId === characterId);
-  const state = bible?.states.find((item) => item.id === stateId);
-
-  const candidates = [
-    state?.referenceAsset,
-    bible?.bodyReferenceAsset,
-    bible?.masterReferenceAsset,
-    character?.referenceAsset
-  ].filter((value): value is string => Boolean(value));
-
-  for (const asset of candidates) {
-    try {
-      await access(assetAbsolutePath(currentProject.id, asset));
-      return {
-        label: character?.name || characterId,
-        ready: true,
-        asset
-      };
-    } catch {}
-  }
-
-  return {
-    label: character?.name || characterId,
-    ready: false,
-    asset: ''
-  };
-}
- + (wanCredits * 0.01).toFixed(2));
-console.log('T1+T3 Grok Lite: ' + runwayCredits + ' créditos = US
-console.log('Video total: US$' + SCENE6_MAX_VIDEO_USD_V6.toFixed(2));
-console.log('Voces máximo: US$' + SCENE6_MAX_VOICE_USD_V6.toFixed(2));
-console.log('Tope total provisional: US$' + SCENE6_SAFE_MAX_USD_V6.toFixed(2));
-console.log('');
-console.log('Fal.ai: PROHIBIDO / NO USADO');
-console.log('Generación ejecutada: NO');
-console.log('APIs externas: NO');
-console.log('Gasto de este preflight: US$0');
-console.log('SCENE6_SOFIA_AUDITION_REQUIRED=YES');
-console.log('SCENE6_PREPARE=PASS');
-
-async function referenceStatus(
-  currentProject: typeof project,
-  characterId: string,
-  stateId: string
-) {
-  const character = currentProject.plan!.characters.find((item) => item.id === characterId);
-  const bible = currentProject.plan!.realMotion?.characterBible.find((item) => item.characterId === characterId);
-  const state = bible?.states.find((item) => item.id === stateId);
-
-  const candidates = [
-    state?.referenceAsset,
-    bible?.bodyReferenceAsset,
-    bible?.masterReferenceAsset,
-    character?.referenceAsset
-  ].filter((value): value is string => Boolean(value));
-
-  for (const asset of candidates) {
-    try {
-      await access(assetAbsolutePath(currentProject.id, asset));
-      return {
-        label: character?.name || characterId,
-        ready: true,
-        asset
-      };
-    } catch {}
-  }
-
-  return {
-    label: character?.name || characterId,
-    ready: false,
-    asset: ''
-  };
-}
- + (runwayCredits * 0.01).toFixed(2));
-console.log('Video total: US$' + SCENE6_MAX_VIDEO_USD_V6.toFixed(2));
-console.log('Voces máximo: US$' + SCENE6_MAX_VOICE_USD_V6.toFixed(2));
-console.log('Tope total provisional: US$' + SCENE6_SAFE_MAX_USD_V6.toFixed(2));
-console.log('');
-console.log('Fal.ai: PROHIBIDO / NO USADO');
-console.log('Generación ejecutada: NO');
-console.log('APIs externas: NO');
-console.log('Gasto de este preflight: US$0');
-console.log('SCENE6_SOFIA_AUDITION_REQUIRED=YES');
-console.log('SCENE6_PREPARE=PASS');
-
-async function referenceStatus(
-  currentProject: typeof project,
-  characterId: string,
-  stateId: string
-) {
-  const character = currentProject.plan!.characters.find((item) => item.id === characterId);
-  const bible = currentProject.plan!.realMotion?.characterBible.find((item) => item.characterId === characterId);
+  const character = currentProject.plan!.characters.find(
+    (item) => item.id === characterId
+  );
+  const bible = currentProject.plan!.realMotion?.characterBible.find(
+    (item) => item.characterId === characterId
+  );
   const state = bible?.states.find((item) => item.id === stateId);
 
   const candidates = [
