@@ -1,12 +1,19 @@
+import type { FilmProject } from '@/lib/domain/schemas';
 import { listProjects } from '@/lib/storage/project-store';
+import { createV7FilmDraft } from '@/lib/v7/creation/film-creation';
 import { adaptLegacyProjectToV7 } from '@/lib/v7/compat/legacy-project-adapter';
+import { FilmV7Schema } from '@/lib/v7/domain/film';
 import {
-  readV7FilmBundle,
-  saveV7FilmBundle
+  createInitialV7Workflow,
+  type V7FilmWorkflow
+} from '@/lib/v7/domain/workflow';
+import {
+  saveV7FilmBundle,
+  v7FilmBundleExists
 } from '@/lib/v7/storage/film-store';
 
 export type V6CatalogMigrationResult = {
-  migrated: Array<{ projectId: string; filmId: string; title: string }>;
+  migrated: Array<{ projectId: string; filmId: string; title: string; mode: 'planned' | 'draft' }>;
   skipped: Array<{ projectId: string; filmId: string; title: string; reason: string }>;
   failed: Array<{ projectId: string; title: string; error: string }>;
 };
@@ -17,19 +24,11 @@ export async function migrateV6CatalogToV7(): Promise<V6CatalogMigrationResult> 
 
   for (const project of projects) {
     try {
-      if (!project.plan) {
-        result.skipped.push({
-          projectId: project.id,
-          filmId: '',
-          title: project.input.title,
-          reason: 'Proyecto V6 sin plan; queda disponible como legacy hasta que tenga plan.'
-        });
-        continue;
-      }
+      const bundle = project.plan
+        ? migratePlannedProject(project)
+        : migrateDraftProject(project);
 
-      const bundle = adaptLegacyProjectToV7(project);
-      try {
-        await readV7FilmBundle(bundle.film.id);
+      if (await v7FilmBundleExists(bundle.film.id)) {
         result.skipped.push({
           projectId: project.id,
           filmId: bundle.film.id,
@@ -37,15 +36,14 @@ export async function migrateV6CatalogToV7(): Promise<V6CatalogMigrationResult> 
           reason: 'Ya existe en V7; no se sobrescribe.'
         });
         continue;
-      } catch {
-        // No existe todavía: se materializa abajo.
       }
 
       await saveV7FilmBundle(bundle);
       result.migrated.push({
         projectId: project.id,
         filmId: bundle.film.id,
-        title: bundle.film.title
+        title: bundle.film.title,
+        mode: project.plan ? 'planned' : 'draft'
       });
     } catch (error) {
       result.failed.push({
@@ -57,4 +55,85 @@ export async function migrateV6CatalogToV7(): Promise<V6CatalogMigrationResult> 
   }
 
   return result;
+}
+
+function migratePlannedProject(project: FilmProject) {
+  const adapted = adaptLegacyProjectToV7(project);
+  return {
+    ...adapted,
+    workflow: workflowFromLegacy(project)
+  };
+}
+
+function migrateDraftProject(project: FilmProject) {
+  const draft = createV7FilmDraft({
+    title: project.input.title,
+    story: project.input.premise,
+    durationMinutes: project.input.durationMinutes,
+    genre: project.input.genre,
+    aspectRatio: project.input.aspectRatio,
+    language: project.input.language,
+    budgetUsd: project.input.budgetUsd,
+    quality: 'cine'
+  }, project.createdAt, 'v7-draft-' + project.id);
+
+  const film = FilmV7Schema.parse({
+    ...draft.film,
+    legacyProjectId: project.id,
+    audience: project.input.audience,
+    visualStyle: project.input.visualStyle || draft.film.visualStyle,
+    updatedAt: project.updatedAt,
+    metadata: {
+      ...draft.film.metadata,
+      source: 'viralcine-6-draft',
+      originalV6Status: project.status
+    }
+  });
+
+  return {
+    film,
+    assets: [],
+    voiceProfiles: [],
+    creationInput: draft.creationInput,
+    workflow: draft.workflow
+  };
+}
+
+function workflowFromLegacy(project: FilmProject): V7FilmWorkflow {
+  const now = project.updatedAt;
+  const workflow = createInitialV7Workflow(now);
+  const complete = Boolean(project.finalVideoAsset);
+
+  return {
+    stages: workflow.stages.map((stage) => {
+      if (complete) {
+        return {
+          ...stage,
+          status: stage.id === 'music' && !project.musicAsset ? 'pending' as const : 'approved' as const,
+          notes: ['Migrado desde ViralCine 6 completado.'],
+          updatedAt: now
+        };
+      }
+
+      if (stage.id === 'project' || stage.id === 'story') {
+        return {
+          ...stage,
+          status: 'approved' as const,
+          notes: ['Migrado desde plan V6 existente.'],
+          updatedAt: now
+        };
+      }
+
+      if (stage.id === 'casting' && project.plan?.characters.length) {
+        return {
+          ...stage,
+          status: 'ready' as const,
+          notes: ['Personajes V6 disponibles para endurecimiento V7.'],
+          updatedAt: now
+        };
+      }
+
+      return stage;
+    })
+  };
 }

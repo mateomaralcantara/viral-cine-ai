@@ -1,16 +1,20 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import { dataRoot } from '@/lib/storage/project-store';
+import { V7FilmCreationInputSchema } from '@/lib/v7/creation/film-creation';
 import { AssetSchema } from '@/lib/v7/domain/asset';
 import { FilmV7Schema } from '@/lib/v7/domain/film';
+import { V7FilmWorkflowSchema } from '@/lib/v7/domain/workflow';
 import { VoiceProfileSchema } from '@/lib/v7/domain/voice-profile';
 
 export const StoredFilmBundleSchema = z.object({
   film: FilmV7Schema,
   assets: z.array(AssetSchema).default([]),
   voiceProfiles: z.array(VoiceProfileSchema).default([]),
+  creationInput: V7FilmCreationInputSchema.optional(),
+  workflow: V7FilmWorkflowSchema.optional(),
   savedAt: z.string()
 });
 
@@ -25,6 +29,19 @@ export function v7FilmRoot(filmId: string) {
   return path.join(v7DataRoot(), 'films', filmId);
 }
 
+export function v7FilmBundlePath(filmId: string) {
+  return path.join(v7FilmRoot(filmId), 'bundle.json');
+}
+
+export async function v7FilmBundleExists(filmId: string) {
+  try {
+    await access(v7FilmBundlePath(filmId));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function saveV7FilmBundle(
   bundle: Omit<StoredFilmBundle, 'savedAt'> & { savedAt?: string }
 ) {
@@ -34,7 +51,7 @@ export async function saveV7FilmBundle(
   });
   const root = v7FilmRoot(parsed.film.id);
   await mkdir(root, { recursive: true });
-  const target = path.join(root, 'bundle.json');
+  const target = v7FilmBundlePath(parsed.film.id);
   const temporary = target + '.tmp-' + randomUUID();
   await writeFile(temporary, JSON.stringify(parsed, null, 2) + '\n', 'utf8');
   try {
@@ -47,7 +64,7 @@ export async function saveV7FilmBundle(
 }
 
 export async function readV7FilmBundle(filmId: string) {
-  const raw = await readFile(path.join(v7FilmRoot(filmId), 'bundle.json'), 'utf8');
+  const raw = await readFile(v7FilmBundlePath(filmId), 'utf8');
   return StoredFilmBundleSchema.parse(JSON.parse(raw));
 }
 

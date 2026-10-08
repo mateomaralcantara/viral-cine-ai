@@ -17,4 +17,5 @@ export * from './library';
 export * from './spend';
 export * from './rights';
 export * from './permission';
+export * from './workflow';
 export * from './film';
