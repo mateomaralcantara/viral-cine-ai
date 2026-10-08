@@ -200,3 +200,232 @@ if (Test-Path $WavPath) {
     Write-Host ''
     Write-Host 'SOFIA V2 ya tiene audicion local. Se reutiliza; no se llama OpenAI.' -ForegroundColor Green
     Start-Process -FilePath $WavPath
+    exit 0
+}
+
+if ($Metadata.live_state -eq 'submitted' -or $Metadata.live_state -eq 'failed-unknown') {
+    throw ('LIVE RETRY BLOQUEADO. Estado previo: ' + $Metadata.live_state + '. Reconcilia antes de repetir.')
+}
+
+$Metadata.live_state = 'submitted'
+$Metadata.live_started_at = (Get-Date).ToUniversalTime().ToString('o')
+Save-Metadata -Metadata $Metadata -Path $MetaPath
+
+Write-Host ''
+Write-Host '=== AUDICION LIVE SOFIA V2 ===' -ForegroundColor Magenta
+Write-Host ('Texto exacto: ' + $AuditionText) -ForegroundColor Cyan
+Write-Host 'Live ceiling: 10 seconds ~= US$0.0084' -ForegroundColor Yellow
+Write-Host 'WAN: NO | Runway: NO | Fal.ai: NO' -ForegroundColor Green
+
+$ws = [System.Net.WebSockets.ClientWebSocket]::new()
+$ws.Options.SetRequestHeader('Authorization', ('Bearer ' + $ApiKey))
+$uri = [Uri]'wss://api.openai.com/v1/live/sessions'
+$cts = [System.Threading.CancellationTokenSource]::new()
+$cts.CancelAfter([TimeSpan]::FromSeconds(11))
+
+try {
+    $ws.ConnectAsync($uri, $cts.Token).GetAwaiter().GetResult()
+}
+catch {
+    $Metadata.live_state = 'failed-unknown'
+    Save-Metadata -Metadata $Metadata -Path $MetaPath
+    throw ('LIVE CONNECT FALLIDO O AMBIGUO. NO HAGAS RETRY. ' + $_.Exception.Message)
+}
+
+$sessionStart = [ordered]@{
+    type = 'session.start'
+    event_id = 'sofia_v2_start'
+    session = [ordered]@{
+        model = 'gpt-live-1'
+        instructions = 'Speak in Latin American Spanish. Use the configured custom voice naturally. Wait for application instructions before speaking.'
+        audio = [ordered]@{
+            format = [ordered]@{
+                type = 'audio/pcm'
+                rate = 24000
+            }
+            output = [ordered]@{
+                voice = [ordered]@{
+                    id = $VoiceId
+                }
+            }
+        }
+        delegation = [ordered]@{
+            type = 'client'
+        }
+        store = $false
+    }
+}
+
+Send-JsonWs -Socket $ws -Payload $sessionStart -Token $cts.Token
+
+$pcm = [System.IO.MemoryStream]::new()
+$started = $false
+$instructionSent = $false
+$heardAudio = $false
+$lastAudioAt = [DateTime]::MinValue
+$transcript = ''
+$hardDeadline = [DateTime]::UtcNow.AddSeconds(10)
+$buffer = New-Object byte[] 131072
+
+try {
+    while ([DateTime]::UtcNow -lt $hardDeadline) {
+        if ($ws.State -ne [System.Net.WebSockets.WebSocketState]::Open) {
+            break
+        }
+
+        $receiveCts = [System.Threading.CancellationTokenSource]::new()
+        $receiveCts.CancelAfter(500)
+
+        try {
+            $message = [System.IO.MemoryStream]::new()
+
+            do {
+                $segment = [ArraySegment[byte]]::new($buffer)
+                $result = $ws.ReceiveAsync($segment, $receiveCts.Token).GetAwaiter().GetResult()
+
+                if ($result.MessageType -eq [System.Net.WebSockets.WebSocketMessageType]::Close) {
+                    break
+                }
+
+                if ($result.Count -gt 0) {
+                    $message.Write($buffer, 0, $result.Count)
+                }
+            }
+            while (-not $result.EndOfMessage)
+
+            if ($message.Length -eq 0) {
+                continue
+            }
+
+            $eventText = [System.Text.Encoding]::UTF8.GetString($message.ToArray())
+            $event = $eventText | ConvertFrom-Json
+
+            if ($event.type -eq 'error') {
+                $detail = $eventText
+                if ($event.error -and $event.error.message) {
+                    $detail = [string]$event.error.message
+                }
+                throw ('LIVE ERROR: ' + $detail)
+            }
+
+            if ($event.type -eq 'session.started') {
+                $started = $true
+
+                if (-not $instructionSent) {
+                    $sayInstruction = [string]::Join(' ', @(
+                        'Immediately say the following line exactly and in full.',
+                        'Do not add or omit any word.',
+                        'Use a natural warm curious daughter-to-mother delivery.',
+                        'Then stop speaking.',
+                        $AuditionText
+                    ))
+
+                    Send-JsonWs -Socket $ws -Payload ([ordered]@{
+                        type = 'session.instructions.append'
+                        event_id = 'sofia_v2_say'
+                        delegation_id = $null
+                        content = $sayInstruction
+                    }) -Token $cts.Token
+
+                    $instructionSent = $true
+                }
+            }
+            elseif ($event.type -eq 'session.output_audio.delta' -and $event.delta) {
+                $chunk = [Convert]::FromBase64String([string]$event.delta)
+                $pcm.Write($chunk, 0, $chunk.Length)
+                $heardAudio = $true
+                $lastAudioAt = [DateTime]::UtcNow
+            }
+            elseif ($event.type -eq 'session.output_transcript.delta' -and $event.delta) {
+                $transcript += [string]$event.delta
+            }
+
+            if (
+                $heardAudio -and
+                $lastAudioAt -ne [DateTime]::MinValue -and
+                ([DateTime]::UtcNow - $lastAudioAt).TotalMilliseconds -gt 900
+            ) {
+                break
+            }
+        }
+        catch [System.OperationCanceledException] {
+            if (
+                $heardAudio -and
+                $lastAudioAt -ne [DateTime]::MinValue -and
+                ([DateTime]::UtcNow - $lastAudioAt).TotalMilliseconds -gt 900
+            ) {
+                break
+            }
+        }
+        finally {
+            $receiveCts.Dispose()
+        }
+    }
+
+    if ($ws.State -eq [System.Net.WebSockets.WebSocketState]::Open) {
+        Send-JsonWs -Socket $ws -Payload ([ordered]@{
+            type = 'session.close'
+            event_id = 'sofia_v2_close'
+        }) -Token ([System.Threading.CancellationToken]::None)
+    }
+}
+catch {
+    $Metadata.live_state = 'failed-unknown'
+    $Metadata.transcript = $transcript
+    Save-Metadata -Metadata $Metadata -Path $MetaPath
+    try { $ws.Dispose() } catch {}
+    try { $cts.Dispose() } catch {}
+    throw
+}
+
+try { $ws.Dispose() } catch {}
+try { $cts.Dispose() } catch {}
+
+if (-not $started) {
+    $Metadata.live_state = 'failed-unknown'
+    Save-Metadata -Metadata $Metadata -Path $MetaPath
+    throw 'Live no confirmo session.started. NO HAGAS RETRY.'
+}
+
+if (-not $heardAudio -or $pcm.Length -lt 1000) {
+    $Metadata.live_state = 'failed-unknown'
+    $Metadata.transcript = $transcript
+    Save-Metadata -Metadata $Metadata -Path $MetaPath
+    throw 'Live no devolvio audio suficiente. NO HAGAS RETRY.'
+}
+
+[System.IO.File]::WriteAllBytes($RawPcm, $pcm.ToArray())
+$pcm.Dispose()
+
+& ffmpeg -y -f s16le -ar 24000 -ac 1 -i $RawPcm -ar 48000 -ac 2 -c:a pcm_s16le $WavPath
+
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path $WavPath)) {
+    $Metadata.live_state = 'failed-unknown'
+    $Metadata.transcript = $transcript
+    Save-Metadata -Metadata $Metadata -Path $MetaPath
+    throw 'FFMPEG no pudo convertir la audicion. No se requiere otra llamada OpenAI.'
+}
+
+$Metadata.live_state = 'succeeded'
+$Metadata.live_succeeded_at = (Get-Date).ToUniversalTime().ToString('o')
+$Metadata.audio_path = $WavPath
+$Metadata.transcript = $transcript
+Save-Metadata -Metadata $Metadata -Path $MetaPath
+
+Write-Host ''
+Write-Host '==================================================' -ForegroundColor Green
+Write-Host ' SOFIA VOICE V2B - AUDICION LISTA' -ForegroundColor Green
+Write-Host '==================================================' -ForegroundColor Green
+Write-Host 'Voice ID: GUARDADO EN METADATA' -ForegroundColor Green
+Write-Host 'Pitch-shift: NO' -ForegroundColor Green
+Write-Host 'Remaster agresivo: NO' -ForegroundColor Green
+Write-Host 'WAN: NO' -ForegroundColor Green
+Write-Host 'Runway: NO' -ForegroundColor Green
+Write-Host 'Fal.ai: NO' -ForegroundColor Green
+Write-Host 'Live ceiling: 10s ~= US$0.0084' -ForegroundColor Yellow
+Write-Host ('Transcript: ' + $transcript) -ForegroundColor Cyan
+Write-Host ('AUDIO: ' + $WavPath) -ForegroundColor Cyan
+Write-Host 'SOFIA_V2_REVIEW_REQUIRED=YES' -ForegroundColor Yellow
+Write-Host '==================================================' -ForegroundColor Green
+
+Start-Process -FilePath $WavPath
