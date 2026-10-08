@@ -16,7 +16,7 @@ if ($attempt.http_status -ne 400) {
     throw ('Este reconciliador solo aplica a HTTP 400. Actual: ' + $attempt.http_status)
 }
 
-if ($attempt.state -notin @('failed-no-charge-assumed','failed-unknown')) {
+if ($attempt.state -ne 'failed-unknown') {
     throw ('Estado no reconciliable: ' + $attempt.state)
 }
 
