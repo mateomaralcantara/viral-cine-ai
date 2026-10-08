@@ -13,4 +13,5 @@ export * from './approval';
 export * from './audit';
 export * from './version';
 export * from './timeline';
+export * from './library';
 export * from './film';
