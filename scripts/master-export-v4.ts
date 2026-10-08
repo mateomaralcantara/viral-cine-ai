@@ -28,7 +28,7 @@ console.log(' VIRALCINE 4.2 — MASTER FINAL');
 console.log('==================================================');
 console.log('Proyecto: ' + project.id + ' — ' + project.input.title);
 console.log('Tomas totales: ' + plan.totalShots);
-console.log('Tomas listas 4.2: ' + plan.readyShots + '/' + plan.totalShots);
+console.log('Tomas listas para master: ' + plan.readyShots + '/' + plan.totalShots);
 console.log('Duración planificada: ' + plan.expectedDurationSeconds.toFixed(3) + 's');
 console.log('Tomas con fallback local de lip-sync: ' + plan.degradedLipSyncShots);
 console.log('Bloqueos estructurales: ' + plan.blockers.length);
