@@ -62,10 +62,12 @@ function authorized(request: Request) {
 }
 
 function flagsEnabled() {
+  // ONLY this named film/shot is enabled; global ViralCine paid routes stay off.
   return process.env.PRODUCTION_MODE === 'real' &&
-    process.env.V7_CINEMA_PAID_ENABLED === 'true' &&
-    process.env.ALLOW_EXTERNAL_API_CALLS === 'true' &&
-    process.env.ALLOW_PAID_GENERATION === 'true';
+    process.env.V7_DOS_TOQUES_P01_PAID_ENABLED === 'true' &&
+    process.env.V7_CINEMA_PAID_ENABLED !== 'true' &&
+    process.env.ALLOW_PAID_GENERATION !== 'true' &&
+    process.env.ALLOW_EXTERNAL_API_CALLS !== 'true';
 }
 
 function redactError(error: unknown) {
