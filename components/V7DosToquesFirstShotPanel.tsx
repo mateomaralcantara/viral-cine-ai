@@ -116,6 +116,18 @@ export default function V7DosToquesFirstShotPanel({ filmId }: { filmId: string }
         </button>
       </details>
 
+      {state?.referenceReady && (
+        <div className="mt-5">
+          <p className="mb-2 text-sm font-bold">Revisa el fotograma familiar V2 que recibirá Veo</p>
+          <img src={endpoint + '/reference'} alt="Fotograma inicial familiar E01-P01: verificar a Gabriel, Daniel y Lucía juntos con cascos"
+            className="aspect-video w-full rounded-xl border border-white/10 object-contain bg-black" />
+          <p className="mt-2 text-xs text-amber-200">
+            La presencia de las tres personas y sus identidades requiere confirmación humana.
+            Un PNG técnicamente válido no garantiza que el contenido sea correcto.
+          </p>
+        </div>
+      )}
+
       {!state?.referenceReady && (
         <div className="mt-5 rounded-2xl border border-dashed border-white/20 p-4">
           <h3 className="text-sm font-bold">Fotograma inicial familiar 16:9 — Gabriel, Daniel y Lucía</h3>
