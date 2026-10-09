@@ -1,0 +1,124 @@
+{
+  "filmId": "film-dos-toques-de-bocina-v7",
+  "title": "DOS TOQUES DE BOCINA",
+  "scoreTitle": "Dos toques de bocina — Banda sonora instrumental original V1",
+  "durationSeconds": 600,
+  "version": 1,
+  "composition": "Composición instrumental original de síntesis digital sin samples de terceros, sin voces, sin sonidos de bocina.",
+  "style": "Piano íntimo, cuerdas cálidas y violonchelo tenue; arcos en tonalidad menor con resolución luminosa al final.",
+  "lyrics": null,
+  "state": "editorial-review-required",
+  "autogeneratePaidAudio": false,
+  "mixPolicy": {
+    "dialoguePriority": true,
+    "recommendedMusicGainDb": -20,
+    "duckRangeDb": [
+      -24,
+      -16
+    ],
+    "noMusicPriorityWindows": [
+      [
+        131,
+        140
+      ],
+      [
+        556,
+        562
+      ],
+      [
+        577,
+        582
+      ]
+    ],
+    "hornSoundEffectSeparate": true,
+    "expectedHornBeepCount": 2,
+    "masterMustNotChangeWithoutApproval": true
+  },
+  "cues": [
+    {
+      "scene": 1,
+      "title": "La señal",
+      "start": 0,
+      "end": 50,
+      "feeling": "ternura cotidiana",
+      "sound": "Piano cálido y motivos ligeros; establecer la señal afectiva de dos notas"
+    },
+    {
+      "scene": 2,
+      "title": "El abandono",
+      "start": 50,
+      "end": 105,
+      "feeling": "ruptura",
+      "sound": "Piano menor aislado, cuerdas casi imperceptibles"
+    },
+    {
+      "scene": 3,
+      "title": "La sentencia",
+      "start": 105,
+      "end": 170,
+      "feeling": "derrota y silencio",
+      "sound": "Piano extremadamente contenido; abrir silencio de 131 a 140 para la sentencia y lluvia"
+    },
+    {
+      "scene": 4,
+      "title": "El motoconcho",
+      "start": 170,
+      "end": 230,
+      "feeling": "soledad y dignidad",
+      "sound": "Violoncelo bajo, piano de pocas notas, pulso lento"
+    },
+    {
+      "scene": 5,
+      "title": "El amigo",
+      "start": 230,
+      "end": 290,
+      "feeling": "esperanza tímida",
+      "sound": "Reaparece motivo en dos notas, armonía más luminosa"
+    },
+    {
+      "scene": 6,
+      "title": "El asiento vacío",
+      "start": 290,
+      "end": 350,
+      "feeling": "lágrimas y escritura",
+      "sound": "Piano en registro medio, pad suave y espacio para lectura"
+    },
+    {
+      "scene": 7,
+      "title": "El libro llega al mundo",
+      "start": 350,
+      "end": 410,
+      "feeling": "primer lector",
+      "sound": "Progresión de piano ascendente delicada, sin euforia ni promesas"
+    },
+    {
+      "scene": 8,
+      "title": "Veinte días",
+      "start": 410,
+      "end": 470,
+      "feeling": "reconocimiento",
+      "sound": "Cuerdas suaves aumentan amplitud y percusión ausente"
+    },
+    {
+      "scene": 9,
+      "title": "La conferencia",
+      "start": 470,
+      "end": 540,
+      "feeling": "vulnerabilidad y verdad",
+      "sound": "Piano y cuerdas con atenuación de diálogo, motivo de los hijos"
+    },
+    {
+      "scene": 10,
+      "title": "Dos toques",
+      "start": 540,
+      "end": 600,
+      "feeling": "reencuentro",
+      "sound": "Resolución tonal esperanzadora, silencio para bocina, cola instrumental final"
+    }
+  ],
+  "notes": [
+    "No confundir música de fondo con voces: voz y bocina deben mezclarse como pistas independientes.",
+    "Toda la música permanece en estado de preproducción editorial hasta aprobación auditiva.",
+    "No representar la vista previa conceptual del sitio Libroseller como captura web real."
+  ]
+}
