@@ -9,8 +9,10 @@ on:
       - feat/v7-new-film-10min
       - feat/v7-dos-toques-de-bocina-script
       - feat/v7-dos-toques-soundtrack-casting
+      - feat/v7-dos-toques-production-bible
   pull_request:
     branches:
+      - feat/v7-dos-toques-soundtrack-casting
       - feat/v7-dos-toques-de-bocina-script
       - feat/v7-new-film-10min
       - feat/v7-feature-film-level2
