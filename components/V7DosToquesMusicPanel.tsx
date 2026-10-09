@@ -40,7 +40,7 @@ export default function V7DosToquesMusicPanel({ filmId }: { filmId: string }) {
       const payload = await res.json() as { ok?: boolean; error?: string };
       if (!res.ok || !payload.ok) throw new Error(payload.error || 'Error al importar el MP3');
       setFile(null);
-      setMessage('Banda sonora importada para revisión editorial. Todavía no está mezclada ni aprobada.');
+      setMessage('Banda sonora importada. Composición aprobada; mezcla con voces y efectos pendiente.');
       await refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
@@ -61,13 +61,13 @@ export default function V7DosToquesMusicPanel({ filmId }: { filmId: string }) {
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
           <ShieldCheck className="h-4 w-4 text-emerald-300" />
-          <span>Sin llamadas pagadas · Sin reemplazar 15 DÍAS · Aprobación final pendiente</span>
+          <span>Composición musical aprobada · Sin llamadas pagadas · Mezcla final pendiente</span>
         </div>
         {ready ? (
           <>
             <audio src={url} controls preload="metadata" className="mt-5 w-full"
               aria-label="Banda sonora original de Dos Toques de Bocina" />
-            <p className="mt-2 text-xs text-amber-200">Importada; todavía no mezclada con las voces.</p>
+            <p className="mt-2 text-xs text-amber-200">Composición aprobada por el creador; todavía no mezclada con las voces.</p>
           </>
         ) : (
           <div className="mt-5 rounded-2xl border border-dashed border-white/20 p-4">
