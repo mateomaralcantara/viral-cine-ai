@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Copy, FileCheck2, LockKeyhole, RefreshCcw } from 'lucide-react';
 
 type Preflight = {
-  ok: boolean; shotId: string; durationSeconds: number;
+  ok: boolean; shotId: string; providerSeconds: number; filmShotSeconds: number; trimRequired: boolean;
   referenceReady: boolean; verifiedRateConfigured: boolean;
   filmBudgetUsd: number; localBudgetCapUsd: number;
   estimatedVideoUsd: number | null; readyForPaidSubmission: false;
@@ -84,8 +84,9 @@ export default function V7DosToquesFirstShotPanel({ filmId }: { filmId: string }
       </p>
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-white/10 p-3">
-          <p className="text-xs text-slate-400">Duración</p>
+          <p className="text-xs text-slate-400">Duración proveedor</p>
           <p className="mt-1 text-lg font-bold">8 segundos</p>
+          <p className="mt-1 text-xs text-slate-400">Montaje V7: {state ? state.filmShotSeconds.toFixed(2) + ' s' : 'consultando...'}</p>
         </div>
         <div className="rounded-xl border border-white/10 p-3">
           <p className="text-xs text-slate-400">Referencia inicial</p>
@@ -136,6 +137,8 @@ export default function V7DosToquesFirstShotPanel({ filmId }: { filmId: string }
           Controles para iniciar una generación real
         </h3>
         <p className="mt-2 text-xs text-slate-400">
+          El video de proveedor de 8 s debe recortarse a la duración real del guion V7,
+          aproximadamente 7,17 s, para no descuadrar los 10 minutos.
           El presupuesto de esta película continúa sin autorización para generación de video.
           Un precio estimado no es una autorización de pago.
         </p>
