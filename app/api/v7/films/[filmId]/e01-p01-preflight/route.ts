@@ -61,10 +61,11 @@ export async function GET(request: Request, context: Context) {
     const quote = estimateVeoUsd(8, DOS_TOQUES_FIRST_SHOT_BUDGET.providerRateUsdPerSecond);
     const tariffMatchesPublished = rate === DOS_TOQUES_FIRST_SHOT_BUDGET.providerRateUsdPerSecond;
     const paidSystemEnabled =
-      process.env.V7_CINEMA_PAID_ENABLED === 'true' &&
-      process.env.ALLOW_EXTERNAL_API_CALLS === 'true' &&
-      process.env.ALLOW_PAID_GENERATION === 'true' &&
-      process.env.PRODUCTION_MODE === 'real';
+      process.env.V7_DOS_TOQUES_P01_PAID_ENABLED === 'true' &&
+      process.env.PRODUCTION_MODE === 'real' &&
+      process.env.V7_CINEMA_PAID_ENABLED !== 'true' &&
+      process.env.ALLOW_EXTERNAL_API_CALLS !== 'true' &&
+      process.env.ALLOW_PAID_GENERATION !== 'true';
     const blockers: string[] = [];
     if (!referenceReady) blockers.push('Falta la referencia inicial 16:9 validada.');
     if (!tariffMatchesPublished) blockers.push('Configura la tarifa verificada de US$0.10/s de Veo 3.1 Fast 720p.');
