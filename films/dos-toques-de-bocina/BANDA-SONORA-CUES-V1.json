@@ -7,7 +7,7 @@
   "composition": "Composición instrumental original de síntesis digital sin samples de terceros, sin voces, sin sonidos de bocina.",
   "style": "Piano íntimo, cuerdas cálidas y violonchelo tenue; arcos en tonalidad menor con resolución luminosa al final.",
   "lyrics": null,
-  "state": "editorial-review-required",
+  "state": "composition-approved-mix-pending",
   "autogeneratePaidAudio": false,
   "mixPolicy": {
     "dialoguePriority": true,
@@ -120,5 +120,13 @@
     "No confundir música de fondo con voces: voz y bocina deben mezclarse como pistas independientes.",
     "Toda la música permanece en estado de preproducción editorial hasta aprobación auditiva.",
     "No representar la vista previa conceptual del sitio Libroseller como captura web real."
-  ]
+  ],
+  "approvedByCreator": true,
+  "editorialStatusNote": "Composición de fondo aprobada por el creador, 2026-10-09. Pendiente de importación local y mezcla con diálogos, ambiente, lluvia y bocina.",
+  "instrumentalTrackVerifiedLocally": {
+    "durationSeconds": 600.032653,
+    "codec": "mp3",
+    "sizeBytes": 12001435,
+    "note": "Archivo MP3 de 10 minutos verificado durante esta conversación; no se incluye el binario en GitHub."
+  }
 }
