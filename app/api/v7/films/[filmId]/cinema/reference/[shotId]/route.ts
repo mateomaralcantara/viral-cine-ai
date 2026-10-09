@@ -12,7 +12,7 @@ export async function GET(_request: Request, context: Context) {
     return new Response(new Uint8Array(buffer), {
       status: 200,
       headers: {
-        'Content-Type': 'image/jpeg',
+        'Content-Type': shotId === 'LS02' || shotId === 'LS05' ? 'image/png' : 'image/jpeg',
         'Content-Length': String(buffer.length),
         'Cache-Control': 'private, no-store',
         'X-Content-Type-Options': 'nosniff'
