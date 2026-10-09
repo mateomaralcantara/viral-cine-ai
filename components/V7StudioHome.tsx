@@ -34,6 +34,7 @@ export default function V7StudioHome() {
   const [films, setFilms] = useState<V7LibraryFilmSummary[]>([]);
   const [loadingFilms, setLoadingFilms] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [importingApprovedFilm, setImportingApprovedFilm] = useState(false);
   const [migrating, setMigrating] = useState(false);
   const [message, setMessage] = useState('');
   const [migrationMessage, setMigrationMessage] = useState('');
@@ -100,6 +101,23 @@ export default function V7StudioHome() {
     }
   }
 
+  async function importApprovedFilm() {
+    setImportingApprovedFilm(true);
+    setMessage('');
+    try {
+      const response = await fetch('/api/v7/films/presets/dos-toques-de-bocina', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const payload = await response.json() as { ok?: boolean; nextUrl?: string; error?: string };
+      if (!response.ok || !payload.ok || !payload.nextUrl) throw new Error(payload.error || 'No se pudo iniciar la preproducción.');
+      window.location.href = payload.nextUrl;
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : String(cause));
+      setImportingApprovedFilm(false);
+    }
+  }
+
   async function migrateLegacy() {
     setMigrating(true);
     setMigrationMessage('');
@@ -158,6 +176,18 @@ export default function V7StudioHome() {
           </div>
 
           <div className="grid gap-5">
+            <div className="rounded-2xl border border-violet-400/20 bg-violet-500/[.07] p-4">
+              <h3 className="text-base font-black">Segunda película aprobada: DOS TOQUES DE BOCINA</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-300">
+                Drama familiar · 10 minutos · 10 escenas · Guion literario V1 y perfiles de voz.
+                Proyecto independiente de «15 DÍAS». Crear la preproducción no genera video ni usa créditos.
+              </p>
+              <button type="button" className="button-primary mt-3" disabled={importingApprovedFilm || creating}
+                onClick={() => void importApprovedFilm()}>
+                {importingApprovedFilm ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Clapperboard className="h-4 w-4" />}
+                {importingApprovedFilm ? 'CREANDO PREPRODUCCIÓN…' : 'ABRIR PRODUCCIÓN: DOS TOQUES DE BOCINA'}
+              </button>
+            </div>
             <Field label="Título">
               <input
                 className="field"
