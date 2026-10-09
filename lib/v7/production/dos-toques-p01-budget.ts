@@ -14,7 +14,7 @@ export const DOS_TOQUES_FIRST_SHOT_BUDGET = Object.freeze({
   maxTotalUsd: 2.00,
   maxProviderSubmissions: 1,
   automaticRetries: 0,
-  requiresReferenceImage: true,
+  requiresReferenceImage: false, // Google Veo image-to-video restricts people to allow_adult; E01 has two children.
   requiresAdminAuthentication: true,
   requiresExplicitLocalAction: true,
   scope: 'one paid generation for E01-P01 only; no extra shots, no retry, no music or voice charges',
