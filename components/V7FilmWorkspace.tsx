@@ -157,6 +157,7 @@ export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
   const hasMaster = bundle.assets.some((asset) => asset.type === 'master' && asset.approved) ||
     typeof bundle.film.metadata.originalFinalVideoAsset === 'string';
   const masterUrl = '/api/v7/films/' + encodeURIComponent(filmId) + '/media/master';
+  const hasLibrosellerPackage = filmId === 'v7-film-01db01f78f6c0e5afee6';
 
   return (
     <main className="mx-auto min-h-screen max-w-[1500px] px-4 py-6 md:px-8">
@@ -249,7 +250,21 @@ export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
         </>
       )}
 
-      {tab === 'production' && <V7CinemaProductionPanel filmId={filmId} />}
+      {tab === 'production' && (hasLibrosellerPackage
+        ? <V7CinemaProductionPanel filmId={filmId} />
+        : <section className="panel mt-6 rounded-3xl p-6">
+            <h2 className="text-2xl font-bold">Producción de película nueva</h2>
+            <p className="mt-3 text-sm leading-6 text-slate-300">
+              Este proyecto es independiente de 15 DÍAS. Primero desarrolla y aprueba su guion,
+              personajes y referencias. El ejecutor de siete tomas de Libroseller pertenece
+              exclusivamente a la película anterior y no se reutilizará en esta.
+            </p>
+            <p className="mt-3 text-sm text-amber-300">
+              Generación pagada aún no configurada para este nuevo proyecto. No se ha creado video.
+            </p>
+            <a href={'/v7/films/' + encodeURIComponent(filmId) + '?tab=feature'}
+              className="button-secondary mt-4">Ver planificación de 10 minutos</a>
+          </section>)}
 
       {tab === 'feature' && <V7FeatureFilmPlanner filmId={filmId} />}
 
