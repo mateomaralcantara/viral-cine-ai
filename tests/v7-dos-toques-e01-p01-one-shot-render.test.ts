@@ -15,6 +15,10 @@ test('the new Veo first-shot endpoint honors one-shot budget and stores reservat
   assert.equal(AUTH.automaticRetries, 0);
   assert.match(source, /const MODEL = 'veo-3\.1-fast-generate-preview'/);
   assert.match(source, /const RATE = 0\.10/);
+  assert.match(source, /V7_DOS_TOQUES_P01_PAID_ENABLED/);
+  assert.match(source, /V7_CINEMA_PAID_ENABLED !== 'true'/);
+  assert.match(source, /ALLOW_PAID_GENERATION !== 'true'/);
+  assert.match(source, /ALLOW_EXTERNAL_API_CALLS !== 'true'/);
   assert.match(source, /status: 'reserved'/);
   assert.match(source, /flag: 'wx'/);
   const reservation = source.indexOf('await writeFile(recordPath()');
