@@ -83,9 +83,10 @@ Write-Host $env:V7_CINEMA_ADMIN_TOKEN -ForegroundColor Magenta
 $url = "http://localhost:3010/v7/films/$filmId" + '?tab=scene01'
 Write-Host "[4/4] Abriendo: $url" -ForegroundColor Green
 Start-Process $url
-Write-Host 'Importa una NUEVA referencia PNG 16:9 con Gabriel, Daniel y Lucia visibles.' -ForegroundColor Yellow
-Write-Host 'No uses la imagen antigua donde solo aparece Gabriel.' -ForegroundColor Yellow
-Write-Host 'Comprueba que los tres lleven casco y que las identidades sean correctas.'
-Write-Host 'Despues de revisar el encuadre, confirma manualmente la UNICA solicitud pagada.'
+Write-Host 'Generacion Veo: TEXTO-A-VIDEO para incluir a Gabriel, Daniel y Lucia.' -ForegroundColor Green
+Write-Host 'El fotograma familiar 16:9 es OPCIONAL, solo referencia editorial; no se envia a Google.'
+Write-Host 'Comprueba el prompt con los tres personajes y sus cascos antes de confirmar.'
+Write-Host 'No reutilices ni importes como obligatoria la antigua imagen solo de Gabriel.'
+Write-Host 'Confirma manualmente la UNICA solicitud pagada; no se permite reintento.'
 Write-Host 'Una vez enviada, utiliza Recuperar operacion. No reintentes.'
 npm run dev -- -p 3010
