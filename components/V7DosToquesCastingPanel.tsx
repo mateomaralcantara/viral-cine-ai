@@ -73,9 +73,11 @@ export default function V7DosToquesCastingPanel({ filmId }: { filmId: string }) 
           <h2 className="text-2xl font-black">Casting visual · Familia Santos</h2>
         </div>
         <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-300">
-          Importa una imagen original en PNG para cada personaje; se almacena como candidata
+          Los rostros candidatos de Gabriel, Daniel y Lucía ya fueron aprobados por el creador.
+          Importa su PNG original para verificar y fijar su referencia técnica; se almacena como candidata
           sin sobrescribir ninguna imagen existente. La identidad no queda aprobada automáticamente.
-          Hasta su revisión, la generación de video y los perfiles de voz permanecen bloqueados.
+          Hasta confirmar identidad multivista, derechos de voz y presupuesto,
+          la generación de video y las voces finales permanecen bloqueadas.
         </p>
         <p className="mt-3 flex items-center gap-2 text-xs text-amber-300">
           <ShieldAlert className="h-4 w-4" /> No usar recortes de un póster con rostros variables como referencias canónicas.
@@ -87,7 +89,7 @@ export default function V7DosToquesCastingPanel({ filmId }: { filmId: string }) 
           const ready = Boolean(available[person.id]);
           return (
             <article className="panel rounded-3xl p-5" key={person.id}>
-              <p className="text-xs font-bold uppercase text-violet-300">Casting pendiente · {person.age} años</p>
+              <p className="text-xs font-bold uppercase text-violet-300">Rostro aprobado editorialmente · {person.age} años</p>
               <h3 className="mt-2 text-xl font-black">{person.name}</h3>
               {ready
                 ? <img src={urlFor(person.id)} alt={'Imagen candidata de ' + person.name}
@@ -103,7 +105,7 @@ export default function V7DosToquesCastingPanel({ filmId }: { filmId: string }) 
               </details>
               {ready ? (
                 <p className="mt-4 flex items-center gap-2 text-sm text-amber-200">
-                  <ShieldCheck className="h-4 w-4" /> Referencia candidata importada; falta aprobar casting.
+                  <ShieldCheck className="h-4 w-4" /> Rostro aprobado editorialmente e imagen importada; faltan vistas y QA canónico.
                 </p>
               ) : (
                 <div className="mt-4">
