@@ -1,0 +1,71 @@
+{
+  "filmId": "film-dos-toques-de-bocina-v7",
+  "scene": "E01",
+  "shot": "E01-P01",
+  "title": "La llegada a la escuela",
+  "timelineStartSeconds": 0,
+  "timelineEndSeconds": 8,
+  "requestedSeconds": 8,
+  "providerVideoSeconds": 8,
+  "objective": "Establecer la vida humilde y afectuosa de Gabriel antes del abandono, con el motor azul oscuro llegando al colegio dominicano al amanecer.",
+  "action": "Una motocicleta azul oscuro antigua con el asiento remendado entra lentamente en plano y estaciona junto a la acera exterior de una escuela de barrio de República Dominicana. Se ve un conductor adulto con casco negro y ropa azul humilde, de espalda o de tres cuartos. No mostrar primeros planos de menores.",
+  "camera": {
+    "framing": "Plano general 16:9",
+    "lens": "35 mm equivalente",
+    "movement": "Travelling lateral muy suave, fijo a baja altura; sin cortes internos",
+    "fpsTarget": 24,
+    "lighting": "Amanecer dorado, temperatura cálida; sombras suaves",
+    "focus": "Motor azul y entrada de escuela en profundidad",
+    "renderQuality": "720p inicial de prueba; 1080p solo si proveedor y presupuesto lo permiten"
+  },
+  "continuity": {
+    "motorcycleColor": "azul oscuro, asiento remendado con cinta negra",
+    "driver": "Gabriel Santos, 39 años, piel canela, casco negro, camisa azul desgastada; rostro no visible de frente",
+    "childHelmet": "Casco infantil azul celeste colgado del manubrio derecho; no moverlo entre planos",
+    "school": "Escuela ficticia dominicana, sin logos institucionales reales",
+    "timeline": "E01-P01: 00:00–00:08; historia inicia en mañana de día lectivo"
+  },
+  "promptVideoEnglish": "Single continuous cinematic realistic 8-second establishing shot, 16:9. Early morning outside a fictional neighborhood school in the Dominican Republic. A worn dark-blue commuter motorcycle with a black-tape patched seat gently enters the frame and comes to a full stop along the curb. An adult Dominican father (39) in a faded blue work shirt and a matte black protective helmet rides the motorcycle. Keep his face turned away from camera, matching the locked character appearance if visible. One small light-blue children's helmet hangs on the RIGHT side of the handlebar. Warm golden dawn, believable Caribbean urban street textures, mild background breeze, slight natural engine vibration. Slow stable 35mm lateral tracking shot; realistic wheels and physics. No dialogue, no facial animation, no children visible or identifiable, no fabricated text, no logos, no subtitles, no hard cuts, no camera teleportation. Preserve exact motorcycle and helmet details and lighting.",
+  "negativeConstraints": [
+    "No generar rostros de niños en la primera toma.",
+    "Sin diálogos, sin lipsync, sin doblaje.",
+    "No inventar logos ni textos en fachada.",
+    "No cambiar color de moto, casco o posición del casco infantil.",
+    "No mostrar manubrio físicamente imposible ni ruedas deformadas.",
+    "No usar marca de motocicleta identificable como elemento publicitario."
+  ],
+  "audioDesign": {
+    "ambient": "Motor a baja revolución, calle matinal dominicana; sonido localizado, sin voces de menores",
+    "music": "Primeros 8 s de composición original DOS TOQUES, piano cálido atenuado; mezclado después del video",
+    "hornBeepCount": 0,
+    "dialogue": "Ninguno"
+  },
+  "imageReference": {
+    "format": "PNG",
+    "minWidth": 1280,
+    "minHeight": 720,
+    "aspect": "16:9",
+    "type": "fotograma inicial canónico, sin niños visibles",
+    "path": "e01-p01/referencia-aprobada.png",
+    "approvalStatus": "PENDING_LOCAL_IMPORT_AND_QA"
+  },
+  "provider": {
+    "suggestedModel": "veo-3.1-fast-generate-preview",
+    "pricingStatus": "NOT_VERIFIED",
+    "approvedBudgetUsd": 0,
+    "externalRequestAuthorized": false,
+    "submitted": false,
+    "providerOperationId": null
+  },
+  "qualityCriteria": [
+    "Motor y casco se mantienen idénticos durante los 8 segundos.",
+    "Entorno escolar realista y coherente con República Dominicana.",
+    "Movimiento continuo de entrada, frenada y parada creíble.",
+    "No hay niños ni rostros juveniles visibles en este plano.",
+    "No aparecen letras erráticas ni logotipos inventados.",
+    "Sin artefactos en rueda, manos, casco ni manubrio.",
+    "Resultado tiene audio/ambiente utilizable por separado y se integra a música original.",
+    "Duración final de montaje exactamente 8.000 s; sin cortes ni flashes inexplicados."
+  ],
+  "status": "PREPRODUCTION_ONLY_AWAITING_IMAGE_AND_BUDGET"
+}
