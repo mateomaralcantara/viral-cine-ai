@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - feat/viralcine-7-feature-film-os
+      - feat/v7-cinema-core-veo-safe
   pull_request:
     branches:
       - main
+      - feat/viralcine-7-feature-film-os
 
 permissions:
   contents: read
