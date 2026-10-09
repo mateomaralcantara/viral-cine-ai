@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import V7CinemaProductionPanel from '@/components/V7CinemaProductionPanel';
 import V7FeatureFilmPlanner from '@/components/V7FeatureFilmPlanner';
 import V7ClosedCutPlayer from '@/components/V7ClosedCutPlayer';
+import V7DosToquesMusicPanel from '@/components/V7DosToquesMusicPanel';
+import V7DosToquesCastingPanel from '@/components/V7DosToquesCastingPanel';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -14,6 +16,7 @@ import {
   Layers3,
   LoaderCircle,
   LockKeyhole,
+  Music2,
   Play,
   ShieldCheck,
   Video
@@ -97,7 +100,7 @@ type Bundle = {
   voiceProfiles: unknown[];
 };
 
-type Tab = 'overview' | 'scenes' | 'takes' | 'production' | 'feature' | 'master';
+type Tab = 'overview' | 'scenes' | 'takes' | 'production' | 'feature' | 'music' | 'casting' | 'master';
 
 export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
   const [bundle, setBundle] = useState<Bundle | null>(null);
@@ -107,7 +110,7 @@ export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
 
   useEffect(() => {
     const requested = new URLSearchParams(window.location.search).get('tab');
-    if (requested === 'scenes' || requested === 'takes' || requested === 'production' || requested === 'feature' || requested === 'master' || requested === 'overview') {
+    if (requested === 'scenes' || requested === 'takes' || requested === 'production' || requested === 'feature' || requested === 'music' || requested === 'casting' || requested === 'master' || requested === 'overview') {
       setTab(requested);
     }
   }, []);
@@ -158,6 +161,7 @@ export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
     typeof bundle.film.metadata.originalFinalVideoAsset === 'string';
   const masterUrl = '/api/v7/films/' + encodeURIComponent(filmId) + '/media/master';
   const hasLibrosellerPackage = filmId === 'v7-film-01db01f78f6c0e5afee6';
+  const hasDosToquesProject = filmId === 'film-dos-toques-de-bocina-v7';
 
   return (
     <main className="mx-auto min-h-screen max-w-[1500px] px-4 py-6 md:px-8">
@@ -204,6 +208,12 @@ export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
         <TabButton active={tab === 'takes'} onClick={() => setTab('takes')} icon={<Video className="h-4 w-4" />}>Tomas</TabButton>
         <TabButton active={tab === 'production'} onClick={() => setTab('production')} icon={<Clapperboard className="h-4 w-4" />}>Producción</TabButton>
         <TabButton active={tab === 'feature'} onClick={() => setTab('feature')} icon={<Layers3 className="h-4 w-4" />}>Nivel 2 · Largometrajes</TabButton>
+        {hasDosToquesProject && (
+          <TabButton active={tab === 'casting'} onClick={() => setTab('casting')} icon={<ShieldCheck className="h-4 w-4" />}>Casting visual</TabButton>
+        )}
+        {hasDosToquesProject && (
+          <TabButton active={tab === 'music'} onClick={() => setTab('music')} icon={<Music2 className="h-4 w-4" />}>Música emotiva</TabButton>
+        )}
         <TabButton active={tab === 'master'} onClick={() => setTab('master')} icon={<Play className="h-4 w-4" />}>Película final</TabButton>
       </nav>
 
@@ -267,6 +277,10 @@ export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
           </section>)}
 
       {tab === 'feature' && <V7FeatureFilmPlanner filmId={filmId} />}
+
+      {tab === 'music' && hasDosToquesProject && <V7DosToquesMusicPanel filmId={filmId} />}
+
+      {tab === 'casting' && hasDosToquesProject && <V7DosToquesCastingPanel filmId={filmId} />}
 
       {tab === 'master' && <V7ClosedCutPlayer filmId={filmId} />}
 
