@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Copy, FileCheck2, LockKeyhole, RefreshCcw } from 'lucide-react';
+import V7DosToquesShotRenderPanel from '@/components/V7DosToquesShotRenderPanel';
 
 type Preflight = {
   ok: boolean; shotId: string; providerSeconds: number; filmShotSeconds: number; trimRequired: boolean;
@@ -160,6 +161,7 @@ export default function V7DosToquesFirstShotPanel({ filmId }: { filmId: string }
           <RefreshCcw className="h-4 w-4" /> Comprobar estado
         </button>
       </div>
+      <V7DosToquesShotRenderPanel filmId={filmId} />
       {message && <p className="mt-4 text-sm text-amber-200" role="status">{message}</p>}
     </section>
   );
