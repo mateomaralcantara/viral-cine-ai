@@ -44,7 +44,7 @@
     "Daniel se sostiene detrás de Gabriel; Lucía se mantiene visible, colocada con seguridad según la referencia aprobada.",
     "La moto se aproxima a la acera y reduce suavemente la velocidad."
   ],
-  "safetyProductionNote": "Representar el traslado como un montaje cinematográfico simulado/compuesto, sin rodar realmente con menores en condiciones inseguras. No mostrar niños sin casco.",
+  "safetyProductionNote": "Representar el traslado como un montaje cinematográfico simulado/compuesto, sin rodar realmente con menores en condiciones inseguras. No mostrar niños sin casco. Veo se utiliza en modo texto-a-video porque con imagen-a-video se restringe personGeneration a allow_adult.",
   "sound": {
     "dialogue": null,
     "motor": "ralentí suave y frenada leve",
@@ -70,7 +70,10 @@
     "mustShowAllThree": true,
     "importedOnUserPc": false,
     "manualCompositionConfirmationRequired": true,
-    "oldFatherOnlyImageIsInvalid": true
+    "oldFatherOnlyImageIsInvalid": true,
+    "usedAsModelInput": false,
+    "requiredForGeneration": false,
+    "purpose": "Guía de puesta en escena y QA visual, opcional; el proveedor no recibe la imagen en modalidad texto-a-video."
   },
   "provider": {
     "model": "veo-3.1-fast-generate-preview",
@@ -81,9 +84,17 @@
     "maxProviderSubmissions": 1,
     "automaticRetries": 0,
     "submitted": false,
-    "operationId": null
+    "operationId": null,
+    "mode": "text-to-video",
+    "personGeneration": "allow_all",
+    "imageReferenceSupportedForChildren": false
   },
-  "readiness": "AWAITING_NEW_THREE_PERSON_FRAME_AND_LOCAL_PROVIDER_EXECUTION",
+  "readiness": "TEXT_TO_VIDEO_ONE_SHOT_US2_AUTHORIZED_LOCAL_USER_SUBMISSION_PENDING",
   "firstShotStatus": "NOT_GENERATED",
-  "sourceOfTruth": "La composición especificada explícitamente por el creador en la última solicitud sustituye el encuadre antiguo de Gabriel solo."
+  "sourceOfTruth": "La composición especificada explícitamente por el creador en la última solicitud sustituye el encuadre antiguo de Gabriel solo.",
+  "modelLimitations": [
+    "La coincidencia exacta de rostros con retratos aprobados no está garantizada en texto-a-video.",
+    "El equipo debe revisar si realmente aparecen tres personas, sus edades aparentes, cascos, continuidad, movimiento y seguridad.",
+    "La escena puede resultar rechazada por políticas de seguridad de generación o por la disponibilidad del proveedor; no reintentar automáticamente."
+  ]
 }
