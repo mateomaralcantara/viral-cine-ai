@@ -87,6 +87,7 @@ type Bundle = {
     type: string;
     storagePath: string;
     approved: boolean;
+    source?: string;
     shotId?: string;
     takeId?: string;
     provider?: string;
@@ -150,6 +151,7 @@ export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
 
   const stages = bundle.workflow?.stages || [];
   const next = stages.find((stage) => stage.status === 'ready' || stage.status === 'in-progress');
+  const hasApprovedV7Master = bundle.assets.some((asset) => asset.type === 'master' && asset.approved && asset.source !== 'legacy-v6');
   const hasMaster = bundle.assets.some((asset) => asset.type === 'master' && asset.approved) ||
     typeof bundle.film.metadata.originalFinalVideoAsset === 'string';
   const masterUrl = '/api/v7/films/' + encodeURIComponent(filmId) + '/media/master';
@@ -176,7 +178,7 @@ export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
               : 'border-amber-400/20 bg-amber-500/[.08] text-amber-300')
           }>
             {hasMaster ? <CheckCircle2 className="mr-2 inline h-4 w-4" /> : <ShieldCheck className="mr-2 inline h-4 w-4" />}
-            {hasMaster ? 'PELÍCULA TERMINADA' : 'PRODUCCIÓN PROTEGIDA'}
+            {hasApprovedV7Master ? 'PELÍCULA V7 APROBADA' : hasMaster ? 'MASTER ORIGINAL V6' : 'PRODUCCIÓN PROTEGIDA'}
           </div>
         </div>
         <div className="mt-5 flex flex-wrap gap-2 text-xs">
@@ -250,7 +252,7 @@ export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
         <section id="master" className="panel mt-6 rounded-3xl p-5 md:p-7">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="text-xs font-black uppercase tracking-wider text-emerald-300">Master final</div>
+              <div className="text-xs font-black uppercase tracking-wider text-emerald-300">{hasApprovedV7Master ? 'Master final V7' : 'Master original / legado'}</div>
               <h2 className="mt-1 text-2xl font-black">{bundle.film.title}</h2>
             </div>
             {hasMaster && (
