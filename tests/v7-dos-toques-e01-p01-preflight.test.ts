@@ -34,11 +34,11 @@ test('E01-P01 real-take plan is 8s, adult-only, consistent with the canonical mo
   assert.match(plan.promptVideoEnglish, /no children visible/i);
   assert.equal(plan.audioDesign.hornBeepCount, 0);
   assert.equal(plan.audioDesign.dialogue, 'Ninguno');
-  assert.equal(plan.provider.approvedBudgetUsd, 0);
-  assert.equal(plan.provider.submitted, false);
-  assert.equal(plan.provider.externalRequestAuthorized, false);
+  assert.equal(plan.provider.approvedBudgetUsd, 2);
+  assert.equal(plan.provider.submitted, false); // Consent is not a paid submission
+  assert.equal(plan.provider.externalRequestAuthorized, true);
   assert.equal(plan.imageReference.aspect, '16:9');
-  assert.equal(plan.imageReference.approvalStatus, 'PENDING_LOCAL_IMPORT_AND_QA');
+  assert.equal(plan.imageReference.approvalStatus, 'CREATED_CANDIDATE_PENDING_USER_REVIEW_AND_LOCAL_IMPORT');
   assert.ok(plan.negativeConstraints.length >= 4);
 });
 
