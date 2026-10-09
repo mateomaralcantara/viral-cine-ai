@@ -11,7 +11,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const FILM_ID = 'film-dos-toques-de-bocina-v7';
-const REFERENCE = 'e01-p01/referencia-aprobada.png';
+const REFERENCE = 'e01-p01/referencia-familia-v2.png';
 const MAX_BYTES = 8 * 1024 * 1024;
 type Context = { params: Promise<{ filmId: string }> };
 
@@ -67,7 +67,7 @@ export async function GET(request: Request, context: Context) {
       process.env.ALLOW_EXTERNAL_API_CALLS !== 'true' &&
       process.env.ALLOW_PAID_GENERATION !== 'true';
     const blockers: string[] = [];
-    if (!referenceReady) blockers.push('Falta la referencia inicial 16:9 validada.');
+    if (!referenceReady) blockers.push('Falta una referencia nueva de Gabriel, Daniel y Lucía visibles en el mismo fotograma 16:9. La referencia anterior de Gabriel solo no corresponde a esta toma.');
     if (!tariffMatchesPublished) blockers.push('Configura la tarifa verificada de US$0.10/s de Veo 3.1 Fast 720p.');
     if (configuredCap <= 0) blockers.push('El límite local de esta toma aún no está configurado (V7_CINEMA_MAX_USD).');
     else if (quote !== null && quote > configuredCap)
@@ -152,7 +152,7 @@ export async function POST(request: Request, context: Context) {
     temp = undefined;
     return NextResponse.json({
       ok: true,
-      status: 'fotograma-importado-pendiente-de-aprobacion-editorial',
+      status: 'referencia-familiar-v2-importada-pendiente-de-revision-visual',
       externalApiCalls: 0,
       referenceStored: true,
       videoGenerated: false
