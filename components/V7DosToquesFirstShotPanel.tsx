@@ -14,17 +14,17 @@ type Preflight = {
 };
 
 const firstShotPrompt = [
-  'Single continuous cinematic realistic 8-second establishing shot, 16:9.',
-  'Early morning outside a fictional neighborhood school in the Dominican Republic.',
-  'A worn dark-blue commuter motorcycle with a black-tape patched seat gently',
-  'enters the frame and comes to a full stop along the curb.',
-  'An adult Dominican father (39) in a faded blue work shirt and a matte black',
-  'protective helmet rides the motorcycle; keep his face turned away from camera.',
-  'One small light-blue child helmet hangs on the RIGHT side of the handlebar.',
-  'Warm golden dawn, believable Caribbean urban street textures,',
-  'slow stable 35mm lateral tracking, physically realistic wheels and braking.',
-  'No speaking, no facial animation, no children visible, no invented logos,',
-  'no subtitles, no hard cuts, no camera teleportation.'
+  'Cinematic single-take 8-second 16:9 720p live-action drama, golden dawn in a modest Dominican neighborhood.',
+  'Gabriel Santos (39) arrives slowly at the school on an old dark-blue motorcycle with patched seat.',
+  'Daniel Santos (11) is clearly visible sitting behind Gabriel, wearing a protective helmet and holding on safely.',
+  'Lucía Santos (7) is also clearly visible, with two braids and a light-blue protective helmet,',
+  'safely positioned as in the approved staged reference frame.',
+  'All three people remain identical and visible for the whole wide tracking shot.',
+  'Bike moving at walking pace on a controlled street, then gentle braking.',
+  'Realistic physics, softly moving nearby cars, birds and natural street ambience.',
+  'Restrained emotional piano should be mixed afterward as an independent track.',
+  'No dialogue, no unsafe unhelmeted riding, no name cards, no titles, no text overlays,',
+  'no slideshow, no generated captions, no identity swaps, no anatomy distortions.'
 ].join(' ');
 
 export default function V7DosToquesFirstShotPanel({ filmId }: { filmId: string }) {
@@ -79,9 +79,10 @@ export default function V7DosToquesFirstShotPanel({ filmId }: { filmId: string }
         <h2 className="text-xl font-black">Siguiente paso · Primera toma real E01-P01 (8 s)</h2>
       </header>
       <p className="mt-3 text-sm leading-6 text-slate-300">
-        Apertura de la película: Gabriel estaciona su motocicleta azul junto a la escuela al amanecer.
-        El encuadre muestra a un conductor adulto de espaldas; los niños aparecen a partir de
-        los planos posteriores. **No se generará video desde esta pantalla:** primero validamos
+        Apertura de la película: Gabriel llega lentamente en su motocicleta azul con
+        <strong> Daniel y Lucía visibles desde el inicio</strong>. Los tres llevan cascos
+        adecuados. La cámara acompaña el vehículo hacia la escuela y muestra la llegada
+        sin tarjetas de nombres ni fotografías estáticas. **No se generará video desde esta pantalla:** primero validamos
         la referencia y el presupuesto, sin duplicar ni gastar operaciones.
       </p>
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -117,11 +118,12 @@ export default function V7DosToquesFirstShotPanel({ filmId }: { filmId: string }
 
       {!state?.referenceReady && (
         <div className="mt-5 rounded-2xl border border-dashed border-white/20 p-4">
-          <h3 className="text-sm font-bold">Fotograma inicial 16:9 para esta toma</h3>
+          <h3 className="text-sm font-bold">Fotograma inicial familiar 16:9 — Gabriel, Daniel y Lucía</h3>
           <p className="mt-2 text-xs leading-5 text-slate-400">
-            Importa una imagen propia PNG de al menos 1280×720 con el motor azul,
-            el casco infantil en el manubrio derecho y el conductor adulto de espaldas.
-            No reutilices el póster general ni inventes personas o logotipos.
+            Importa un fotograma PNG nuevo de al menos 1280×720 donde se vean
+            Gabriel, Daniel y Lucía juntos, con cascos y posiciones físicamente
+            coherentes. La referencia anterior de Gabriel solo es incompatible.
+            Se guardará separada, sin sobrescribir el fotograma antiguo.
           </p>
           <input type="file" accept=".png,image/png" className="mt-3 block w-full text-xs"
             aria-label="Referencia inicial 16:9 E01-P01"
