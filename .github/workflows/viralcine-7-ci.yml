@@ -10,8 +10,10 @@ on:
       - feat/v7-dos-toques-de-bocina-script
       - feat/v7-dos-toques-soundtrack-casting
       - feat/v7-dos-toques-production-bible
+      - feat/v7-dos-toques-scene01-pilot
   pull_request:
     branches:
+      - feat/v7-dos-toques-production-bible
       - feat/v7-dos-toques-soundtrack-casting
       - feat/v7-dos-toques-de-bocina-script
       - feat/v7-new-film-10min
