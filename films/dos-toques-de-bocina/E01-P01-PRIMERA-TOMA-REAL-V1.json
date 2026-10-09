@@ -4,7 +4,7 @@
   "shot": "E01-P01",
   "title": "La llegada a la escuela",
   "timelineStartSeconds": 0,
-  "timelineEndSeconds": 8,
+  "timelineEndSeconds": 7.166666666666667,
   "requestedSeconds": 8,
   "providerVideoSeconds": 8,
   "objective": "Establecer la vida humilde y afectuosa de Gabriel antes del abandono, con el motor azul oscuro llegando al colegio dominicano al amanecer.",
@@ -67,5 +67,10 @@
     "Resultado tiene audio/ambiente utilizable por separado y se integra a música original.",
     "Duración final de montaje exactamente 8.000 s; sin cortes ni flashes inexplicados."
   ],
-  "status": "PREPRODUCTION_ONLY_AWAITING_IMAGE_AND_BUDGET"
+  "status": "PREPRODUCTION_ONLY_AWAITING_IMAGE_AND_BUDGET",
+  "canonicalV7FilmShotSeconds": 7.166666666666667,
+  "animaticSegmentSeconds": 8,
+  "trimSecondsFromProviderClip": 0.833333333333333,
+  "durationPolicy": "Veo 8 s brutos; el bundle V7 original asigna 172 fotogramas a 24 fps (7.1667 s) a E01-P01. Recortar al montaje V7 sin sobrescribir guion ni recalcular otras escenas.",
+  "editorialTimingNote": "La previsualización usa 00:00–00:08, pero el guion nativo existente usa 00:00–00:07.167. No alterar los bundles locales ya creados; export final usa la duración del guion V7."
 }
