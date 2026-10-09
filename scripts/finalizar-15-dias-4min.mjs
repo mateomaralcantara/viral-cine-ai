@@ -67,6 +67,12 @@ function wrap(s, width = 64) {
   if (line) lines.push(line);
   return lines.slice(0, 3);
 }
+async function hashFile(file) {
+  const hash = createHash('sha256');
+  for await (const chunk of fs.createReadStream(file)) hash.update(chunk);
+  return hash.digest('hex');
+}
+
 function videoInfo(file) {
   const raw = execute('ffprobe', ['-v', 'error', '-show_entries',
     'format=duration:stream=codec_type', '-of', 'json', file]);
@@ -171,7 +177,7 @@ async function main() {
   const info = videoInfo(master);
   if (info.duration < 149.7 || !info.hasAudio)
     throw new Error('Master V6 incompleto o sin audio');
-  const beforeHash = createHash('sha256').update(await fsp.readFile(master)).digest('hex');
+  const beforeHash = await hashFile(master);
 
   const packages = (await fsp.readdir(FILMROOT, { withFileTypes: true }))
     .filter((e) => e.isDirectory() && e.name.startsWith('produccion-libroseller-50s-'))
@@ -273,7 +279,7 @@ async function main() {
   if (Math.abs(final.duration - 240) > 1 || !final.hasAudio)
     throw new Error('Exportación incompleta: ' + final.duration.toFixed(3));
 
-  const hashAfter = createHash('sha256').update(await fsp.readFile(master)).digest('hex');
+  const hashAfter = await hashFile(master);
   if (hashAfter !== beforeHash) throw new Error('Alerta: hash master V6 cambió');
   const report = {
     title: '15 DÍAS — edición narrativa cerrada de 4 minutos',
