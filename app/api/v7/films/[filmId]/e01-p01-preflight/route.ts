@@ -5,6 +5,7 @@ import sharp from 'sharp';
 import { NextResponse } from 'next/server';
 import { readV7FilmBundle, v7FilmRoot } from '@/lib/v7/storage/film-store';
 import { estimateVeoUsd } from '@/lib/v7/production/cinema-core-policy';
+import { DOS_TOQUES_FIRST_SHOT_BUDGET, maySubmitFirstShot } from '@/lib/v7/production/dos-toques-p01-budget';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -54,8 +55,11 @@ export async function GET(request: Request, context: Context) {
 
     const rate = positiveNumber(process.env.V7_VEO_USD_PER_SECOND, 10);
     const localCap = positiveNumber(process.env.V7_CINEMA_MAX_USD, 1000000);
-    const configuredCap = Math.min(bundle.film.budgetUsd, localCap ?? 0);
-    const quote = rate === null ? null : estimateVeoUsd(8, rate);
+    // A user-approved allowance for this exact shot is separate from the film-wide budget.
+    // Never raise bundle.film.budgetUsd, which could authorize unrelated shots.
+    const configuredCap = Math.min(DOS_TOQUES_FIRST_SHOT_BUDGET.maxTotalUsd, localCap ?? 0);
+    const quote = estimateVeoUsd(8, DOS_TOQUES_FIRST_SHOT_BUDGET.providerRateUsdPerSecond);
+    const tariffMatchesPublished = rate === DOS_TOQUES_FIRST_SHOT_BUDGET.providerRateUsdPerSecond;
     const paidSystemEnabled =
       process.env.V7_CINEMA_PAID_ENABLED === 'true' &&
       process.env.ALLOW_EXTERNAL_API_CALLS === 'true' &&
@@ -63,12 +67,22 @@ export async function GET(request: Request, context: Context) {
       process.env.PRODUCTION_MODE === 'real';
     const blockers: string[] = [];
     if (!referenceReady) blockers.push('Falta la referencia inicial 16:9 validada.');
-    if (quote === null) blockers.push('Tarifa real del proveedor sin verificar.');
-    if (configuredCap <= 0) blockers.push('No existe un presupuesto positivo autorizado para esta película.');
+    if (!tariffMatchesPublished) blockers.push('Configura la tarifa verificada de US$0.10/s de Veo 3.1 Fast 720p.');
+    if (configuredCap <= 0) blockers.push('El límite local de esta toma aún no está configurado (V7_CINEMA_MAX_USD).');
     else if (quote !== null && quote > configuredCap)
       blockers.push('El costo calculado supera el presupuesto configurado.');
+    const policyAllow = maySubmitFirstShot({
+      shotId: 'E01-P01',
+      model: DOS_TOQUES_FIRST_SHOT_BUDGET.model,
+      rateUsdPerSecond: tariffMatchesPublished ? rate : null,
+      providerSubmissions: 0,
+      referenceReady,
+      alreadyReserved: false,
+      localCapUsd: configuredCap
+    });
+    if (!policyAllow) blockers.push('El permiso específico de US$2 todavía no supera todas las comprobaciones.');
     if (!paidSystemEnabled) blockers.push('Generación pagada desactivada por seguridad.');
-    blockers.push('Pendiente de autorización explícita del importe exacto y revisión del fotograma.');
+    blockers.push('Falta revisar el fotograma y confirmar la disponibilidad de credenciales en tu servidor local.');
     return NextResponse.json({
       ok: true,
       filmId: FILM_ID,
@@ -80,7 +94,14 @@ export async function GET(request: Request, context: Context) {
       trimRequired: Math.abs(sourceShotSeconds - 8) > 0.01,
       referenceReady,
       filmBudgetUsd: bundle.film.budgetUsd,
-      verifiedRateConfigured: rate !== null,
+      scopedApprovalUsd: DOS_TOQUES_FIRST_SHOT_BUDGET.maxTotalUsd,
+      approvedProviderCalls: DOS_TOQUES_FIRST_SHOT_BUDGET.maxProviderSubmissions,
+      approvedAutomaticRetries: DOS_TOQUES_FIRST_SHOT_BUDGET.automaticRetries,
+      creatorApprovalRecorded: true,
+      approvedModel: DOS_TOQUES_FIRST_SHOT_BUDGET.model,
+      approvedResolution: DOS_TOQUES_FIRST_SHOT_BUDGET.resolution,
+      tariffSource: 'https://ai.google.dev/gemini-api/docs/pricing',
+      verifiedRateConfigured: tariffMatchesPublished,
       estimatedVideoUsd: quote,
       localBudgetCapUsd: configuredCap,
       paidSystemEnabled,
