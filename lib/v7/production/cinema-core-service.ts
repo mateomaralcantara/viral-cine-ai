@@ -112,7 +112,11 @@ function configuredCap() {
 }
 
 async function referenceFile(packageInfo: PackageInfo, shotId: string) {
-  const candidate = path.join(packageInfo.root, 'referencias', shotId + '-referencia.jpg');
+  // UI reference: show a real public-site capture for WEB shots, never a fabricated screen.
+  const candidate = path.join(packageInfo.root, 'referencias',
+    shotId === 'LS02' || shotId === 'LS05'
+      ? 'LIBROSELLER-WEB-PUBLICA.png'
+      : shotId + '-referencia.jpg');
   const info = await stat(candidate);
   if (!info.isFile() || info.size < 10000) throw new Error('Referencia JPEG inválida');
   return candidate;
@@ -299,7 +303,7 @@ export async function cinemaAction(filmId: string, input: CinemaApproval) {
         // Retain the provider operation ID so the same operation can be resumed.
         current.error = stripError(error);
         await saveRecord(filmId, current);
-        throw error;
+        throw new Error('No se pudo consultar el resultado de Veo: ' + current.error);
       }
     }
 
