@@ -5,6 +5,7 @@ on:
     branches:
       - feat/viralcine-7-feature-film-os
       - feat/v7-cinema-core-veo-safe
+      - feat/v7-feature-film-level2
   pull_request:
     branches:
       - main
