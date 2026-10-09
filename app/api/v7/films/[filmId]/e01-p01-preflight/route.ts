@@ -67,7 +67,8 @@ export async function GET(request: Request, context: Context) {
       process.env.ALLOW_EXTERNAL_API_CALLS !== 'true' &&
       process.env.ALLOW_PAID_GENERATION !== 'true';
     const blockers: string[] = [];
-    if (!referenceReady) blockers.push('Falta una referencia nueva de Gabriel, Daniel y Lucía visibles en el mismo fotograma 16:9. La referencia anterior de Gabriel solo no corresponde a esta toma.');
+    // Optional editorial storyboard only. Veo receives text, never an image of minors.
+    if (!referenceReady) blockers.push('Opcional: falta fotograma editorial familiar; la generación de texto-a-video puede continuar sin él.');
     if (!tariffMatchesPublished) blockers.push('Configura la tarifa verificada de US$0.10/s de Veo 3.1 Fast 720p.');
     if (configuredCap <= 0) blockers.push('El límite local de esta toma aún no está configurado (V7_CINEMA_MAX_USD).');
     else if (quote !== null && quote > configuredCap)
@@ -77,7 +78,7 @@ export async function GET(request: Request, context: Context) {
       model: DOS_TOQUES_FIRST_SHOT_BUDGET.model,
       rateUsdPerSecond: tariffMatchesPublished ? rate : null,
       providerSubmissions: 0,
-      referenceReady,
+      referenceReady: true, // no image-to-video for scenes depicting children
       alreadyReserved: false,
       localCapUsd: configuredCap
     });
@@ -94,6 +95,9 @@ export async function GET(request: Request, context: Context) {
       animaticSegmentSeconds: 8,
       trimRequired: Math.abs(sourceShotSeconds - 8) > 0.01,
       referenceReady,
+      providerMode: 'text-to-video',
+      referenceOnlyForEditorialReview: true,
+      referencePassedToModel: false,
       filmBudgetUsd: bundle.film.budgetUsd,
       scopedApprovalUsd: DOS_TOQUES_FIRST_SHOT_BUDGET.maxTotalUsd,
       approvedProviderCalls: DOS_TOQUES_FIRST_SHOT_BUDGET.maxProviderSubmissions,
