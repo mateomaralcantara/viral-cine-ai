@@ -33,7 +33,8 @@ type ShotRecord = {
   providerSeconds: number;
   maximumApprovedUsd: number;
   estimatedUsd: number;
-  referenceSha256: string;
+  referenceSha256: string; // Legacy audit field; in text-to-video it reads 'NO_IMAGE_INPUT'.
+  promptSha256?: string;
   createdAt: string;
   updatedAt: string;
   providerOperationName?: string;
@@ -43,7 +44,6 @@ type ShotRecord = {
 
 function root() { return path.join(v7FilmRoot(FILM_ID), 'e01-p01'); }
 function recordPath() { return path.join(root(), 'provider-operation.json'); }
-function referencePath() { return path.join(root(), 'referencia-familia-v2.png'); }
 function videoPath() { return path.join(root(), FILE); }
 
 function requestAllowed(request: Request) {
@@ -122,16 +122,8 @@ async function withLock<T>(task: () => Promise<T>) {
   finally { await lock.close(); await unlink(lockName).catch(() => undefined); }
 }
 
-async function referenceSha() {
-  const bytes = await readFile(referencePath());
-  const { default: sharp } = await import('sharp');
-  const info = await sharp(bytes, { limitInputPixels: 16777216 }).metadata();
-  if (!info.width || !info.height || info.width < 1280 || info.height < 720 ||
-      info.width > 4096 || info.height > 2304 ||
-      Math.abs(info.width / info.height - 16 / 9) > 0.012) {
-    throw new Error('Referencia no cumple 16:9 y 1280x720 mínimos.');
-  }
-  return { data: bytes, sha: createHash('sha256').update(bytes).digest('hex') };
+function promptSha256() {
+  return createHash('sha256').update(prompt()).digest('hex');
 }
 
 function client() {
@@ -143,7 +135,7 @@ function client() {
 function prompt() {
   return [
     'Single continuous 8-second cinematic realistic image-to-video shot; 16:9 720p.',
-    'Use the uploaded initial reference frame as a strict continuity anchor.',
+    'Generate this as TEXT-TO-VIDEO; there is no uploaded first-frame image.',
     'Outside a fictional Dominican neighborhood school at golden dawn.',
     'A Dominican father Gabriel Santos, 39 years old, faded blue work shirt,',
     'matte black safety helmet, rides his old dark-blue commuter motorcycle',
@@ -187,16 +179,20 @@ function clearResult(status: number, error: string) {
 async function statusBody(context: Context) {
   await ensureFilm(context);
   const record = await getRecord();
-  let referenceSha256: string | null = null;
-  try { referenceSha256 = (await referenceSha()).sha; } catch { /* image unavailable */ }
+  const approvedPromptSha256 = promptSha256();
   return {
     ok: true, filmId: FILM_ID, shotId: SHOT_ID,
     maximumApprovedUsd: GRANT.maxTotalUsd,
     estimatedUsd: firstShotQuotedUsd(RATE),
     maxProviderSubmissions: GRANT.maxProviderSubmissions,
     automaticRetries: GRANT.automaticRetries,
-    referenceReady: referenceSha256 !== null,
-    referenceSha256,
+    providerMode: 'text-to-video',
+    imageReferenceNotSentToGoogle: true,
+    referenceReady: true, // No source image required in Veo text-to-video.
+    referenceSha256: null,
+    promptSha256: approvedPromptSha256,
+    childCharactersPresentInPrompt: true,
+    identityAccuracyNeedsHumanReview: true,
     flagsEnabled: flagsEnabled(),
     rateVerifiedInEnv: envRateMatches(),
     capVerifiedInEnv: envCapEnough(),
@@ -210,7 +206,7 @@ async function statusBody(context: Context) {
     videoUrl: record?.status === 'review-required'
       ? '/api/v7/films/' + encodeURIComponent(FILM_ID) + '/e01-p01-render/video' : null,
     error: record?.error || null,
-    canSubmitAfterUserClick: record === null && Boolean(referenceSha256) && flagsEnabled() &&
+    canSubmitAfterUserClick: record === null && flagsEnabled() &&
       envRateMatches() && envCapEnough() && Boolean(process.env.GEMINI_API_KEY) &&
       Boolean(process.env.V7_CINEMA_ADMIN_TOKEN)
   };
@@ -224,7 +220,7 @@ export async function GET(request: Request, context: Context) {
 
 export async function POST(request: Request, context: Context) {
   if (!requestAllowed(request) || !authorized(request)) return clearResult(403, 'Token administrativo u origen inválido.');
-  let body: { action?: string; referenceSha256?: string; approvedEstimateUsd?: number; confirm?: boolean; compositionConfirmed?: string };
+  let body: { action?: string; promptSha256?: string; approvedEstimateUsd?: number; confirm?: boolean; compositionConfirmed?: string };
   try { body = await request.json() as typeof body; }
   catch { return clearResult(400, 'Solicitud JSON inválida.'); }
   if (body.action !== 'submit' && body.action !== 'resume') return clearResult(400, 'Solo submit o resume.');
@@ -291,13 +287,13 @@ export async function POST(request: Request, context: Context) {
         });
       }
 
-      // ONE attempt: record created BEFORE external call, never erased on timeout/error.
+      // ONE text-to-video attempt (allows children); save reservation BEFORE external call.
       if (existing) throw new Error('Esta toma ya tiene una reserva/operación. No se permite otro intento.');
       if (!flagsEnabled()) throw new Error('Generación pagada desactivada en el servidor.');
       if (!envRateMatches()) throw new Error('Tarifa diferente a US$0.10/s; detén la solicitud.');
       if (!envCapEnough()) throw new Error('Configura V7_CINEMA_MAX_USD entre 0.80 y 2.00.');
-      const { data, sha } = await referenceSha();
-      if (body.confirm !== true || body.compositionConfirmed !== REQUIRED_COMPOSITION || body.referenceSha256 !== sha ||
+      const sha = promptSha256();
+      if (body.confirm !== true || body.compositionConfirmed !== REQUIRED_COMPOSITION || body.promptSha256 !== sha ||
           body.approvedEstimateUsd !== firstShotQuotedUsd(RATE)) {
         throw new Error('Debes confirmar la referencia vigente y exactamente US$0.80 estimados.');
       }
@@ -312,7 +308,7 @@ export async function POST(request: Request, context: Context) {
         filmId: FILM_ID, shotId: SHOT_ID, model: MODEL,
         status: 'reserved', providerSeconds: 8,
         maximumApprovedUsd: 2, estimatedUsd: 0.8,
-        referenceSha256: sha, createdAt: now, updatedAt: now
+        referenceSha256: 'NO_IMAGE_INPUT', promptSha256: sha, createdAt: now, updatedAt: now
       };
       await writeFile(recordPath(), JSON.stringify(record, null, 2) + '\n', { flag: 'wx' });
       // From this point onward a timeout may mean the provider accepted a paid request.
@@ -320,14 +316,11 @@ export async function POST(request: Request, context: Context) {
         const ai = client();
         const operation = await ai.models.generateVideos({
           model: MODEL,
-          source: {
-            prompt: prompt(),
-            image: { imageBytes: data.toString('base64'), mimeType: 'image/png' }
-          },
+          source: { prompt: prompt() }, 
           config: {
             aspectRatio: '16:9', numberOfVideos: 1,
             durationSeconds: 8, resolution: '720p',
-            personGeneration: 'allow_adult'
+            personGeneration: 'allow_all'
           }
         });
         if (!operation.name) throw new Error('Veo no devolvió ID de operación. Posible costo incierto.');
