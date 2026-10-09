@@ -62,3 +62,12 @@ Los datos de V7 pueden residir en el worktree de integración, mientras que los 
 Esto resuelve los 404 cuando el master o las tomas originales existen en V6 pero el servidor de V7 los busca bajo la raíz incorrecta. No copia ni reescribe archivos originales. Si persiste un 404, comprobar la ruta del asset en el registro: una ruta correcta no reconstruye un archivo ausente.
 
 Después de cambiar variables de entorno, detener Next.js mediante Ctrl+C y reiniciar en la terminal actual. Mantener las banderas pagadas desactivadas.
+
+
+## Reproducción de los MP4 V6 con búsqueda en línea de tiempo
+
+El endpoint GET /api/v7/films/<filmId>/media/<mediaId> ahora utiliza lector por demanda desde FileHandle, con soporte para HTTP Range (206), HEAD, rangos inválidos (416) y cancelación del navegador. Se evitan las conversiones Readable.toWeb(createReadStream) que pueden provocar "ERR_INVALID_STATE: Controller is already closed" al saltar de posición o detener la reproducción. El lector cierra el descriptor de archivo cuando finaliza o se cancela una petición. Los archivos V6 solo se abren para lectura.
+
+Para probar manualmente, usar un navegador en localhost:3010, abrir Película final, pulsar reproducir, saltar al minuto 1:00, pausar y volver a reproducir. El master original debe servirse con 206 y sin ERR_INVALID_STATE. Si persisten errores, registrar salida exacta y si el navegador puede reproducir/adelantar, ya que TypeScript/CI no reproducen un navegador real.
+
+No hay ninguna generación paga implicada en corregir el streaming.
