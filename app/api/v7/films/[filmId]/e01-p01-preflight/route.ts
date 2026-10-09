@@ -31,10 +31,12 @@ async function resolveContext(context: Context) {
     .flatMap(act => act.sequences.flatMap(sequence => sequence.scenes))
     .flatMap(scene => scene.shots)
     .find(item => item.id === FILM_ID + '-scene-01-shot-01');
-  if (!shot || Math.abs(shot.durationSeconds - 8) > 0.001) {
-    throw new Error('La primera toma E01-P01 no corresponde al guion de 8 segundos');
+  if (!shot || !Number.isFinite(shot.durationSeconds) ||
+      shot.durationSeconds < 6 || shot.durationSeconds > 8) {
+    throw new Error('Toma E01-P01 de V7 ausente o duración fuera de rango');
   }
-  return { bundle, imageFile: path.join(v7FilmRoot(FILM_ID), REFERENCE) };
+  return { bundle, sourceShotSeconds: shot.durationSeconds,
+    imageFile: path.join(v7FilmRoot(FILM_ID), REFERENCE) };
 }
 
 function positiveNumber(value: string | undefined, max: number) {
@@ -45,7 +47,7 @@ function positiveNumber(value: string | undefined, max: number) {
 export async function GET(request: Request, context: Context) {
   if (!localRequest(request)) return NextResponse.json({ ok: false }, { status: 403 });
   try {
-    const { bundle, imageFile } = await resolveContext(context);
+    const { bundle, sourceShotSeconds, imageFile } = await resolveContext(context);
     let referenceReady = false;
     try { const file = await stat(imageFile); referenceReady = file.isFile() && file.size > 10000; }
     catch { /* Not yet imported */ }
@@ -71,7 +73,11 @@ export async function GET(request: Request, context: Context) {
       ok: true,
       filmId: FILM_ID,
       shotId: 'E01-P01',
-      durationSeconds: 8,
+      providerSeconds: 8,
+      filmShotSeconds: sourceShotSeconds,
+      trimToFilmSeconds: sourceShotSeconds,
+      animaticSegmentSeconds: 8,
+      trimRequired: Math.abs(sourceShotSeconds - 8) > 0.01,
       referenceReady,
       filmBudgetUsd: bundle.film.budgetUsd,
       verifiedRateConfigured: rate !== null,
