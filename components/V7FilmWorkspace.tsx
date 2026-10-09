@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import V7CinemaProductionPanel from '@/components/V7CinemaProductionPanel';
+import V7FeatureFilmPlanner from '@/components/V7FeatureFilmPlanner';
+import V7ClosedCutPlayer from '@/components/V7ClosedCutPlayer';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -95,7 +97,7 @@ type Bundle = {
   voiceProfiles: unknown[];
 };
 
-type Tab = 'overview' | 'scenes' | 'takes' | 'production' | 'master';
+type Tab = 'overview' | 'scenes' | 'takes' | 'production' | 'feature' | 'master';
 
 export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
   const [bundle, setBundle] = useState<Bundle | null>(null);
@@ -105,7 +107,7 @@ export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
 
   useEffect(() => {
     const requested = new URLSearchParams(window.location.search).get('tab');
-    if (requested === 'scenes' || requested === 'takes' || requested === 'production' || requested === 'master' || requested === 'overview') {
+    if (requested === 'scenes' || requested === 'takes' || requested === 'production' || requested === 'feature' || requested === 'master' || requested === 'overview') {
       setTab(requested);
     }
   }, []);
@@ -200,6 +202,7 @@ export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
         <TabButton active={tab === 'scenes'} onClick={() => setTab('scenes')} icon={<Layers3 className="h-4 w-4" />}>Escenas</TabButton>
         <TabButton active={tab === 'takes'} onClick={() => setTab('takes')} icon={<Video className="h-4 w-4" />}>Tomas</TabButton>
         <TabButton active={tab === 'production'} onClick={() => setTab('production')} icon={<Clapperboard className="h-4 w-4" />}>Producción</TabButton>
+        <TabButton active={tab === 'feature'} onClick={() => setTab('feature')} icon={<Layers3 className="h-4 w-4" />}>Nivel 2 · Largometrajes</TabButton>
         <TabButton active={tab === 'master'} onClick={() => setTab('master')} icon={<Play className="h-4 w-4" />}>Película final</TabButton>
       </nav>
 
@@ -247,6 +250,10 @@ export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
       )}
 
       {tab === 'production' && <V7CinemaProductionPanel filmId={filmId} />}
+
+      {tab === 'feature' && <V7FeatureFilmPlanner filmId={filmId} />}
+
+      {tab === 'master' && <V7ClosedCutPlayer filmId={filmId} />}
 
       {tab === 'master' && (
         <section id="master" className="panel mt-6 rounded-3xl p-5 md:p-7">
