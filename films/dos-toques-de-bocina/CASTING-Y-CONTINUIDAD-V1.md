@@ -1,6 +1,6 @@
 # DOS TOQUES DE BOCINA — Casting y continuidad V1
 
-Estado: propuesta de identidades ficticias, **NO aprobadas como referencia visual canónica**. El póster/storyboard inicial es únicamente conceptual. No puede utilizarse como foto de identidad de personajes ni como captura real de Libroseller.
+Estado de casting (09/10/2026): **aprobación editorial del creador para los retratos candidatos de Gabriel, Daniel y Lucía**. Todavía deben importarse los tres PNG individuales al proyecto local V7 y validarse como referencias faciales canónicas antes del primer render. Los personajes secundarios aún no tienen retratos aprobados. El póster/storyboard es conceptual; no sirve como captura real de Libroseller.
 
 | Código | Personaje | Rasgos invariables | Voz editorial |
 |---|---|---|---|
@@ -32,10 +32,10 @@ Estado: propuesta de identidades ficticias, **NO aprobadas como referencia visua
 
 ## Aprobaciones pendientes
 
-**No se han aprobado todavía:** retratos canónicos, voces sintetizadas, derechos de voz, sincronización labial, escenas con IA, sonido de bocina definitivo o master mezclado.
+**Aprobado editorialmente:** rostros candidatos de Gabriel, Daniel y Lucía. **Pendiente de validación técnica:** importar sus PNG como imágenes canónicas, fijar referencia multivista, sintetizar/licenciar voces, comprobar sincronización labial, grabar efectos y mezclar master. Las tomas con IA todavía no existen.
 
 La música instrumental original V1 tiene archivo MP3 de 600 segundos, importable desde la pestaña «Música emotiva». Será mezcla provisional hasta revisar las voces y los efectos. La captura de Libroseller debe obtenerse de su interfaz auténtica, no del storyboard ilustrado.
 
 ## Prioridades
 
-Primero aprobar el rostro canónico de Gabriel, Daniel y Lucía; después Samuel, Camila y Victoria. Desarrollar muestras de voz cortas y mantener identificadores estables. La generación pagada solo se debe iniciar tras cerrar guion técnico, continuidad y presupuesto.
+Primero importar y verificar las imágenes ya aprobadas editorialmente de Gabriel, Daniel y Lucía; después crear y aprobar los rostros de Samuel, Camila y Victoria. Desarrollar muestras de voz cortas y mantener identificadores estables. La generación pagada solo se debe iniciar tras cerrar guion técnico, continuidad y presupuesto.
