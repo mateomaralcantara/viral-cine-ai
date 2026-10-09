@@ -30,6 +30,7 @@ export default function V7DosToquesShotRenderPanel({ filmId }: { filmId: string 
   const [status, setStatus] = useState<VideoStatus | null>(null);
   const [adminToken, setAdminToken] = useState('');
   const [checked, setChecked] = useState(false);
+  const [familyConfirmed, setFamilyConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -58,7 +59,8 @@ export default function V7DosToquesShotRenderPanel({ filmId }: { filmId: string 
         action: 'submit',
         referenceSha256: status?.referenceSha256 || '',
         approvedEstimateUsd: status?.estimatedUsd,
-        confirm: checked
+        confirm: checked,
+        compositionConfirmed: familyConfirmed ? 'gabriel-daniel-lucia-on-motorcycle-v2' : ''
       } : { action: 'resume' };
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -76,6 +78,7 @@ export default function V7DosToquesShotRenderPanel({ filmId }: { filmId: string 
             ? 'Solicitud única enviada. Guarda la sesión y utiliza Recuperar operación.'
             : 'Estado de la operación: ' + data.status);
       setChecked(false);
+      setFamilyConfirmed(false);
       await refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
@@ -154,6 +157,15 @@ export default function V7DosToquesShotRenderPanel({ filmId }: { filmId: string 
           placeholder="No publiques este token ni la clave de Google" />
         {!status?.hasSubmittedOrReserved && (
           <label className="mt-4 flex cursor-pointer items-start gap-3 text-sm">
+            <input type="checkbox" className="mt-1" checked={familyConfirmed}
+              onChange={event => setFamilyConfirmed(event.target.checked)} />
+            <span>He revisado el fotograma familiar V2: Gabriel, Daniel y Lucía aparecen
+              juntos, con edades y rostros coherentes y cascos de protección.
+              No usaré el fotograma antiguo donde solo aparece Gabriel.</span>
+          </label>
+        )}
+        {!status?.hasSubmittedOrReserved && (
+          <label className="mt-4 flex cursor-pointer items-start gap-3 text-sm">
             <input type="checkbox" className="mt-1" checked={checked}
               onChange={event => setChecked(event.target.checked)} />
             <span>Confirmo la primera y única solicitud Veo E01-P01 de 8 segundos,
@@ -164,7 +176,7 @@ export default function V7DosToquesShotRenderPanel({ filmId }: { filmId: string 
         <div className="mt-4 flex flex-wrap gap-3">
           {!status?.hasSubmittedOrReserved ? (
             <button type="button" className="button-primary"
-              disabled={busy || !checked || !adminToken || !status?.canSubmitAfterUserClick}
+              disabled={busy || !checked || !familyConfirmed || !adminToken || !status?.canSubmitAfterUserClick}
               onClick={() => void action('submit')}>
               <Film className="h-4 w-4" />
               {busy ? 'Enviando una operación...' : 'Generar una sola toma — US$0.80 previsto'}
