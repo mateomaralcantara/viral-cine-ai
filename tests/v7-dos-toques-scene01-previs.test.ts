@@ -52,3 +52,31 @@ test('E01 import endpoint guards local studio, MP4 identity and prevents overwri
   assert.match(api, /Math\.abs\(duration - 50\)/);
   assert.match(api, /providerCalls: 0/);
 });
+
+
+test('E01 voice auditions preserve family roles and avoid all horn cues', async () => {
+  const raw = await readFile(
+    new URL('../films/dos-toques-de-bocina/ESCENA-01-GUIA-DE-VOCES-V1.json', import.meta.url),
+    'utf8'
+  );
+  const voices = JSON.parse(raw) as {
+    language: string;
+    voiceRequirements: Array<{
+      id: string; role: string; rightsStatus: string; approvedPerformance: boolean;
+      lines: Array<{ startSeconds: number; endSeconds: number }>
+    }>;
+    paidGenerationAuthorized: boolean;
+    videoGenerated: boolean;
+  };
+  assert.equal(voices.language, 'es-DO');
+  assert.deepEqual(voices.voiceRequirements.map(v => v.id), [
+    'GABRIEL-ESDO-V1', 'DANIEL-ESDO-V1', 'LUCIA-ESDO-V1'
+  ]);
+  assert.deepEqual(voices.voiceRequirements.map(v => v.role), ['father', 'son', 'daughter']);
+  assert.ok(voices.voiceRequirements.every(v => v.rightsStatus === 'unknown' && !v.approvedPerformance));
+  assert.ok(voices.voiceRequirements.every(v =>
+    v.lines.every(line => line.endSeconds <= 43 && line.startSeconds >= 0 && line.endSeconds > line.startSeconds)
+  ));
+  assert.equal(voices.paidGenerationAuthorized, false);
+  assert.equal(voices.videoGenerated, false);
+});
