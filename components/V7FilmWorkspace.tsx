@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import V7CinemaProductionPanel from '@/components/V7CinemaProductionPanel';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -93,7 +94,7 @@ type Bundle = {
   voiceProfiles: unknown[];
 };
 
-type Tab = 'overview' | 'scenes' | 'takes' | 'master';
+type Tab = 'overview' | 'scenes' | 'takes' | 'production' | 'master';
 
 export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
   const [bundle, setBundle] = useState<Bundle | null>(null);
@@ -103,7 +104,7 @@ export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
 
   useEffect(() => {
     const requested = new URLSearchParams(window.location.search).get('tab');
-    if (requested === 'scenes' || requested === 'takes' || requested === 'master' || requested === 'overview') {
+    if (requested === 'scenes' || requested === 'takes' || requested === 'production' || requested === 'master' || requested === 'overview') {
       setTab(requested);
     }
   }, []);
@@ -196,6 +197,7 @@ export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
         <TabButton active={tab === 'overview'} onClick={() => setTab('overview')} icon={<Film className="h-4 w-4" />}>Resumen</TabButton>
         <TabButton active={tab === 'scenes'} onClick={() => setTab('scenes')} icon={<Layers3 className="h-4 w-4" />}>Escenas</TabButton>
         <TabButton active={tab === 'takes'} onClick={() => setTab('takes')} icon={<Video className="h-4 w-4" />}>Tomas</TabButton>
+        <TabButton active={tab === 'production'} onClick={() => setTab('production')} icon={<Clapperboard className="h-4 w-4" />}>Producción</TabButton>
         <TabButton active={tab === 'master'} onClick={() => setTab('master')} icon={<Play className="h-4 w-4" />}>Película final</TabButton>
       </nav>
 
@@ -241,6 +243,8 @@ export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
           </section>
         </>
       )}
+
+      {tab === 'production' && <V7CinemaProductionPanel filmId={filmId} />}
 
       {tab === 'master' && (
         <section id="master" className="panel mt-6 rounded-3xl p-5 md:p-7">
