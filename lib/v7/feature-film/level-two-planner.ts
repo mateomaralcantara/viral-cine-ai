@@ -5,7 +5,7 @@
  * fabricated. Every proposed scene/shot remains blocked until its screenplay,
  * visual references and spending authorization are approved.
  */
-export const FEATURE_LEVELS_MINUTES = [4, 15, 30, 60, 90] as const;
+export const FEATURE_LEVELS_MINUTES = [4, 10, 15, 30, 60, 90] as const;
 export type FeatureLevelMinutes = typeof FEATURE_LEVELS_MINUTES[number];
 
 type FeatureAct = {
@@ -65,7 +65,7 @@ export function makeFeatureFilmPlan(args: {
   videoRateUsdPerSecond?: number | null;
 }): FeaturePlan {
   if (!FEATURE_LEVELS_MINUTES.includes(args.minutes as FeatureLevelMinutes)) {
-    throw new Error('Nivel no admitido: usa 4, 15, 30, 60 o 90 minutos.');
+    throw new Error('Nivel no admitido: usa 4, 10, 15, 30, 60 o 90 minutos.');
   }
   const minutes = args.minutes as FeatureLevelMinutes;
   const totalSeconds = minutes * 60;
@@ -74,8 +74,10 @@ export function makeFeatureFilmPlan(args: {
     throw new Error('No se puede cotizar con una tarifa de video inválida.');
   }
 
-  // 120s per scene is only a preliminary capacity assumption, not a script.
-  const count = Math.max(3, Math.ceil(totalSeconds / 120));
+  // For a 10-minute short film, plan shorter scenes (~60s).
+  // This is only a capacity assumption, never a screenplay.
+  const sceneTargetSeconds = minutes <= 15 ? 60 : 120;
+  const count = Math.max(3, Math.ceil(totalSeconds / sceneTargetSeconds));
   const secondsByAct = [totalSeconds / 4, totalSeconds / 2, totalSeconds / 4];
   // All supported levels are divisible by 4, so these remain exact integers.
   const sceneCounts = [0, 0, 0];

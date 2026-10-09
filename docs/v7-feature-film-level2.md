@@ -8,7 +8,7 @@ Esta rama amplía Cinema Core sin modificar el master original de V6. El corte d
 
 Abrir /v7/films/v7-film-01db01f78f6c0e5afee6?tab=feature
 
-El planificador ofrece cinco escalas: 4, 15, 30, 60 y 90 minutos. Divide el tiempo exactamente en tres actos, escenas y tomas, y presenta segundos de generación teóricos. Solo calcula costo de video cuando el servidor dispone de una tarifa explícita, no inventa precios. El plan es de CAPACIDAD: no contiene guion escrito, referencias aprobadas, metraje generado, autorizaciones ni colas de ejecución.
+El planificador ofrece cinco escalas: 4, 10, 15, 30, 60 y 90 minutos. Divide el tiempo exactamente en tres actos, escenas y tomas, y presenta segundos de generación teóricos. Solo calcula costo de video cuando el servidor dispone de una tarifa explícita, no inventa precios. El plan es de CAPACIDAD: no contiene guion escrito, referencias aprobadas, metraje generado, autorizaciones ni colas de ejecución.
 
 Seleccionar 90 minutos no extiende artificialmente 15 DÍAS. Para una nueva película larga hará falta una historia y un guion propios.
 

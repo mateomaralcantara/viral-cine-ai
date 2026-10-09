@@ -22,6 +22,15 @@ test('all Level 2 durations produce exact scene/shot totals and no ready-to-gene
   }
 });
 
+test('ten-minute films have a separate 600-second structure and multiple scenes', () => {
+  const plan = makeFeatureFilmPlan({ minutes: 10 });
+  assert.equal(plan.targetSeconds, 600);
+  assert.ok(plan.totalScenes >= 8);
+  assert.ok(plan.totalShots >= 75);
+  assert.equal(plan.acts.reduce((sum, a) => sum + a.seconds, 0), 600);
+  assert.equal(plan.totalEstimatedVideoCostUsd, null);
+});
+
 test('ninety-minute planning is structurally feasible but not a generated film', () => {
   const plan = makeFeatureFilmPlan({ minutes: 90 });
   assert.equal(plan.targetSeconds, 5400);

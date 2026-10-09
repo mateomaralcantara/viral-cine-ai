@@ -13,9 +13,9 @@ export async function GET(request: Request, context: Context) {
     const bundle = await readV7FilmBundle(filmId);
     const params = new URL(request.url).searchParams;
     const requested = params.get('minutes') ?? '15';
-    if (!/^(4|15|30|60|90)$/.test(requested)) {
+    if (!/^(4|10|15|30|60|90)$/.test(requested)) {
       return NextResponse.json({
-        ok: false, error: 'Duración no admitida: 4, 15, 30, 60 o 90 minutos.'
+        ok: false, error: 'Duración no admitida: 4, 10, 15, 30, 60 o 90 minutos.'
       }, { status: 400 });
     }
 
