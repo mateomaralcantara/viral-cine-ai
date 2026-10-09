@@ -26,7 +26,7 @@ test('original emotional score has a valid ten-scene 600s cue map', async () => 
     assert.ok(plan.cues[i].end > plan.cues[i].start);
     if (i > 0) assert.equal(plan.cues[i].start, plan.cues[i - 1].end);
   }
-  assert.equal(plan.state, 'editorial-review-required');
+  assert.equal(plan.state, 'composition-approved-mix-pending');
   assert.ok(plan.mixPolicy.dialoguePriority);
   assert.ok(plan.mixPolicy.recommendedMusicGainDb < 0);
   assert.equal(plan.mixPolicy.expectedHornBeepCount, 2);
