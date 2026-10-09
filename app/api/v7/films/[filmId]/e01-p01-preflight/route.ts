@@ -37,9 +37,9 @@ async function resolveContext(context: Context) {
   return { bundle, imageFile: path.join(v7FilmRoot(FILM_ID), REFERENCE) };
 }
 
-function positiveNumber(value: string | undefined) {
+function positiveNumber(value: string | undefined, max: number) {
   const n = Number(value ?? 0);
-  return Number.isFinite(n) && n > 0 && n <= 10 ? n : null;
+  return Number.isFinite(n) && n > 0 && n <= max ? n : null;
 }
 
 export async function GET(request: Request, context: Context) {
@@ -50,8 +50,8 @@ export async function GET(request: Request, context: Context) {
     try { const file = await stat(imageFile); referenceReady = file.isFile() && file.size > 10000; }
     catch { /* Not yet imported */ }
 
-    const rate = positiveNumber(process.env.V7_VEO_USD_PER_SECOND);
-    const localCap = positiveNumber(process.env.V7_CINEMA_MAX_USD);
+    const rate = positiveNumber(process.env.V7_VEO_USD_PER_SECOND, 10);
+    const localCap = positiveNumber(process.env.V7_CINEMA_MAX_USD, 1000000);
     const configuredCap = Math.min(bundle.film.budgetUsd, localCap ?? 0);
     const quote = rate === null ? null : estimateVeoUsd(8, rate);
     const paidSystemEnabled =
