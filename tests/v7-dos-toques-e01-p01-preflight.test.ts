@@ -9,7 +9,7 @@ test('E01-P01 real-take plan is 8s, adult-only, consistent with the canonical mo
   const plan = JSON.parse(contents) as {
     filmId: string; scene: string; shot: string;
     timelineStartSeconds: number; timelineEndSeconds: number;
-    requestedSeconds: number; providerVideoSeconds: number;
+    requestedSeconds: number; providerVideoSeconds: number; canonicalV7FilmShotSeconds: number; trimSecondsFromProviderClip: number;
     promptVideoEnglish: string;
     audioDesign: { hornBeepCount: number; dialogue: string };
     provider: {
@@ -24,9 +24,11 @@ test('E01-P01 real-take plan is 8s, adult-only, consistent with the canonical mo
   assert.equal(plan.scene, 'E01');
   assert.equal(plan.shot, 'E01-P01');
   assert.equal(plan.timelineStartSeconds, 0);
-  assert.equal(plan.timelineEndSeconds, 8);
+  assert.equal(plan.timelineEndSeconds, 172 / 24);
   assert.equal(plan.requestedSeconds, 8);
   assert.equal(plan.providerVideoSeconds, 8);
+  assert.equal(plan.canonicalV7FilmShotSeconds, 172 / 24);
+  assert.equal(plan.trimSecondsFromProviderClip, 8 - 172 / 24);
   assert.match(plan.promptVideoEnglish, /dark-blue commuter motorcycle/i);
   assert.match(plan.promptVideoEnglish, /RIGHT side/);
   assert.match(plan.promptVideoEnglish, /no children visible/i);
@@ -48,6 +50,7 @@ test('readiness endpoint is local-only and never submits to Veo', async () => {
   assert.match(api, /V7_VEO_USD_PER_SECOND/);
   assert.match(api, /V7_CINEMA_MAX_USD/);
   assert.match(api, /readyForPaidSubmission: false/);
+  assert.match(api, /trimToFilmSeconds: sourceShotSeconds/);
   assert.match(api, /providerCallsMade: 0/);
   assert.match(api, /await link\(temp, imageFile\)/);
   assert.doesNotMatch(api, /generateVideos\s*\(/);
