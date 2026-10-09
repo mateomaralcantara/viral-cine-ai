@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "2.0",
+  "filmId": "film-dos-toques-de-bocina-v7",
+  "scene": "E01",
+  "shot": "E01-P01",
+  "title": "Llegada — Gabriel con Daniel y Lucía",
+  "rawVideoDurationSeconds": 8,
+  "canonicalV7ShotSeconds": 7.166666666666667,
+  "staging": "Tres personajes en una misma toma continua 16:9; llegada al colegio al amanecer",
+  "characters": [
+    {
+      "id": "gabriel",
+      "age": 39,
+      "role": "father and rider",
+      "safety": "helmet",
+      "traits": "piel canela, camisa azul de trabajo, moto vieja azul oscuro"
+    },
+    {
+      "id": "daniel",
+      "age": 11,
+      "role": "son, seated behind father",
+      "safety": "well-fitted helmet",
+      "traits": "niño dominicano de cabello rizado corto, uniforme escolar"
+    },
+    {
+      "id": "lucia",
+      "age": 7,
+      "role": "daughter, visibly and safely staged",
+      "safety": "well-fitted sky-blue helmet",
+      "traits": "niña con dos trenzas, uniforme y mochila de estrellas"
+    }
+  ],
+  "camera": {
+    "lensEquivalentMm": 35,
+    "framing": "plano general o semigeneral continuo, todos visibles",
+    "motion": "travelling lateral lento, fluido",
+    "lighting": "amanecer dorado",
+    "shotCount": 1,
+    "noCuts": true
+  },
+  "action": [
+    "La familia aparece junta sobre la motocicleta azul oscura usada.",
+    "Gabriel conduce muy despacio hacia una escuela barrial dominicana.",
+    "Daniel se sostiene detrás de Gabriel; Lucía se mantiene visible, colocada con seguridad según la referencia aprobada.",
+    "La moto se aproxima a la acera y reduce suavemente la velocidad."
+  ],
+  "safetyProductionNote": "Representar el traslado como un montaje cinematográfico simulado/compuesto, sin rodar realmente con menores en condiciones inseguras. No mostrar niños sin casco.",
+  "sound": {
+    "dialogue": null,
+    "motor": "ralentí suave y frenada leve",
+    "birds": true,
+    "neighborhood": "tránsito matinal suave",
+    "music": "piano emotivo original discretamente mezclado en postproducción",
+    "hornBeepCount": 0
+  },
+  "compositionRules": [
+    "Exactamente tres ocupantes: Gabriel, Daniel y Lucía; no duplicar personas.",
+    "Los tres visibles a lo largo de la toma; ningún título, cartel ni collage.",
+    "Rostros coherentes con los retratos aprobados de casting.",
+    "Casco infantil azul claro puesto por Lucía durante el movimiento; podrá colgarse del manubrio después de detenerse, en otra toma.",
+    "Motor y ropa conservan detalles entre fotogramas, física realista.",
+    "No hacer acrobacias ni tráfico peligroso.",
+    "Escuela ficticia, sin logos ni nombres inventados."
+  ],
+  "negativePrompt": "No slideshow, no title card, no person labels, no generated captions, no fake brand logos, no identity switching, no fourth rider, no unhelmeted children, no anatomical distortion, no multi-camera edits.",
+  "reference": {
+    "path": "e01-p01/referencia-familia-v2.png",
+    "minSize": "1280x720",
+    "format": "PNG",
+    "mustShowAllThree": true,
+    "importedOnUserPc": false,
+    "manualCompositionConfirmationRequired": true,
+    "oldFatherOnlyImageIsInvalid": true
+  },
+  "provider": {
+    "model": "veo-3.1-fast-generate-preview",
+    "resolution": "720p",
+    "rateUsdPerSecond": 0.1,
+    "estimatedCostUsd": 0.8,
+    "maxAuthorizedUsd": 2,
+    "maxProviderSubmissions": 1,
+    "automaticRetries": 0,
+    "submitted": false,
+    "operationId": null
+  },
+  "readiness": "AWAITING_NEW_THREE_PERSON_FRAME_AND_LOCAL_PROVIDER_EXECUTION",
+  "firstShotStatus": "NOT_GENERATED",
+  "sourceOfTruth": "La composición especificada explícitamente por el creador en la última solicitud sustituye el encuadre antiguo de Gabriel solo."
+}
