@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { link, mkdir, open, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -16,6 +16,7 @@ export const dynamic = 'force-dynamic';
 const FILM_ID = 'film-dos-toques-de-bocina-v7';
 const E01_PREVIS = 'E01-LA-SENAL-PREVIS-50S.mp4';
 const MAX_VIDEO_BYTES = 35 * 1024 * 1024;
+const VERIFIED_PILOT_SHA256 = 'ca872c06b41e07f407e3c0f29f149b5367fa24d910638419142f1f6f60beea5c';
 const ffprobe = promisify(execFile);
 type Context = { params: Promise<{ filmId: string }> };
 
@@ -108,6 +109,12 @@ export async function POST(request: Request, context: Context) {
     if (bytes.toString('ascii', 4, 8) !== 'ftyp') {
       return NextResponse.json({ ok: false, error: 'El archivo no contiene cabecera MP4 válida.' },
         { status: 400 });
+    }
+
+    if (createHash('sha256').update(bytes).digest('hex') !== VERIFIED_PILOT_SHA256) {
+      return NextResponse.json({ ok: false,
+        error: 'El archivo no coincide con la prueba E01 V1 entregada; no se importará otro video por error.'
+      }, { status: 400 });
     }
 
     await mkdir(path.dirname(target), { recursive: true });
