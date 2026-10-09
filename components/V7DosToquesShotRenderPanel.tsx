@@ -11,6 +11,9 @@ type VideoStatus = {
   automaticRetries: number;
   referenceReady: boolean;
   referenceSha256: string | null;
+  promptSha256: string;
+  providerMode: 'text-to-video';
+  imageReferenceNotSentToGoogle: boolean;
   flagsEnabled: boolean;
   rateVerifiedInEnv: boolean;
   capVerifiedInEnv: boolean;
@@ -57,7 +60,7 @@ export default function V7DosToquesShotRenderPanel({ filmId }: { filmId: string 
     try {
       const body = kind === 'submit' ? {
         action: 'submit',
-        referenceSha256: status?.referenceSha256 || '',
+        promptSha256: status?.promptSha256 || '',
         approvedEstimateUsd: status?.estimatedUsd,
         confirm: checked,
         compositionConfirmed: familyConfirmed ? 'gabriel-daniel-lucia-on-motorcycle-v2' : ''
@@ -90,7 +93,7 @@ export default function V7DosToquesShotRenderPanel({ filmId }: { filmId: string 
 
   const missing: string[] = [];
   if (status) {
-    if (!status.referenceReady) missing.push('Importar el fotograma inicial 16:9 en la sección anterior');
+
     if (!status.rateVerifiedInEnv) missing.push('V7_VEO_USD_PER_SECOND=0.10 (tarifa oficial verificada)');
     if (!status.capVerifiedInEnv) missing.push('V7_CINEMA_MAX_USD=2 (máximo local)');
     if (!status.credentialConfigured) missing.push('GEMINI_API_KEY debe estar configurada en el servidor');
@@ -106,7 +109,9 @@ export default function V7DosToquesShotRenderPanel({ filmId }: { filmId: string 
       </div>
       <p className="mt-3 text-sm leading-6 text-slate-300">
         Una única generación de ocho segundos con Veo 3.1 Fast a 720p, destinada a
-        E01-P01. El resultado se almacena como <strong>candidato</strong>, no sustituye
+        E01-P01. Para incluir a Daniel y Lucía, utiliza <strong>texto-a-video</strong>:
+        la imagen familiar sirve de guía editorial, pero Google no la recibirá.
+        La continuidad facial tendrá que verificarse después. El resultado se almacena como <strong>candidato</strong>, no sustituye
         la previsualización ni se considera aprobado hasta revisar su calidad.
       </p>
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -159,9 +164,10 @@ export default function V7DosToquesShotRenderPanel({ filmId }: { filmId: string 
           <label className="mt-4 flex cursor-pointer items-start gap-3 text-sm">
             <input type="checkbox" className="mt-1" checked={familyConfirmed}
               onChange={event => setFamilyConfirmed(event.target.checked)} />
-            <span>He revisado el fotograma familiar V2: Gabriel, Daniel y Lucía aparecen
-              juntos, con edades y rostros coherentes y cascos de protección.
-              No usaré el fotograma antiguo donde solo aparece Gabriel.</span>
+            <span>Confirmo la puesta en escena: aparecen Gabriel, Daniel y Lucía juntos,
+              con cascos y edades correctas, llegando a la escuela. Esta generación
+              es de texto a video; no se envía una imagen de referencia a Google,
+              y los rostros deben comprobarse al recibir el clip.</span>
           </label>
         )}
         {!status?.hasSubmittedOrReserved && (
