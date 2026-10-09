@@ -6,7 +6,8 @@ import { Copy, FileCheck2, LockKeyhole, RefreshCcw } from 'lucide-react';
 type Preflight = {
   ok: boolean; shotId: string; providerSeconds: number; filmShotSeconds: number; trimRequired: boolean;
   referenceReady: boolean; verifiedRateConfigured: boolean;
-  filmBudgetUsd: number; localBudgetCapUsd: number;
+  filmBudgetUsd: number; localBudgetCapUsd: number; scopedApprovalUsd: number;
+  approvedProviderCalls: number; approvedAutomaticRetries: number; creatorApprovalRecorded: boolean;
   estimatedVideoUsd: number | null; readyForPaidSubmission: false;
   paidSystemEnabled: boolean; blockers: string[]; error?: string;
 };
@@ -139,9 +140,16 @@ export default function V7DosToquesFirstShotPanel({ filmId }: { filmId: string }
         <p className="mt-2 text-xs text-slate-400">
           El video de proveedor de 8 s debe recortarse a la duración real del guion V7,
           aproximadamente 7,17 s, para no descuadrar los 10 minutos.
-          El presupuesto de esta película continúa sin autorización para generación de video.
-          Un precio estimado no es una autorización de pago.
+          El creador autorizó hasta US$2.00 para una sola generación de E01-P01 a 720p,
+          sin reintentos automáticos. El costo previsto según Google es US$0.80.
+          Ninguna llamada pagada ha sido enviada; antes de ejecutarla es obligatorio
+          importar el fotograma y comprobar credenciales y límites locales.
         </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-emerald-300">
+          <span>Autorización de esta toma:</span>
+          <strong>{state?.scopedApprovalUsd != null ? 'US$ ' + state.scopedApprovalUsd.toFixed(2) : 'consultando...'}</strong>
+          <span>· 1 intento · 0 reintentos · Ningún pago realizado</span>
+        </div>
         <ul className="mt-3 list-inside list-disc space-y-1.5 text-sm text-amber-200">
           {(state?.blockers || ['Cargando comprobaciones de presupuesto y referencia…'])
             .map(blocker => <li key={blocker}>{blocker}</li>)}
