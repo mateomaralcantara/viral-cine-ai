@@ -47,15 +47,23 @@
     "aspect": "16:9",
     "type": "fotograma inicial canónico, sin niños visibles",
     "path": "e01-p01/referencia-aprobada.png",
-    "approvalStatus": "PENDING_LOCAL_IMPORT_AND_QA"
+    "approvalStatus": "CREATED_CANDIDATE_PENDING_USER_REVIEW_AND_LOCAL_IMPORT",
+    "candidateFileName": "DOS_TOQUES_E01_P01_REFERENCIA_1280x720.png",
+    "candidateSha256": "3f2a3ec659883506b727de9bda0474e10812fb76f9d258a0a76a8b49129c2422",
+    "candidateResolution": "1280x720",
+    "candidateAvailableForImport": true
   },
   "provider": {
     "suggestedModel": "veo-3.1-fast-generate-preview",
-    "pricingStatus": "NOT_VERIFIED",
-    "approvedBudgetUsd": 0,
-    "externalRequestAuthorized": false,
+    "pricingStatus": "GOOGLE_PUBLIC_RATE_0.10_USD_PER_SECOND_FAST_720P",
+    "approvedBudgetUsd": 2,
+    "externalRequestAuthorized": true,
     "submitted": false,
-    "providerOperationId": null
+    "providerOperationId": null,
+    "estimatedOneShotUsd": 0.8,
+    "maxProviderSubmissions": 1,
+    "retriesAuthorized": 0,
+    "status": "AUTHORIZED_AWAITING_USER_LOCAL_EXECUTION"
   },
   "qualityCriteria": [
     "Motor y casco se mantienen idénticos durante los 8 segundos.",
