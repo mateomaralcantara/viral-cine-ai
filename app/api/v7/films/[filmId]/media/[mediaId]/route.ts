@@ -1,10 +1,9 @@
-import { createReadStream } from 'node:fs';
-import { stat } from 'node:fs/promises';
+import { open, stat } from 'node:fs/promises';
 import { basename, extname } from 'node:path';
-import { Readable } from 'node:stream';
 import { readV7FilmBundle } from '@/lib/v7/storage/film-store';
 import { resolveV7AssetAbsolutePath } from '@/lib/v7/storage/asset-resolver';
 import { getMasterAsset } from '@/lib/v7/library/library-view';
+import { createFileByteRangeStream, parseVideoByteRange } from '@/lib/v7/media/file-byte-range-stream';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -12,6 +11,14 @@ export const dynamic = 'force-dynamic';
 type Context = { params: Promise<{ filmId: string; mediaId: string }> };
 
 export async function GET(request: Request, context: Context) {
+  return serveMedia(request, context, false);
+}
+
+export async function HEAD(request: Request, context: Context) {
+  return serveMedia(request, context, true);
+}
+
+async function serveMedia(request: Request, context: Context, headersOnly: boolean) {
   try {
     const { filmId, mediaId } = await context.params;
     const bundle = await readV7FilmBundle(filmId);
@@ -32,77 +39,50 @@ export async function GET(request: Request, context: Context) {
     const download = url.searchParams.get('download') === '1';
     const fileName = safeFileName(
       mediaId === 'master'
-        ? bundle.film.title + ' - PELICULA FINAL' + extname(absolute)
+        ? bundle.film.title + ' - MASTER ORIGINAL' + extname(absolute)
         : basename(absolute)
     );
     const commonHeaders: Record<string, string> = {
       'Accept-Ranges': 'bytes',
       'Content-Type': contentType(absolute),
       'Cache-Control': 'private, no-store',
-      'Content-Disposition': (download ? 'attachment' : 'inline') + '; filename="' + fileName + '"'
+      'Content-Disposition': (download ? 'attachment' : 'inline') + '; filename="' + fileName + '"',
+      'X-Content-Type-Options': 'nosniff'
     };
 
     const range = request.headers.get('range');
-    if (!range) {
-      const stream = createReadStream(absolute);
-      return new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>, {
-        status: 200,
+    const parsed = range === null ? null : parseVideoByteRange(range, info.size);
+
+    if (range !== null && !parsed) {
+      return new Response(null, {
+        status: 416,
         headers: {
           ...commonHeaders,
-          'Content-Length': String(info.size)
+          'Content-Range': 'bytes */' + info.size
         }
       });
     }
 
-    const parsed = parseRange(range, info.size);
-    if (!parsed) {
-      return new Response('Rango inválido', {
-        status: 416,
-        headers: { 'Content-Range': 'bytes */' + info.size }
-      });
-    }
+    const start = parsed?.start ?? 0;
+    const end = parsed?.end ?? info.size - 1;
+    const status = parsed ? 206 : 200;
+    const headers: Record<string, string> = {
+      ...commonHeaders,
+      'Content-Length': String(parsed ? end - start + 1 : info.size)
+    };
+    if (parsed) headers['Content-Range'] = 'bytes ' + start + '-' + end + '/' + info.size;
 
-    const { start, end } = parsed;
-    const stream = createReadStream(absolute, { start, end });
-    return new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>, {
-      status: 206,
-      headers: {
-        ...commonHeaders,
-        'Content-Length': String(end - start + 1),
-        'Content-Range': 'bytes ' + start + '-' + end + '/' + info.size
-      }
-    });
+    if (headersOnly || info.size === 0) return new Response(null, { status, headers });
+
+    // Open AFTER all validation and range checks; no source files are modified.
+    const file = await open(absolute, 'r');
+    // The response reads one bounded chunk per pull and releases the handle
+    // on a finished range or a cancelled seek.
+    const stream = createFileByteRangeStream(file, start, end);
+    return new Response(stream, { status, headers });
   } catch {
     return new Response('Video no encontrado', { status: 404 });
   }
-}
-
-function parseRange(value: string, size: number) {
-  const match = /^bytes=(\d*)-(\d*)$/.exec(value.trim());
-  if (!match) return undefined;
-
-  let start: number;
-  let end: number;
-
-  if (!match[1] && match[2]) {
-    const suffix = Number(match[2]);
-    if (!Number.isFinite(suffix) || suffix <= 0) return undefined;
-    start = Math.max(0, size - suffix);
-    end = size - 1;
-  } else {
-    start = match[1] ? Number(match[1]) : 0;
-    end = match[2] ? Number(match[2]) : size - 1;
-  }
-
-  if (
-    !Number.isInteger(start) ||
-    !Number.isInteger(end) ||
-    start < 0 ||
-    end < start ||
-    start >= size
-  ) return undefined;
-
-  return { start, end: Math.min(end, size - 1) };
 }
 
 function contentType(filePath: string) {

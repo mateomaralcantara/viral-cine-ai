@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import V7CinemaProductionPanel from '@/components/V7CinemaProductionPanel';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -86,6 +87,7 @@ type Bundle = {
     type: string;
     storagePath: string;
     approved: boolean;
+    source?: string;
     shotId?: string;
     takeId?: string;
     provider?: string;
@@ -93,7 +95,7 @@ type Bundle = {
   voiceProfiles: unknown[];
 };
 
-type Tab = 'overview' | 'scenes' | 'takes' | 'master';
+type Tab = 'overview' | 'scenes' | 'takes' | 'production' | 'master';
 
 export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
   const [bundle, setBundle] = useState<Bundle | null>(null);
@@ -103,7 +105,7 @@ export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
 
   useEffect(() => {
     const requested = new URLSearchParams(window.location.search).get('tab');
-    if (requested === 'scenes' || requested === 'takes' || requested === 'master' || requested === 'overview') {
+    if (requested === 'scenes' || requested === 'takes' || requested === 'production' || requested === 'master' || requested === 'overview') {
       setTab(requested);
     }
   }, []);
@@ -149,6 +151,7 @@ export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
 
   const stages = bundle.workflow?.stages || [];
   const next = stages.find((stage) => stage.status === 'ready' || stage.status === 'in-progress');
+  const hasApprovedV7Master = bundle.assets.some((asset) => asset.type === 'master' && asset.approved && asset.source !== 'legacy-v6');
   const hasMaster = bundle.assets.some((asset) => asset.type === 'master' && asset.approved) ||
     typeof bundle.film.metadata.originalFinalVideoAsset === 'string';
   const masterUrl = '/api/v7/films/' + encodeURIComponent(filmId) + '/media/master';
@@ -175,7 +178,7 @@ export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
               : 'border-amber-400/20 bg-amber-500/[.08] text-amber-300')
           }>
             {hasMaster ? <CheckCircle2 className="mr-2 inline h-4 w-4" /> : <ShieldCheck className="mr-2 inline h-4 w-4" />}
-            {hasMaster ? 'PELÍCULA TERMINADA' : 'PRODUCCIÓN PROTEGIDA'}
+            {hasApprovedV7Master ? 'PELÍCULA V7 APROBADA' : hasMaster ? 'MASTER ORIGINAL V6' : 'PRODUCCIÓN PROTEGIDA'}
           </div>
         </div>
         <div className="mt-5 flex flex-wrap gap-2 text-xs">
@@ -196,6 +199,7 @@ export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
         <TabButton active={tab === 'overview'} onClick={() => setTab('overview')} icon={<Film className="h-4 w-4" />}>Resumen</TabButton>
         <TabButton active={tab === 'scenes'} onClick={() => setTab('scenes')} icon={<Layers3 className="h-4 w-4" />}>Escenas</TabButton>
         <TabButton active={tab === 'takes'} onClick={() => setTab('takes')} icon={<Video className="h-4 w-4" />}>Tomas</TabButton>
+        <TabButton active={tab === 'production'} onClick={() => setTab('production')} icon={<Clapperboard className="h-4 w-4" />}>Producción</TabButton>
         <TabButton active={tab === 'master'} onClick={() => setTab('master')} icon={<Play className="h-4 w-4" />}>Película final</TabButton>
       </nav>
 
@@ -242,11 +246,13 @@ export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
         </>
       )}
 
+      {tab === 'production' && <V7CinemaProductionPanel filmId={filmId} />}
+
       {tab === 'master' && (
         <section id="master" className="panel mt-6 rounded-3xl p-5 md:p-7">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="text-xs font-black uppercase tracking-wider text-emerald-300">Master final</div>
+              <div className="text-xs font-black uppercase tracking-wider text-emerald-300">{hasApprovedV7Master ? 'Master final V7' : 'Master original / legado'}</div>
               <h2 className="mt-1 text-2xl font-black">{bundle.film.title}</h2>
             </div>
             {hasMaster && (
