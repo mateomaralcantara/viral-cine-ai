@@ -92,7 +92,7 @@ export default function V7DosToquesShotRenderPanel({ filmId }: { filmId: string 
     if (!status.capVerifiedInEnv) missing.push('V7_CINEMA_MAX_USD=2 (máximo local)');
     if (!status.credentialConfigured) missing.push('GEMINI_API_KEY debe estar configurada en el servidor');
     if (!status.adminTokenConfigured) missing.push('V7_CINEMA_ADMIN_TOKEN (secreto de 24+ caracteres)');
-    if (!status.flagsEnabled) missing.push('Activar permisos de producción real, después de verificar la clave y el presupuesto');
+    if (!status.flagsEnabled) missing.push('Activar solo V7_DOS_TOQUES_P01_PAID_ENABLED=true; mantener los demás pagos globales desactivados');
   }
 
   return (
