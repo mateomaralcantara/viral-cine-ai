@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Clapperboard, Film, LoaderCircle, ShieldCheck, Volume2 } from 'lucide-react';
+import V7DosToquesFirstShotPanel from '@/components/V7DosToquesFirstShotPanel';
 
 const shots = [
   { id: 'E01-P01', start: '00:00', end: '00:08', seconds: 8, text: 'Llegada a la escuela y presentación de la familia.' },
@@ -109,6 +110,8 @@ export default function V7DosToquesScene01Panel({ filmId }: { filmId: string }) 
         )}
         {message && <p className="mt-3 text-sm text-amber-200" role="status">{message}</p>}
       </header>
+
+      <V7DosToquesFirstShotPanel filmId={filmId} />
 
       <div className="panel rounded-3xl p-6">
         <h3 className="text-xl font-bold">Plan de siete tomas</h3>
