@@ -25,10 +25,10 @@ type PlanResponse = {
   error?: string;
 };
 
-const LENGTHS = [4, 15, 30, 60, 90] as const;
+const LENGTHS = [4, 10, 15, 30, 60, 90] as const;
 
 export default function V7FeatureFilmPlanner({ filmId }: { filmId: string }) {
-  const [minutes, setMinutes] = useState<(typeof LENGTHS)[number]>(15);
+  const [minutes, setMinutes] = useState<(typeof LENGTHS)[number]>(10);
   const [data, setData] = useState<PlanResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
