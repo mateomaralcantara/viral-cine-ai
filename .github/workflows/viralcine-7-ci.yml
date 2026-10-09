@@ -44,6 +44,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Check four-minute local exporter
+        run: |
+          node --check scripts/finalizar-15-dias-4min.mjs
+          node -e "import('sharp').then(() => console.log('LOCAL_EXPORTER_SHARP_READY=YES'))"
+
       - name: Typecheck V6 + V7
         run: npm run typecheck
 
