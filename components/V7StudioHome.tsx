@@ -27,7 +27,7 @@ type CreateResponse = {
   };
 };
 
-const durationPresets = [5, 15, 30, 60, 90, 120];
+const durationPresets = [5, 10, 15, 30, 60, 90, 120];
 const genres = ['Drama', 'Acción', 'Comedia', 'Suspenso', 'Terror', 'Romance', 'Documental', 'Histórica', 'Ciencia ficción'];
 
 export default function V7StudioHome() {
@@ -41,7 +41,7 @@ export default function V7StudioHome() {
   const [form, setForm] = useState({
     title: '',
     story: '',
-    durationMinutes: 90,
+    durationMinutes: 10,
     genre: 'Drama',
     aspectRatio: '16:9',
     language: 'es',
