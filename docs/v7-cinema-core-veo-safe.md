@@ -50,3 +50,15 @@ El CI usa ALLOW_EXTERNAL_API_CALLS=false y ALLOW_PAID_GENERATION=false.
 ## Integración con el equipo local
 
 La rama remota feat/v7-cinema-core-veo-safe nace de feat/viralcine-7-feature-film-os. El equipo del usuario ejecuta feat/v7-integrated con modificaciones locales no publicadas. No usar reset hard, no sobrescribir su V7 local ni V6: revisar la solicitud de cambios y aplicarlos mediante cherry-pick controlado o un nuevo worktree. Resolver conflictos de V7FilmWorkspace antes de integrar. Esta entrega es un piloto integrado de producción, no una plataforma completamente automática de QA y master.
+
+
+## Media separada V6 / V7 (local)
+
+Los datos de V7 pueden residir en el worktree de integración, mientras que los medios originales siguen en V6. El resolver de assets acepta una variable adicional que señala el árbol V6 solo para localizar y leer recursos:
+
+    VIRALCINE_DATA_DIR=C:\Users\martin\Desktop\VSC\BestS\viral-cine-v7-integration\.data
+    VIRALCINE_V6_DATA_DIR=C:\Users\martin\Desktop\VSC\BestS\viral-cine-ai\.data
+
+Esto resuelve los 404 cuando el master o las tomas originales existen en V6 pero el servidor de V7 los busca bajo la raíz incorrecta. No copia ni reescribe archivos originales. Si persiste un 404, comprobar la ruta del asset en el registro: una ruta correcta no reconstruye un archivo ausente.
+
+Después de cambiar variables de entorno, detener Next.js mediante Ctrl+C y reiniciar en la terminal actual. Mantener las banderas pagadas desactivadas.
