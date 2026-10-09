@@ -11,8 +11,10 @@ on:
       - feat/v7-dos-toques-soundtrack-casting
       - feat/v7-dos-toques-production-bible
       - feat/v7-dos-toques-scene01-pilot
+      - feat/v7-dos-toques-e01-p01-preflight
   pull_request:
     branches:
+      - feat/v7-dos-toques-scene01-pilot
       - feat/v7-dos-toques-production-bible
       - feat/v7-dos-toques-soundtrack-casting
       - feat/v7-dos-toques-de-bocina-script
