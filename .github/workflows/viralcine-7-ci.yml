@@ -14,8 +14,10 @@ on:
       - feat/v7-dos-toques-e01-p01-preflight
       - feat/v7-dos-toques-p01-usd2-approval
       - feat/v7-dos-toques-p01-one-shot-render
+      - feat/v7-dos-toques-p01-family-arrival
   pull_request:
     branches:
+      - feat/v7-dos-toques-p01-one-shot-render
       - feat/v7-dos-toques-p01-usd2-approval
       - feat/v7-dos-toques-e01-p01-preflight
       - feat/v7-dos-toques-scene01-pilot
