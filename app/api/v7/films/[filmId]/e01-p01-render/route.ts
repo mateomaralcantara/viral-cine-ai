@@ -20,6 +20,7 @@ const MODEL = 'veo-3.1-fast-generate-preview';
 const RATE = 0.10;
 const SHOT_ID = 'E01-P01';
 const FILE = 'E01-P01-veo-candidato.mp4';
+const REQUIRED_COMPOSITION = 'gabriel-daniel-lucia-on-motorcycle-v2';
 const ffprobe = promisify(execFile);
 
 type Context = { params: Promise<{ filmId: string }> };
@@ -42,7 +43,7 @@ type ShotRecord = {
 
 function root() { return path.join(v7FilmRoot(FILM_ID), 'e01-p01'); }
 function recordPath() { return path.join(root(), 'provider-operation.json'); }
-function referencePath() { return path.join(root(), 'referencia-aprobada.png'); }
+function referencePath() { return path.join(root(), 'referencia-familia-v2.png'); }
 function videoPath() { return path.join(root(), FILE); }
 
 function requestAllowed(request: Request) {
@@ -144,16 +145,27 @@ function prompt() {
     'Single continuous 8-second cinematic realistic image-to-video shot; 16:9 720p.',
     'Use the uploaded initial reference frame as a strict continuity anchor.',
     'Outside a fictional Dominican neighborhood school at golden dawn.',
-    'A worn dark-blue commuter motorcycle with black tape on its patched seat',
-    'moves slowly and stops along the curb, with natural wheel rotation and suspension.',
-    'A Dominican adult man, 39 years old, faded blue work shirt, matte black helmet,',
-    'face oriented away from the camera. One small light blue child helmet hangs',
-    'on the RIGHT side of the motorcycle handlebar throughout the shot.',
-    'Slow stable tracking shot, 35mm lens, warm natural Caribbean morning light.',
-    'Subtle motor and street ambience, no voices or dialogue.',
-    'No children visible, no talking, no lipsync, no face changes,',
-    'no text, no logos, no subtitles, no cuts, no teleportation,',
-    'no deformities in hands, wheels, motorcycle or helmets.'
+    'A Dominican father Gabriel Santos, 39 years old, faded blue work shirt,',
+    'matte black safety helmet, rides his old dark-blue commuter motorcycle',
+    'with a patched black-tape seat very slowly toward the entrance of',
+    'a modest fictional school. BOTH of his children are CLEARLY VISIBLE:',
+    'Daniel Santos (11-year-old boy, short curly hair, school uniform, well-fitted',
+    'protective helmet) seated securely behind his father, and Lucía Santos',
+    '(7-year-old girl, two braids, school uniform, well-fitted light blue',
+    'protective helmet), positioned securely as established in the approved',
+    'staged reference frame. The three faces/ages/outfits match that image',
+    'across every video frame. No additional riders.',
+    'Three human beings and one intact motorcycle throughout. The bike travels',
+    'at walking pace on a quiet controlled street, approaching school then',
+    'braking gently. Film as a safely staged cinematic composite, not real',
+    'unsafe child transport. No child without a helmet.',
+    'Golden Caribbean dawn, natural neighborhood traffic in the distance,',
+    'birds and restrained motorcycle ambience, very subtle expressive piano',
+    'to be mixed after generation. Slow smooth wide lateral tracking,',
+    '35mm lens, realistic wheel motion and perspective, no cuts.',
+    'No dialogue, no lipsync, no names on screen, no overlays, no posters,',
+    'no title cards, no invented signs or logos, no duplicated limbs,',
+    'no identity or clothing swaps, no frame-to-frame motorcycle morphing.'
   ].join(' ');
 }
 
@@ -212,7 +224,7 @@ export async function GET(request: Request, context: Context) {
 
 export async function POST(request: Request, context: Context) {
   if (!requestAllowed(request) || !authorized(request)) return clearResult(403, 'Token administrativo u origen inválido.');
-  let body: { action?: string; referenceSha256?: string; approvedEstimateUsd?: number; confirm?: boolean };
+  let body: { action?: string; referenceSha256?: string; approvedEstimateUsd?: number; confirm?: boolean; compositionConfirmed?: string };
   try { body = await request.json() as typeof body; }
   catch { return clearResult(400, 'Solicitud JSON inválida.'); }
   if (body.action !== 'submit' && body.action !== 'resume') return clearResult(400, 'Solo submit o resume.');
@@ -285,7 +297,7 @@ export async function POST(request: Request, context: Context) {
       if (!envRateMatches()) throw new Error('Tarifa diferente a US$0.10/s; detén la solicitud.');
       if (!envCapEnough()) throw new Error('Configura V7_CINEMA_MAX_USD entre 0.80 y 2.00.');
       const { data, sha } = await referenceSha();
-      if (body.confirm !== true || body.referenceSha256 !== sha ||
+      if (body.confirm !== true || body.compositionConfirmed !== REQUIRED_COMPOSITION || body.referenceSha256 !== sha ||
           body.approvedEstimateUsd !== firstShotQuotedUsd(RATE)) {
         throw new Error('Debes confirmar la referencia vigente y exactamente US$0.80 estimados.');
       }
