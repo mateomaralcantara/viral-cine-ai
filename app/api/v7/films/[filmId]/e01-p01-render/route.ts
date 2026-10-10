@@ -144,9 +144,9 @@ function prompt() {
     'Daniel Santos (11-year-old boy, short curly hair, school uniform, well-fitted',
     'protective helmet) seated securely behind his father, and Lucía Santos',
     '(7-year-old girl, two braids, school uniform, well-fitted light blue',
-    'protective helmet), positioned securely as established in the approved',
-    'staged reference frame. The three faces/ages/outfits match that image',
-    'across every video frame. No additional riders.',
+    'protective helmet), also clearly visible in a safely composited',
+    'cinematic riding arrangement. The three characters keep the same',
+    'apparent ages, clothes and helmets across all frames. No additional riders.'
     'Three human beings and one intact motorcycle throughout. The bike travels',
     'at walking pace on a quiet controlled street, approaching school then',
     'braking gently. Film as a safely staged cinematic composite, not real',
