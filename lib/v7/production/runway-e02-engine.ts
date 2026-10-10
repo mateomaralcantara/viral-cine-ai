@@ -1,4 +1,5 @@
-import {createHash,randomUUID,timingSafeEqual} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
+import {localAdminAuthorized} from '@/lib/v7/security/local-studio-session';
 import {execFile} from 'node:child_process';
 import {createReadStream} from 'node:fs';
 import {mkdir,readFile,writeFile,rename,open,unlink,stat,link} from 'node:fs/promises';
@@ -85,11 +86,7 @@ export function runwayEnabled(){
   Boolean(process.env.RUNWAYML_API_SECRET?.trim());
 }
 export function runwayAdminAuthorized(request:Request){
- const secret=process.env.V7_CINEMA_ADMIN_TOKEN??'';
- const supplied=request.headers.get('authorization')?.replace(/^Bearer /i,'')??'';
- if(secret.length<24||supplied.length!==secret.length)return false;
- const a=Buffer.from(secret),b=Buffer.from(supplied);
- return a.length===b.length&&timingSafeEqual(a,b);
+ return localAdminAuthorized(request);
 }
 function safeError(error:unknown){
  return String(error instanceof Error?error.message:error)
