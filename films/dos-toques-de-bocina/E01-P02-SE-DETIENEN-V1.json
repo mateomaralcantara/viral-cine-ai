@@ -1,0 +1,96 @@
+{
+  "schemaVersion": "1.0",
+  "filmId": "film-dos-toques-de-bocina-v7",
+  "scene": "E01",
+  "shotId": "E01-P02",
+  "title": "Se detienen — la ternura después de la llegada",
+  "status": "PREPRODUCTION_NO_PROVIDER_SUBMISSION",
+  "editorial": {
+    "sourceOfTruth": "canonical-existing-film-v7",
+    "scene01Seconds": 50,
+    "canonicalStartFrames": 172,
+    "canonicalDurationFrames": 172,
+    "canonicalStartSeconds": 7.166666666666667,
+    "canonicalEndSeconds": 14.333333333333334,
+    "previewWindow": "00:08–00:15 (animática, no exacto V7)",
+    "supplierIfApprovedSeconds": 8,
+    "plannedTrimSeconds": 7.166666666666667
+  },
+  "previousShot": {
+    "shotId": "E01-P01",
+    "sourceFile": "e01-p01/E01-P01-veo-candidato.mp4",
+    "approvalFile": "e01-p01/artistic-approval.json",
+    "approvalRequired": "artistic-approved",
+    "referenceCaptureAtSeconds": 7,
+    "referenceFile": "e01-p02/continuidad-final-p01.png",
+    "sourceApprovalRemainsUntouched": true
+  },
+  "action": [
+    "La moto azul oscura ya está completamente detenida junto a la acera de la escuela.",
+    "Gabriel sostiene el manubrio, apaga el motor y mira a Daniel y Lucía con cansancio y ternura.",
+    "Los dos niños están colocados de forma segura en la acera junto al motor estacionado; no se representa a menores circulando sin casco.",
+    "Gabriel se quita su propio casco negro; con calma se acerca a los niños. La ayuda a bajar ocurrirá en E01-P03 según continuidad.",
+    "Cerrar con sonrisa natural de Gabriel y el gesto de Daniel acercándose a su padre."
+  ],
+  "staging": "Un solo plano medio lateral sin cortes. Cámara a nivel de la acera. Motocicleta completamente parada y apoyada. Niños en la acera o quietos en la moto sin movimiento ni acrobacias.",
+  "continuityLocks": [
+    "Mismo motor azul oscuro usado y asiento de cinta negra que en la toma real E01-P01.",
+    "Misma fachada escolar y luz dorada; conservar dirección de la calle y la posición de la moto.",
+    "Gabriel: camisa azul de trabajo y casco negro; los niños con uniformes azules y blancos.",
+    "Casco infantil: verificar qué aparece realmente en E01-P01; no dar por verificada su colocación.",
+    "Gabriel, Daniel y Lucía: identidad aparente y número exacto de personajes; revisar manualmente.",
+    "La composición E01-P01 presenta posible inconsistencia de casco/posición trasera: no reproducir una conducción insegura."
+  ],
+  "camera": {
+    "framing": "plano medio lateral de los tres, foco gradual al rostro de Gabriel",
+    "lens": "35–50 mm",
+    "motion": "acercamiento sutil desde la acera, 1 toma continua",
+    "lighting": "amanecer caribeño cálido idéntico a P01"
+  },
+  "sound": {
+    "dialogue": "sin diálogo en P02; respirar/sonrisa ligera",
+    "motor": "motor reduce revoluciones y se apaga",
+    "school": "pájaros, murmullo escolar tenue, pasos",
+    "music": "piano/cuerdas emotivo original en mezcla posterior",
+    "horn": "ningún pitido antes de E01-P07"
+  },
+  "promptEnglish": "One continuous cinematic 8-second TEXT-TO-VIDEO 16:9 720p shot, naturalistic Dominican family drama, seamless emotional continuation of a morning drop-off outside a fictional neighborhood school. The same old dark-blue commuter motorcycle with worn black-tape patched seat is now COMPLETELY STOPPED and stable next to the curb. Gabriel Santos, tired yet gentle Dominican father of 39, in faded blue work shirt, stands still next to it and switches off the engine, looking fondly at his two children. Daniel (11, short curly hair) and Lucía (7, braids) wear consistent white-and-navy school uniforms, safely positioned on the sidewalk beside the stopped motorcycle; no riding or unsafe dismount. Gabriel removes his black helmet, offers a small natural smile, checks on both children. Warm golden Caribbean sunrise, same modest blue-and-cream school exterior, modest Dominican street, gentle continuous lateral medium shot at pedestrian eye height, 35mm optics, physically accurate motorcycle, lifelike movements. No conversation, no lip synchronization, no superimposed text, no name cards, no branding, no slideshow, no cuts, no duplicated children, no helmet or clothing morphing. Ambient engine stops, distant birds and schoolyard sound; restrained original piano added later in post.",
+  "negative": [
+    "no title cards",
+    "no names on screen",
+    "no generated dialogue",
+    "no motorcycle movement with children onboard",
+    "no impossible bike geometry",
+    "no unsafe dismount",
+    "no face morphing",
+    "no sudden changes in wardrobes",
+    "no fourth person riding",
+    "no fabricated signage"
+  ],
+  "reviewChecklist": [
+    "Gabriel, Daniel, Lucía visibles y edades aparentes correctas",
+    "Moto completamente inmóvil antes de interactuar con los niños",
+    "Motor azul usado, uniforme y colegio coherentes con P01",
+    "No se repite el posible error de casco/posición de P01",
+    "Física y rostros sin artefactos, un plano continuo",
+    "Sin labios artificiales ni texto o nombres",
+    "Corte editorial a duración exacta nativa V7 de 172/24 segundos",
+    "Audio original preservado y música añadida solo en mezcla"
+  ],
+  "provider": {
+    "mode": "text-to-video",
+    "modelSuggestion": "veo-3.1-fast-generate-preview",
+    "secondsIfLaterApproved": 8,
+    "tariffNotAuthorizedForThisShot": true,
+    "approvedNewBudgetUsd": 0,
+    "maxSubmissions": 0,
+    "submitted": false
+  },
+  "safeguard": {
+    "externalApiCalls": 0,
+    "paidOperations": 0,
+    "originalP01Preserved": true,
+    "notAutomaticallyFinal": true,
+    "requiresFutureSpecificAuthorization": true
+  }
+}
