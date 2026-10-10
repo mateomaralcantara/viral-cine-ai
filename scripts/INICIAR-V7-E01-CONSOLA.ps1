@@ -58,7 +58,7 @@ $env:ALLOW_EXTERNAL_API_CALLS = 'false'
 # Runway es el proveedor visual principal.
 # La variable por si sola NO gasta; cada lote exige checkbox y confirmacion del usuario.
 $env:V7_RUNWAY_E01_ENABLED = 'true'
-$env:V7_SCENE01_PAID_ENABLED = 'true'
+$env:V7_SCENE01_PAID_ENABLED = 'false'
 $env:V7_SCENE01_RATE_USD_PER_SECOND = '0.10'
 $env:V7_SCENE01_PER_SHOT_CAP_USD = '0.80'
 $env:V7_SCENE01_TOTAL_CAP_USD = '5.60'
@@ -78,7 +78,7 @@ if (-not $env:RUNWAYML_API_SECRET) {
 }
 Write-Host 'P01 y P02: existentes, no regenerables desde esta consola.' -ForegroundColor Green
 Write-Host 'P03-P07: una autorizacion para nuevos envios. P01/P02 conservadas.' -ForegroundColor Green
-Write-Host 'Limite acumulado, incluidos dos intentos previos: USD 5.60. Autorizacion adicional maxima: USD 4.00.' -ForegroundColor Yellow
+Write-Host 'Veo: envios pagados deshabilitados. Runway es el proveedor principal.' -ForegroundColor Yellow
 if (-not $env:GEMINI_API_KEY) {
   Write-Host 'AVISO: GEMINI_API_KEY no encontrada; solo preflight/consulta hasta configurarla.' -ForegroundColor Yellow
 }
