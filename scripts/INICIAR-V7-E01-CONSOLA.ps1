@@ -42,11 +42,15 @@ $env:V7_SCENE01_PAID_ENABLED = 'true'
 $env:V7_SCENE01_RATE_USD_PER_SECOND = '0.10'
 $env:V7_SCENE01_PER_SHOT_CAP_USD = '0.80'
 $env:V7_SCENE01_TOTAL_CAP_USD = '5.60'
-if (-not $env:V7_CINEMA_ADMIN_TOKEN -or $env:V7_CINEMA_ADMIN_TOKEN.Length -lt 24) {
-  $env:V7_CINEMA_ADMIN_TOKEN = [guid]::NewGuid().ToString('N') + [guid]::NewGuid().ToString('N')
-}
+$tokenScript = Join-Path $PSScriptRoot 'V7-ADMIN-TOKEN.ps1'
+if (!(Test-Path -LiteralPath $tokenScript)) { throw 'No se encontro el gestor de token persistente.' }
+$env:V7_CINEMA_ADMIN_TOKEN = (& $tokenScript -Mode Get).Trim()
 $env:V7_CINEMA_ADMIN_TOKEN | Set-Clipboard
-Write-Host 'Token administrativo nuevo copiado al portapapeles. NO lo compartas.' -ForegroundColor Green
+Write-Host "`n=== TOKEN ADMINISTRATIVO VIRALCINE V7 ===" -ForegroundColor Cyan
+Write-Host $env:V7_CINEMA_ADMIN_TOKEN -ForegroundColor Yellow
+Write-Host "Copiado al portapapeles. Para verlo despues, ejecuta:" -ForegroundColor Green
+Write-Host "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$tokenScript`" -Mode Show" -ForegroundColor Cyan
+Write-Host "No compartas este token ni lo incluyas en GitHub." -ForegroundColor Yellow
 Write-Host 'P01 y P02: existentes, no regenerables desde esta consola.' -ForegroundColor Green
 Write-Host 'P03-P07: una autorizacion para nuevos envios. P01/P02 conservadas.' -ForegroundColor Green
 Write-Host 'Limite acumulado, incluidos dos intentos previos: USD 5.60. Autorizacion adicional maxima: USD 4.00.' -ForegroundColor Yellow
