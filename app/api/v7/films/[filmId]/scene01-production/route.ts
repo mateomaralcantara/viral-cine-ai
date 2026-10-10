@@ -8,6 +8,7 @@ import {NextResponse} from 'next/server';
 import {readV7FilmBundle, v7FilmRoot} from '@/lib/v7/storage/film-store';
 import {E01_FILM_ID, E01_PROVIDER_MODEL, E01_SHOTS, E01_ESTIMATE_USD,
   E01_MODEL_RATE_USD_PER_SECOND, e01ShotById} from '@/lib/v7/production/dos-toques-e01-shot-packets';
+import { diagnoseVeoOperation, diagnosisSummary, type VeoDiagnosis } from '@/lib/v7/production/veo-operation-diagnostics';
 
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
@@ -21,6 +22,7 @@ type Ledger={
   estimatedUsd:number;maximumApprovedUsd:number;promptSha256:string;
   providerOperationName?:string;candidateName?:string;error?:string;
   createdAt:string;updatedAt:string;
+  diagnosis?:VeoDiagnosis;
 };
 const root=()=>v7FilmRoot(E01_FILM_ID);
 const recordPath=(id:string)=>path.join(root(),id.toLowerCase(),'provider-operation.json');
@@ -105,11 +107,12 @@ async function locked<T>(work:()=>Promise<T>):Promise<T>{
 function publicRecord(r:Ledger|null){
   return {recordStatus:r?.status??'not-started',providerOperationKnown:Boolean(r?.providerOperationName),
     videoReady:r?.status==='review-required',hasSubmittedOrReserved:Boolean(r),
-    error:r?.error??null};
+    error:r?.error??null,diagnosis:r?.diagnosis??null};
 }
 async function status(ctx:Context){
   await ensureFilm(ctx);
   const ledger=await Promise.all(NEW_SHOTS.map(s=>readLedger(s.id)));
+  const haltedForReconciliation=ledger.some(r=>r?.status==='failed-unknown');
   const packets=E01_SHOTS.map(s=>{
     const idx=NEW_SHOTS.findIndex(x=>x.id===s.id);
     const record=idx>=0?ledger[idx]:null;
@@ -120,7 +123,8 @@ async function status(ctx:Context){
       estimatedUsd:s.existing?0:E01_ESTIMATE_USD,...publicRecord(record)};
   });
   return {ok:true,filmId:E01_FILM_ID,sceneId:'E01',packets,
-    priceConfigurationVerified:priceVerified(),providerEnabled:enabled()&&Boolean(process.env.GEMINI_API_KEY),
+    priceConfigurationVerified:priceVerified(),providerEnabled:enabled()&&!haltedForReconciliation&&Boolean(process.env.GEMINI_API_KEY),
+    haltedForReconciliation,
     credentialConfigured:Boolean(process.env.GEMINI_API_KEY),
     adminTokenConfigured:Boolean(process.env.V7_CINEMA_ADMIN_TOKEN?.length&&process.env.V7_CINEMA_ADMIN_TOKEN.length>=24),
     priceDisclaimer:'La tarifa de USD 0.10/s es una hipótesis de configuración local, NO verificación de facturación de Google.',
@@ -139,7 +143,7 @@ export async function POST(request:Request,ctx:Context){
     promptSha256?:string;approvedUsd?:number;pricingConfirmed?:boolean};
   try{body=await request.json() as typeof body;}catch{return blank(400,'JSON inválido.');}
   if(!body||typeof body!=='object')return blank(400,'Solicitud inválida.');
-  if(!['preflight','submit','resume'].includes(body.action||''))return blank(400,'Acción no válida.');
+  if(!['preflight','submit','resume','inspect'].includes(body.action||''))return blank(400,'Acción no válida.');
   if(body.action!=='preflight'&&!authorized(request))return blank(403,'Token administrativo inválido.');
   const shot=e01ShotById(body.shotId||'');
   if(!shot||shot.existing)return blank(403,'Solo P03–P07; P01 y P02 nunca se regeneran.');
@@ -155,6 +159,27 @@ export async function POST(request:Request,ctx:Context){
     }
     return await locked(async()=>{
       const existing=await readLedger(shot.id);
+      if(body.action==='inspect'){
+        if(!existing?.providerOperationName)throw Error('Sin operación verificable en Google.');
+        const sdk=client();
+        const saved=new GenerateVideosOperation();
+        saved.name=existing.providerOperationName;
+        const operation=await sdk.operations.getVideosOperation({operation:saved});
+        const diagnosis=diagnoseVeoOperation(operation);
+        existing.diagnosis=diagnosis;
+        if(diagnosis.classification==='provider-error'||
+           diagnosis.classification==='rai-filtered'||
+           diagnosis.classification==='no-video-unexplained'){
+          existing.status='failed-unknown';
+          existing.error=diagnosisSummary(diagnosis);
+        }
+        // Do not alter the previous operation or send a replacement.
+        await storeLedger(existing);
+        return NextResponse.json({ok:true,shotId:shot.id,diagnosis,
+          summary:diagnosisSummary(diagnosis),providerCalls:0,
+          newGenerationRequests:0,billingVerified:false},
+          {headers:{'Cache-Control':'private, no-store'}});
+      }
       if(body.action==='resume'){
         if(!existing)throw Error('No hay operación original que recuperar.');
         if(existing.status==='review-required')return NextResponse.json({ok:true,status:'review-required',
@@ -168,9 +193,10 @@ export async function POST(request:Request,ctx:Context){
           existing.status='processing';await storeLedger(existing);
           return NextResponse.json({ok:true,status:'processing',providerCalls:0});
         }
+        existing.diagnosis=diagnoseVeoOperation(op);
         const video=op.response?.generatedVideos?.[0]?.video;
         if(!video){
-          existing.status='failed-unknown';existing.error='Operación finalizada sin video. Conciliar con proveedor antes de generar nuevamente.';
+          existing.status='failed-unknown';existing.error=diagnosisSummary(existing.diagnosis);
           await storeLedger(existing);
           return NextResponse.json({ok:true,status:'failed-unknown',providerCalls:0});
         }
@@ -197,6 +223,9 @@ export async function POST(request:Request,ctx:Context){
       }
       // Paid action can ONLY happen after separate shot-level final click.
       if(existing)throw Error('Operación previamente registrada. Usa Recuperar, nunca Generar.');
+      const unresolved=await Promise.all(NEW_SHOTS.map(s=>readLedger(s.id)));
+      if(unresolved.some(r=>r?.status==='failed-unknown'))
+        throw Error('Nuevas generaciones bloqueadas: conciliar P03/P05 u otros fallos previos con Google.');
       if(!enabled())throw Error('Proveedor deshabilitado o tarifa/caps no validados en configuración.');
       if(!process.env.GEMINI_API_KEY||!process.env.V7_CINEMA_ADMIN_TOKEN)throw Error('Faltan credenciales locales.');
       if(body.confirm!==true||body.pricingConfirmed!==true||

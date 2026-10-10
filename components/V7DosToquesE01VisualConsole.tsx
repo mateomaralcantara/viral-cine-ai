@@ -8,10 +8,11 @@ type Packet={
  voiceCharacter:string|null;voiceLine:string|null;promptEnglish:string|null;promptSha256:string|null;
  estimatedUsd:number;recordStatus:string;providerOperationKnown:boolean;
  videoReady:boolean;hasSubmittedOrReserved:boolean;error:string|null;
+ diagnosis?:{classification:string;providerStatus:string|null;providerCode:string|null;providerMessage:string|null;filteredCount:number;filteredReasons:string[];checkedAt:string}|null;
 };
 type Production={ok:boolean;packets:Packet[];providerEnabled:boolean;priceConfigurationVerified:boolean;
  adminTokenConfigured:boolean;credentialConfigured:boolean;perShotCapUsd:number;totalCapUsd:number;
- committedUsd:number;priceDisclaimer:string;automaticProviderRetries:number};
+ committedUsd:number;priceDisclaimer:string;automaticProviderRetries:number;haltedForReconciliation:boolean};
 type ApprovalBoard={ok:boolean;scenes:Array<{label:string;shots:Array<{label:string;approved:boolean;hasVideo:boolean}>}>};
 const routeFor=(filmId:string)=>'/api/v7/films/'+encodeURIComponent(filmId);
 export default function V7DosToquesE01VisualConsole({filmId}:{filmId:string}){
@@ -40,7 +41,7 @@ export default function V7DosToquesE01VisualConsole({filmId}:{filmId:string}){
   return()=>clearInterval(timer);
  },[refresh]);
  const notice=(id:string,value:string)=>setMessages(old=>({...old,[id]:value}));
- async function act(id:string,action:'preflight'|'submit'|'resume',pkt?:Packet){
+ async function act(id:string,action:'preflight'|'submit'|'resume'|'inspect',pkt?:Packet){
   if(action!=='preflight'&&!token){notice(id,'Introduce tu token administrativo en el campo superior.');return;}
   if(action==='submit'&&(!pkt||!accepted[id]||!production?.providerEnabled)){
    notice(id,'Falta confirmación del importe o está bloqueado el proveedor.');return;
@@ -52,11 +53,12 @@ export default function V7DosToquesE01VisualConsole({filmId}:{filmId:string}){
     body:JSON.stringify({action,shotId:id,...(action==='submit'?{
       confirm:true,pricingConfirmed:true,promptSha256:pkt!.promptSha256,
       approvedUsd:pkt!.estimatedUsd}:{})})});
-   const body=await reply.json() as {ok?:boolean;error?:string;status?:string};
+   const body=await reply.json() as {ok?:boolean;error?:string;status?:string;summary?:string};
    if(!reply.ok||!body.ok)throw Error(body.error||'Operación no completada.');
    setAccepted(x=>({...x,[id]:false}));
    notice(id,action==='preflight'?'Preflight: preparado sin costo.':action==='submit'?
-     'Enviado UNA sola vez. Espera y usa Recuperar operación.':'Recuperación: '+body.status);
+     'Enviado UNA sola vez. Espera y usa Recuperar operación.':action==='inspect'?
+     'Diagnóstico de Google: '+(body.summary||'Consulta realizada sin generar video.'):'Recuperación: '+body.status);
    await refresh();
   }catch(e){notice(id,e instanceof Error?e.message:String(e));}
   finally{setBusy('');}
@@ -93,9 +95,11 @@ export default function V7DosToquesE01VisualConsole({filmId}:{filmId:string}){
     No hay reintentos pagados automáticos ni gastos al consultar o preparar.
     Las voces se añadirán en producción sonora posterior.
    </p>
-   <p className="mt-2 text-xs text-amber-200">{production?.providerEnabled?
+   <p className="mt-2 text-xs text-amber-200">{production?.haltedForReconciliation?
+    'ALTO: P03/P05 u otra toma sin video. Nuevas generaciones bloqueadas hasta conciliar operaciones y facturación.':
+    production?.providerEnabled?
     'Proveedor habilitado: cada envío requiere confirmación económica separada.':
-    'Generación pagada bloqueada por configuración. Puedes preparar y revisar todas las tomas sin costo.'}</p>
+    'Generación pagada bloqueada por configuración. Puedes preparar y revisar las tomas sin costo.'}</p>
    <p className="mt-1 text-xs text-amber-200">{production?.priceDisclaimer}</p>
    <input type="password" autoComplete="off" aria-label="Token administrativo de Escena 01"
     className="mt-3 w-full rounded-lg border border-white/20 bg-slate-950 p-3 text-sm"
@@ -143,10 +147,17 @@ export default function V7DosToquesE01VisualConsole({filmId}:{filmId:string}){
         <button className="button-secondary text-sm" type="button" disabled={!!busy}
          onClick={()=>void act(p.id,'preflight')}>{busy===p.id?'Preparando…':'Preparar toma · Gratis'}</button>
         {p.hasSubmittedOrReserved?
-         <button className="button-secondary text-sm" type="button"
-          disabled={!!busy||!p.providerOperationKnown} onClick={()=>void act(p.id,'resume')}>
-          <RefreshCcw className="mr-1 inline h-4 w-4"/> Recuperar mismo render
-         </button>:
+         <>
+          <button className="button-secondary text-sm" type="button"
+           disabled={!!busy||!p.providerOperationKnown} onClick={()=>void act(p.id,'inspect')}>
+           <ShieldCheck className="mr-1 inline h-4 w-4"/> Diagnosticar en Google · Sin nuevo render
+          </button>
+          {(p.recordStatus!=='failed-unknown'||p.diagnosis?.classification==='video-ready')&&
+           <button className="button-secondary text-sm" type="button"
+            disabled={!!busy||!p.providerOperationKnown} onClick={()=>void act(p.id,'resume')}>
+            <RefreshCcw className="mr-1 inline h-4 w-4"/> Recuperar mismo render
+           </button>}
+         </>:
          <>
           <label className="flex items-center gap-2 rounded-lg border border-white/10 p-2 text-xs">
            <input type="checkbox" checked={Boolean(accepted[p.id])}
@@ -161,6 +172,15 @@ export default function V7DosToquesE01VisualConsole({filmId}:{filmId:string}){
        </>
       }
      </div>
+     {p.diagnosis&&<div className="mt-3 rounded-lg border border-amber-400/20 p-3 text-xs text-amber-100">
+      <strong>Diagnóstico de Google: {p.diagnosis.classification}</strong>
+      {p.diagnosis.providerStatus&&<p className="mt-1">Estado: {p.diagnosis.providerStatus}</p>}
+      {p.diagnosis.providerCode&&<p>Código: {p.diagnosis.providerCode}</p>}
+      {p.diagnosis.providerMessage&&<p className="mt-1">Motivo: {p.diagnosis.providerMessage}</p>}
+      {p.diagnosis.filteredReasons.map((reason,i)=><p key={i} className="mt-1">Filtro: {reason}</p>)}
+      {p.diagnosis.classification==='no-video-unexplained'&&<p className="mt-1">Sin causa específica informada por Google. Se requiere conciliación con el proveedor.</p>}
+      <p className="mt-1 text-slate-400">El diagnóstico no confirma facturación ni autoriza otro envío.</p>
+     </div>}
      {messages[p.id]&&<p className="mt-3 text-xs text-amber-200" role="status">{messages[p.id]}</p>}
     </article>;
    })}
