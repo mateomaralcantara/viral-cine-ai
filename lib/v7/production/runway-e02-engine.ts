@@ -96,6 +96,31 @@ function safeError(error:unknown){
 }
 function promptFor(id:string){return validShot(id).prompt;}
 const seedPath=()=>path.join(filmDir(),'scenes','e02','scene02-seed.jpg');
+const shotImagePath=(id:string)=>path.join(shotDir(id),id+'-image-reference.jpg');
+export async function e02ShotImageReady(id:string){
+ validShot(id);
+ return fileExists(shotImagePath(id));
+}
+async function fileExists(file:string){
+ try{return (await stat(file)).size>3000;}
+ catch(e){if((e as NodeJS.ErrnoException).code==='ENOENT')return false;throw e;}
+}
+export async function saveE02ShotImage(id:string,bytes:Buffer){
+ validShot(id);
+ if(bytes.length<3000||bytes.length>4000000)
+  throw new Error('Imagen fuera del límite: entre 3 KB y 4 MB.');
+ if(await readRunwayRecord(id))
+  throw new Error('La toma ya tiene un intento registrado. Su referencia no puede modificarse.');
+ const dest=shotImagePath(id);
+ const normalized=await sharp(bytes,{failOn:'error',limitInputPixels:25000000})
+  .resize(1280,720,{fit:'cover',position:'attention'})
+  .jpeg({quality:88}).toBuffer();
+ if(normalized.length<3000||normalized.length>2500000)
+  throw new Error('Imagen inválida después de convertir.');
+ await mkdir(shotDir(id),{recursive:true});
+ await writeFile(dest,normalized,{flag:'wx',mode:0o600});
+ return {shotId:id,imageReady:true,bytes:normalized.length,newGenerationRequests:0};
+}
 async function existsSeed(){
  try{return (await stat(seedPath())).size>3000;}catch(e){
   if((e as NodeJS.ErrnoException).code==='ENOENT')return false;throw e;
@@ -114,6 +139,11 @@ export async function saveE02Seed(bytes:Buffer){
  return {seedReady:true,bytes:result.length};
 }
 async function nearestReference(id:string){
+ // A director-supplied image takes precedence for its own shot. This allows
+ // seven independent storyboard frames and avoids identity drift.
+ const own=shotImagePath(id);
+ if(await fileExists(own))
+  return {shotId:id+'-IMAGE',file:own,sha256:await hashFile(own),still:true};
  const n=Number(id.slice(-2));
  if(n===1){
   if(!(await existsSeed()))throw new Error('Sube una imagen inicial del interior de la casa para P01.');
