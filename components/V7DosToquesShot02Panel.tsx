@@ -146,28 +146,7 @@ export default function V7DosToquesShot02Panel({ filmId }: { filmId: string }) {
         <h3 className="font-bold">Producción real E01-P02 · Estado del backend</h3>
         <p className="mt-2 text-sm text-slate-300">Una toma de 8 segundos. La preparación no autoriza cargos.</p>
         <p className="mt-2 text-sm">Estado: {renderStatus?.recordStatus ?? 'No comprobado'}</p>
-        <p className="mt-1 text-sm">Estimación técnica: {renderStatus?.estimatedUsd != null ? 'US
-        <summary className="cursor-pointer font-bold">Prompt cinematográfico de E01-P02 (preproducción)</summary>
-        <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-300">
-          {plan.promptEnglish}
-        </p>
-        <button type="button" className="button-secondary mt-3"
-          onClick={() => void navigator.clipboard.writeText(plan.promptEnglish)
-            .then(() => setMessage('Prompt copiado; todavía no autoriza ninguna generación.'))
-            .catch(() => setMessage('No se pudo copiar el prompt.'))}>
-          <Copy className="h-4 w-4" /> Copiar prompt
-        </button>
-      </details>
-      <div className="mt-4 rounded-xl border border-amber-400/20 p-4 text-xs text-amber-200">
-        <strong>Control de calidad pendiente:</strong> continuidad del motor, uniforme y colegio,
-        cascos de ambos niños, tres personajes sin duplicados y corte exacto al guion V7.
-        La aprobación artística de P01 no certifica automáticamente estas condiciones.
-      </div>
-      {message && <p className="mt-3 text-sm text-amber-200" role="status">{message}</p>}
-    </section>
-  );
-}
- + renderStatus.estimatedUsd.toFixed(2) : 'Pendiente'}</p>
+        <p className="mt-1 text-sm">Estimación técnica: {renderStatus?.estimatedUsd != null ? 'US$' + renderStatus.estimatedUsd.toFixed(2) : 'Pendiente'}</p>
         <p className="mt-1 text-sm text-amber-200">Autorización: US$0.00 · Envío pagado bloqueado</p>
         {renderStatus?.videoReady && renderStatus.videoUrl &&
           <video src={renderStatus.videoUrl} controls preload="metadata" className="mt-3 w-full rounded-xl" />}
