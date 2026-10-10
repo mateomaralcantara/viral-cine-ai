@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { execFile } from 'node:child_process';
-import { access, mkdir, open, readFile, stat, unlink } from 'node:fs/promises';
+import { mkdir, open, readFile, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { NextResponse } from 'next/server';
