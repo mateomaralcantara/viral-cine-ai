@@ -18,7 +18,7 @@ const firstShotPrompt = [
   'Gabriel Santos (39) arrives slowly at the school on an old dark-blue motorcycle with patched seat.',
   'Daniel Santos (11) is clearly visible sitting behind Gabriel, wearing a protective helmet and holding on safely.',
   'Lucía Santos (7) is also clearly visible, with two braids and a light-blue protective helmet,',
-  'safely positioned as in the approved staged reference frame.',
+  'safely staged as a cinematic composite, with no physical dangerous stunt.'
   'All three people remain identical and visible for the whole wide tracking shot.',
   'Bike moving at walking pace on a controlled street, then gentle braking.',
   'Realistic physics, softly moving nearby cars, birds and natural street ambience.',
