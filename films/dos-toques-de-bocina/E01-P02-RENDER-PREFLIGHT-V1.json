@@ -15,13 +15,14 @@
     "priceSourceVerified": false
   },
   "authorization": {
-    "approvedBudgetUsd": 0,
+    "approvedBudgetUsd": 0.8,
     "maxProviderSubmissions": 0,
     "automaticRetries": 0,
     "allowSubmit": false,
     "allowResumeExistingOnlyAfterOperationIdSaved": true,
     "requiresFreshAdminToken": true,
-    "requiresSeparateExplicitUserApproval": true
+    "requiresSeparateExplicitUserApproval": true,
+    "requiresFinalPanelConfirmation": true
   },
   "continuity": {
     "priorShot": "E01-P01",
@@ -43,5 +44,5 @@
     "video downloaded to separate P02 filename with validated duration and checksum",
     "manual artistic and continuity QA after download"
   ],
-  "status": "DRAFT_NOT_AUTHORIZED"
+  "status": "BUDGET_CEILING_APPROVED_EXECUTION_DISABLED"
 }
