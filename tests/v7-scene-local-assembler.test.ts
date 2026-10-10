@@ -9,7 +9,7 @@ import path from 'node:path';
 import { createDosToquesBundle } from '../lib/v7/presets/dos-toques-de-bocina';
 import { assembleApprovedSceneLocally } from '../lib/v7/production/scene-local-assembler';
 const run=promisify(execFile);
-test('Local scene assembly joins two approved blocks, preserves sources and never calls a provider',async()=>{
+test('Local scene assembly joins two approved blocks, preserves sources and never calls a provider',{timeout:120000},async()=>{
   const previous=process.env.VIRALCINE_DATA_DIR;
   const tmp=await mkdtemp(path.join(tmpdir(),'v7-local-assembly-'));
   process.env.VIRALCINE_DATA_DIR=tmp;
@@ -52,4 +52,5 @@ test('Local scene assembly joins two approved blocks, preserves sources and neve
     else process.env.VIRALCINE_DATA_DIR=previous;
     await rm(tmp,{recursive:true,force:true});
   }
-},{timeout:120000});
+
+});
