@@ -126,7 +126,7 @@ async function existsSeed(){
   if((e as NodeJS.ErrnoException).code==='ENOENT')return false;throw e;
  }
 }
-export async function e02SeedReady(){return existsSeed();}
+export async function e02SeedReady(){return (await existsSeed())||(await e02ShotImageReady('E02-P01'));}
 export async function saveE02Seed(bytes:Buffer){
  if(bytes.length<3000||bytes.length>4000000)throw new Error('Imagen inválida; máximo 4 MB.');
  if((await runwayReservedUsd())>0)throw new Error('Producción iniciada: la referencia ya no puede cambiar.');
