@@ -51,7 +51,8 @@ async function shotSnapshot(filmId:string,shotId:string,label:string,title:strin
   const dir=shotRoot(filmId,label);
   const source=path.join(dir,candidateName(label));
   const approvalRaw=await safeMissing(path.join(dir,'artistic-approval.json'));
-  const recordRaw=await safeMissing(path.join(dir,'provider-operation.json'));
+  const recordRaw=(await safeMissing(path.join(dir,'provider-operation-attempt-02.json'))) ??
+    (await safeMissing(path.join(dir,'provider-operation.json')));
   const hasVideo=await fileExists(source);
   const record=recordRaw ? JSON.parse(recordRaw) as {filmId?:string;shotId?:string;status?:string;candidateName?:string;providerOperationName?:string} : null;
   const approval=approvalRaw ? JSON.parse(approvalRaw) as {filmId?:string;shotId?:string;status?:string;sourceVideoName?:string;sourceVideoSha256?:string;videoSeconds?:number} : null;
@@ -121,7 +122,9 @@ export async function approveBoardTarget(film:FilmV7,input:{
     schemaVersion:1,filmId:film.id,shotId:shot!.label,status:'artistic-approved',
     approvedAt:new Date().toISOString(),sourceVideoName:candidateName(shot!.label),
     sourceVideoSha256:fingerprint,videoSeconds:seconds,videoBytes:statInfo.size,
-    providerOperationName:JSON.parse((await readFile(path.join(dir,'provider-operation.json'),'utf8'))).providerOperationName,
+    providerOperationName:JSON.parse((await readFile(
+      path.join(dir,(await safeMissing(path.join(dir,'provider-operation-attempt-02.json')))!==null?
+        'provider-operation-attempt-02.json':'provider-operation.json'),'utf8'))).providerOperationName,
     productionNotes:input.notes,artisticChecks:input.checks,
     technicalQaStatus:'pending',continuityQaStatus:'pending',editingStatus:'pending',externalApiCalls:0,additionalSpendUsd:0
   }:{
