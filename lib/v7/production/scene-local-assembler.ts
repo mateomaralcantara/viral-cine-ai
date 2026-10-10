@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import type { FilmV7 } from '@/lib/v7/domain/film';
 import { v7FilmRoot } from '@/lib/v7/storage/film-store';
 import { readSceneApprovalBoard } from './scene-approval-board';
+import {resolveV7ShotVideo} from '@/lib/v7/production/shot-video-source';
 import { runFreeRepairLoop } from '@/lib/v7/orchestration/scene-family-engine';
 import {E01_FILM_ID,E01_SHOTS} from '@/lib/v7/production/dos-toques-e01-shot-packets';
 
@@ -56,11 +57,14 @@ export async function assembleApprovedSceneLocally(film:FilmV7,sceneId:string) {
     const names:string[]=[];
     for(let i=0;i<entry.shots.length;i++){
       const shot=entry.shots[i];
-      const src=path.join(v7FilmRoot(film.id),shot.label.toLowerCase(),shot.label+'-veo-candidato.mp4');
+      const original=await resolveV7ShotVideo(film.id,shot.label);
+      if(!original)throw new Error('No hay MP4 para '+shot.label);
+      const src=original.file;
       const approval=JSON.parse(await readFile(path.join(path.dirname(src),'artistic-approval.json'),'utf8')) as {
-        sourceVideoSha256:string;status:string;
+        sourceVideoSha256:string;sourceVideoName?:string;status:string;
       };
-      if(approval.status!=='artistic-approved'||approval.sourceVideoSha256!==await hashFile(src))
+      if(approval.status!=='artistic-approved'||approval.sourceVideoName!==original.filename||
+          approval.sourceVideoSha256!==await hashFile(src))
         throw new Error('La toma '+shot.label+' cambió desde su aprobación. Montaje detenido.');
       const meta=await mediaInfo(src);
       const shotDef=definition.shots.find(s=>s.id===shot.id)!;

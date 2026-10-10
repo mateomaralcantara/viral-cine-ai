@@ -6,6 +6,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { FilmV7 } from '@/lib/v7/domain/film';
 import { v7FilmRoot } from '@/lib/v7/storage/film-store';
+import {resolveV7ShotVideo} from '@/lib/v7/production/shot-video-source';
 
 const probe = promisify(execFile);
 const safeMissing = async (name: string) => {
@@ -49,19 +50,18 @@ async function sha256(file:string){
 }
 async function shotSnapshot(filmId:string,shotId:string,label:string,title:string):Promise<BoardShot> {
   const dir=shotRoot(filmId,label);
-  const source=path.join(dir,candidateName(label));
+  const chosen=await resolveV7ShotVideo(filmId,label);
   const approvalRaw=await safeMissing(path.join(dir,'artistic-approval.json'));
-  const recordRaw=(await safeMissing(path.join(dir,'provider-operation-attempt-02.json'))) ??
-    (await safeMissing(path.join(dir,'provider-operation.json')));
-  const hasVideo=await fileExists(source);
-  const record=recordRaw ? JSON.parse(recordRaw) as {filmId?:string;shotId?:string;status?:string;candidateName?:string;providerOperationName?:string} : null;
+  const recordRaw=chosen?.recordFile?await safeMissing(chosen.recordFile):null;
+  const hasVideo=Boolean(chosen);
+  const record=recordRaw ? JSON.parse(recordRaw) as {filmId?:string;shotId?:string;status?:string;candidateName?:string;providerOperationName?:string;taskId?:string} : null;
   const approval=approvalRaw ? JSON.parse(approvalRaw) as {filmId?:string;shotId?:string;status?:string;sourceVideoName?:string;sourceVideoSha256?:string;videoSeconds?:number} : null;
   const approved=hasVideo && Boolean(approval && approval.filmId===filmId && approval.shotId===label &&
-    approval.status==='artistic-approved' && approval.sourceVideoName===candidateName(label) &&
+    approval.status==='artistic-approved' && approval.sourceVideoName===chosen?.filename &&
     /^[a-f0-9]{64}$/.test(approval.sourceVideoSha256 ?? ''));
   const readyForApproval=!approved && hasVideo && Boolean(record && record.filmId===filmId &&
     record.shotId===label && record.status==='review-required' &&
-    record.candidateName===candidateName(label) && record.providerOperationName);
+    record.candidateName===chosen?.filename && (record.providerOperationName||record.taskId));
   return {id:shotId,label,title,approved,readyForApproval,hasVideo,
     reason:approved?'Aprobada artísticamente':readyForApproval?'MP4 disponible; aprobar al revisar':
       hasVideo?'MP4 requiere reconciliación del registro':'Falta producir/importar MP4',
@@ -109,22 +109,24 @@ export async function approveBoardTarget(film:FilmV7,input:{
     throw new Error(isShot?shot!.reason:scene.reason);
   }
   const dir=isShot?shotRoot(film.id,shot!.label):sceneRoot(film.id,location.label);
-  const file=isShot?path.join(dir,candidateName(shot!.label)):path.join(dir,'scene-cut.mp4');
+  const chosen=isShot?await resolveV7ShotVideo(film.id,shot!.label):null;
+  if(isShot&&!chosen)throw new Error('El MP4 de esta toma no está disponible.');
+  const file=isShot?chosen!.file:path.join(dir,'scene-cut.mp4');
   const {stdout}=await probe('ffprobe',['-v','error','-show_entries','format=duration:stream=codec_type','-of','json',file],{maxBuffer:1024*1024});
   const metadata=JSON.parse(stdout) as {format?:{duration?:string};streams?:Array<{codec_type?:string}>};
   const seconds=Number(metadata.format?.duration||0);
   if(!Number.isFinite(seconds)||seconds<=0||!metadata.streams?.some(x=>x.codec_type==='video'))throw new Error('MP4 no supera comprobación técnica.');
-  if(isShot&&(seconds<7.7||seconds>8.3))throw new Error('Duración de la toma fuera del perfil de ocho segundos.');
+  if(isShot&&(seconds<7.7||seconds>10.5))throw new Error('Duración de la toma fuera del perfil de ocho a diez segundos.');
   const statInfo=await stat(file);
   const fingerprint=await sha256(file);
   // Bind approval to exactly the candidate that passed QA; preserve source.
   const approval=isShot?{
     schemaVersion:1,filmId:film.id,shotId:shot!.label,status:'artistic-approved',
-    approvedAt:new Date().toISOString(),sourceVideoName:candidateName(shot!.label),
+    approvedAt:new Date().toISOString(),sourceVideoName:chosen!.filename,
     sourceVideoSha256:fingerprint,videoSeconds:seconds,videoBytes:statInfo.size,
-    providerOperationName:JSON.parse((await readFile(
-      path.join(dir,(await safeMissing(path.join(dir,'provider-operation-attempt-02.json')))!==null?
-        'provider-operation-attempt-02.json':'provider-operation.json'),'utf8'))).providerOperationName,
+    providerOperationName:JSON.parse(await readFile(chosen!.recordFile!,'utf8')).taskId ??
+      JSON.parse(await readFile(chosen!.recordFile!,'utf8')).providerOperationName,
+    provider:chosen!.provider,
     productionNotes:input.notes,artisticChecks:input.checks,
     technicalQaStatus:'pending',continuityQaStatus:'pending',editingStatus:'pending',externalApiCalls:0,additionalSpendUsd:0
   }:{

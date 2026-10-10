@@ -5,6 +5,7 @@ import { Clapperboard, Film, LoaderCircle, ShieldCheck, Volume2 } from 'lucide-r
 import V7DosToquesFirstShotPanel from '@/components/V7DosToquesFirstShotPanel';
 import V7DosToquesShot02Panel from '@/components/V7DosToquesShot02Panel';
 import V7DosToquesE01VisualConsole from '@/components/V7DosToquesE01VisualConsole';
+import V7RunwayGen4TurboPanel from '@/components/V7RunwayGen4TurboPanel';
 
 const shots = [
   { id: 'E01-P01', start: '00:00', end: '00:08', seconds: 8, text: 'Llegada a la escuela y presentación de la familia.' },
@@ -68,7 +69,15 @@ export default function V7DosToquesScene01Panel({ filmId }: { filmId: string }) 
 
   return (
     <section className="mt-6 space-y-5">
-      <V7DosToquesE01VisualConsole filmId={filmId} />
+      <V7RunwayGen4TurboPanel filmId={filmId} />
+      <details className="rounded-xl border border-white/10 p-4">
+        <summary className="cursor-pointer text-sm font-bold">
+          Proveedor alternativo · Veo 3.1 · Expedientes y operaciones anteriores
+        </summary>
+        <div className="mt-4">
+          <V7DosToquesE01VisualConsole filmId={filmId} />
+        </div>
+      </details>
       <details className="rounded-xl border border-white/10 p-4">
         <summary className="cursor-pointer text-sm font-bold">Archivo técnico anterior P01 y P02 · Solo consulta</summary>
         <div className="mt-4 space-y-4">

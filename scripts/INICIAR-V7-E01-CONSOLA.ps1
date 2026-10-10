@@ -30,6 +30,23 @@ if (-not $env:GEMINI_API_KEY) {
     }
   }
 }
+# Cargar secreto Runway solo en memoria; nunca mostrarlo ni copiarlo.
+if (-not $env:RUNWAYML_API_SECRET) {
+  foreach ($file in @(
+    (Join-Path $root '.env.local'),
+    (Join-Path $integration '.env.local'),
+    (Join-Path $v6 '.env.local')
+  )) {
+    if (!(Test-Path -LiteralPath $file)) { continue }
+    $line = Get-Content -LiteralPath $file |
+      Where-Object { $_ -match '^\s*RUNWAYML_API_SECRET\s*=' } |
+      Select-Object -Last 1
+    if ($line) {
+      $env:RUNWAYML_API_SECRET = $line.Substring($line.IndexOf('=')+1).Trim().Trim([char]34,[char]39)
+      break
+    }
+  }
+}
 # Global provider switches remain disabled; ONLY per-shot E01 route may submit
 # after explicit auth, a per-shot paid confirmation, and an immutable reservation.
 $env:PRODUCTION_MODE = 'real'
@@ -38,7 +55,10 @@ $env:V7_DOS_TOQUES_P02_PAID_ENABLED = 'false'
 $env:V7_CINEMA_PAID_ENABLED = 'false'
 $env:ALLOW_PAID_GENERATION = 'false'
 $env:ALLOW_EXTERNAL_API_CALLS = 'false'
-$env:V7_SCENE01_PAID_ENABLED = 'true'
+# Runway es el proveedor visual principal.
+# La variable por si sola NO gasta; cada lote exige checkbox y confirmacion del usuario.
+$env:V7_RUNWAY_E01_ENABLED = 'true'
+$env:V7_SCENE01_PAID_ENABLED = 'false'
 $env:V7_SCENE01_RATE_USD_PER_SECOND = '0.10'
 $env:V7_SCENE01_PER_SHOT_CAP_USD = '0.80'
 $env:V7_SCENE01_TOTAL_CAP_USD = '5.60'
@@ -51,9 +71,14 @@ Write-Host $env:V7_CINEMA_ADMIN_TOKEN -ForegroundColor Yellow
 Write-Host "Copiado al portapapeles. Para verlo despues, ejecuta:" -ForegroundColor Green
 Write-Host "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$tokenScript`" -Mode Show" -ForegroundColor Cyan
 Write-Host "No compartas este token ni lo incluyas en GitHub." -ForegroundColor Yellow
+Write-Host 'Runway Gen-4 Turbo: PROVEEDOR PRINCIPAL (10 s a 0.50 USD estimados).' -ForegroundColor Green
+Write-Host 'Cinco tomas nuevas: autorizacion maxima de USD 2.50, no automatica.' -ForegroundColor Yellow
+if (-not $env:RUNWAYML_API_SECRET) {
+  Write-Host 'RUNWAYML_API_SECRET no encontrado. Generacion Runway deshabilitada hasta configurarlo.' -ForegroundColor Yellow
+}
 Write-Host 'P01 y P02: existentes, no regenerables desde esta consola.' -ForegroundColor Green
 Write-Host 'P03-P07: una autorizacion para nuevos envios. P01/P02 conservadas.' -ForegroundColor Green
-Write-Host 'Limite acumulado, incluidos dos intentos previos: USD 5.60. Autorizacion adicional maxima: USD 4.00.' -ForegroundColor Yellow
+Write-Host 'Veo: envios pagados deshabilitados. Runway es el proveedor principal.' -ForegroundColor Yellow
 if (-not $env:GEMINI_API_KEY) {
   Write-Host 'AVISO: GEMINI_API_KEY no encontrada; solo preflight/consulta hasta configurarla.' -ForegroundColor Yellow
 }
