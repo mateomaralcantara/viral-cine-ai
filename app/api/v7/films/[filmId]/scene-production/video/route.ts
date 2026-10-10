@@ -2,6 +2,7 @@ import { open, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { readV7FilmBundle, v7FilmRoot } from '@/lib/v7/storage/film-store';
 import { readSceneApprovalBoard } from '@/lib/v7/production/scene-approval-board';
+import {resolveV7ShotVideo} from '@/lib/v7/production/shot-video-source';
 import { createFileByteRangeStream, parseVideoByteRange } from '@/lib/v7/media/file-byte-range-stream';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
@@ -23,10 +24,12 @@ async function serve(request:Request,context:Context,head:boolean){
     const shot=id?board.scenes.flatMap(s=>s.shots).find(s=>s.id===id):null;
     if(sceneId&&(!scene||!scene.assembled))return new Response(null,{status:404});
     if(id&&(!shot||!shot.hasVideo))return new Response(null,{status:404});
-    const filename=scene?'scene-cut.mp4':shot!.label+'-veo-candidato.mp4';
+    const asset=shot?await resolveV7ShotVideo(filmId,shot.label):null;
+    if(shot&&!asset)return new Response(null,{status:404});
+    const filename=scene?'scene-cut.mp4':asset!.filename;
     const file=scene
       ?path.join(v7FilmRoot(filmId),'scenes',scene.label.toLowerCase(),filename)
-      :path.join(v7FilmRoot(filmId),shot!.label.toLowerCase(),filename);
+      :asset!.file;
     const metadata=await stat(file);
     if(!metadata.isFile()||metadata.size<10000)return new Response(null,{status:404});
     const requested=request.headers.get('range');
