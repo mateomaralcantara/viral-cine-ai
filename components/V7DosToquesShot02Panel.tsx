@@ -24,8 +24,51 @@ export default function V7DosToquesShot02Panel({ filmId }: { filmId: string }) {
   const [token, setToken] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
-  const [renderStatus, setRenderStatus] = useState<{ok:boolean;shotId:string;recordStatus:string;flagsEnabled:boolean;canSubmitAfterUserClick:boolean;estimatedUsd:number;maxProviderSubmissions:number;videoReady:boolean;videoUrl:string|null;error?:string}|null>(null);
+  const [renderStatus, setRenderStatus] = useState<{ok:boolean;shotId:string;recordStatus:string;flagsEnabled:boolean;canSubmitAfterUserClick:boolean;estimatedUsd:number;maxProviderSubmissions:number;promptSha256:string;providerOperationKnown:boolean;hasSubmittedOrReserved:boolean;videoReady:boolean;videoUrl:string|null;error?:string}|null>(null);
   const [renderError, setRenderError] = useState('');
+  const [finalToken, setFinalToken] = useState('');
+  const [finalApproval, setFinalApproval] = useState(false);
+  const [paidBusy, setPaidBusy] = useState(false);
+  async function submitP02() {
+    if (!finalApproval || !finalToken || !renderStatus?.canSubmitAfterUserClick) {
+      setRenderError('Faltan la confirmación final, el token o las validaciones del servidor.');
+      return;
+    }
+    setPaidBusy(true); setRenderError('');
+    try {
+      const response = await fetch('/api/v7/films/' + encodeURIComponent(filmId) + '/e01-p02-render', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json', Authorization:'Bearer ' + finalToken},
+        body: JSON.stringify({
+          action:'submit', confirm:true,
+          compositionConfirmed:'p02-three-helmeted-riders-same-order-safe-stop',
+          promptSha256: renderStatus.promptSha256,
+          approvedEstimateUsd:0.8
+        })
+      });
+      const body = await response.json();
+      if (!response.ok || !body.ok) throw new Error(body.error || 'No se pudo enviar P02');
+      setFinalApproval(false); setFinalToken('');
+      setMessage('Operación enviada una sola vez. Usa Recuperar operación para consultar el resultado.');
+      await refreshRender();
+    } catch(e) { setRenderError(e instanceof Error ? e.message : String(e)); }
+    finally {setPaidBusy(false);}
+  }
+  async function resumeP02() {
+    if (!finalToken) {setRenderError('Introduce el token administrativo para recuperar la operación.'); return;}
+    setPaidBusy(true); setRenderError('');
+    try {
+      const response = await fetch('/api/v7/films/' + encodeURIComponent(filmId) + '/e01-p02-render', {
+        method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+finalToken},
+        body:JSON.stringify({action:'resume'})
+      });
+      const body = await response.json();
+      if (!response.ok || !body.ok) throw new Error(body.error || 'Recuperación fallida');
+      setMessage('Estado de recuperación: ' + body.status);
+      await refreshRender();
+    } catch(e) {setRenderError(e instanceof Error ? e.message : String(e));}
+    finally {setPaidBusy(false);}
+  }
   async function refreshRender() {
     try {
       const response = await fetch('/api/v7/films/' + encodeURIComponent(filmId) + '/e01-p02-render', { cache:'no-store' });
@@ -153,6 +196,32 @@ export default function V7DosToquesShot02Panel({ filmId }: { filmId: string }) {
         <button type="button" className="button-secondary mt-3" onClick={() => void refreshRender()}>
           <RefreshCcw className="h-4 w-4" /> Comprobar backend P02
         </button>
+        <div className="mt-4 space-y-3 border-t border-white/10 pt-4">
+          <p className="text-sm font-bold">Generación E01-P02 — confirmación final</p>
+          <p className="text-xs text-amber-200">8 segundos a 720p · límite US$0.80 · una solicitud · cero reintentos. Una generación texto-a-video puede presentar diferencias de continuidad respecto de P01.</p>
+          <input type="password" autoComplete="off" aria-label="Token administrativo de E01-P02"
+            placeholder="Token administrativo del servidor" value={finalToken}
+            onChange={event => setFinalToken(event.target.value)}
+            className="w-full rounded-lg border border-white/20 bg-slate-950 p-3 text-sm" />
+          {!renderStatus?.hasSubmittedOrReserved && (
+            <>
+              <label className="flex items-start gap-2 text-sm">
+                <input type="checkbox" checked={finalApproval} onChange={event => setFinalApproval(event.target.checked)} />
+                Confirmo UNA generación E01-P02 de hasta US$0.80, sin reintentos.
+              </label>
+              <button type="button" className="button-primary" onClick={() => void submitP02()}
+                disabled={paidBusy || !finalApproval || !finalToken || !renderStatus?.canSubmitAfterUserClick}>
+                Generar E01-P02 · Confirmación final US$0.80
+              </button>
+            </>
+          )}
+          {renderStatus?.hasSubmittedOrReserved && (
+            <button type="button" className="button-secondary" onClick={() => void resumeP02()}
+              disabled={paidBusy || !finalToken}>
+              Recuperar MISMA operación · No generar nuevamente
+            </button>
+          )}
+        </div>
         {renderError && <p className="mt-2 text-sm text-amber-200" role="status">{renderError}</p>}
         {renderStatus?.canSubmitAfterUserClick &&
           <p className="mt-2 text-sm text-red-300">Alerta: autorización inesperada. No realizar ninguna generación.</p>}
