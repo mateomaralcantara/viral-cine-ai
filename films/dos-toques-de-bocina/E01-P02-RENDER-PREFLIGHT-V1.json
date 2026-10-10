@@ -16,9 +16,9 @@
   },
   "authorization": {
     "approvedBudgetUsd": 0.8,
-    "maxProviderSubmissions": 0,
+    "maxProviderSubmissions": 1,
     "automaticRetries": 0,
-    "allowSubmit": false,
+    "allowSubmit": true,
     "allowResumeExistingOnlyAfterOperationIdSaved": true,
     "requiresFreshAdminToken": true,
     "requiresSeparateExplicitUserApproval": true,
@@ -44,5 +44,5 @@
     "video downloaded to separate P02 filename with validated duration and checksum",
     "manual artistic and continuity QA after download"
   ],
-  "status": "BUDGET_CEILING_APPROVED_EXECUTION_DISABLED"
+  "status": "CREATOR_BUDGET_APPROVED_FINAL_PANEL_CLICK_REQUIRED"
 }
