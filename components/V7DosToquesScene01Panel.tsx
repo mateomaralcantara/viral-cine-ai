@@ -66,10 +66,11 @@ export default function V7DosToquesScene01Panel({ filmId }: { filmId: string }) 
 
   return (
     <section className="mt-6 space-y-5">
+      <V7DosToquesFirstShotPanel filmId={filmId} />
       <header className="panel rounded-3xl p-6 md:p-8">
         <div className="flex items-center gap-3">
           <Clapperboard className="h-6 w-6 text-violet-300" />
-          <h2 className="text-2xl font-black">E01 · La señal — primera prueba de 50 segundos</h2>
+          <h2 className="text-2xl font-black">Archivo de animática E01 · 50 segundos (NO es la película)</h2>
         </div>
         <p className="mt-3 max-w-4xl text-sm leading-6 text-slate-300">
           Piloto de montaje con los retratos aprobados de Gabriel, Daniel y Lucía, un fragmento
@@ -82,13 +83,16 @@ export default function V7DosToquesScene01Panel({ filmId }: { filmId: string }) 
           Previsualización sin créditos de generación · «15 DÍAS» permanece intacta
         </div>
         {exists ? (
-          <div className="mt-5">
+          <details className="mt-5 rounded-xl border border-white/10 p-4">
+            <summary className="cursor-pointer text-sm font-bold">
+              Ver storyboard antiguo con fotografías y nombres (solo archivo, no metraje cinematográfico)
+            </summary>
             <video src={endpoint} controls preload="metadata"
-              className="aspect-video w-full rounded-2xl bg-black" />
+              className="mt-3 aspect-video w-full rounded-2xl bg-black" />
             <p className="mt-2 text-xs text-amber-200">
-              Audio: música aprobada y bocina temporal. Sin grabaciones de diálogo.
+              Esta animática no sustituye las tomas de video real. Mantener como referencia de ritmo.
             </p>
-          </div>
+          </details>
         ) : (
           <div className="mt-5 rounded-2xl border border-dashed border-white/20 p-5">
             <p className="text-sm font-bold">Importar el video de previsualización E01</p>
@@ -110,8 +114,6 @@ export default function V7DosToquesScene01Panel({ filmId }: { filmId: string }) 
         )}
         {message && <p className="mt-3 text-sm text-amber-200" role="status">{message}</p>}
       </header>
-
-      <V7DosToquesFirstShotPanel filmId={filmId} />
 
       <div className="panel rounded-3xl p-6">
         <h3 className="text-xl font-bold">Plan de siete tomas</h3>
