@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, Film, RefreshCcw, ShieldCheck } from 'lucide-react';
 
 type Shot={id:string;label:string;title:string;approved:boolean;readyForApproval:boolean;hasVideo:boolean;reason:string};
-type Scene={id:string;label:string;title:string;approved:boolean;readyForApproval:boolean;assembled:boolean;reason:string;shots:Shot[]};
+type Scene={id:string;label:string;title:string;approved:boolean;readyForApproval:boolean;readyForAssembly:boolean;assembled:boolean;reason:string;shots:Shot[]};
 type Board={ok:boolean;scenes:Scene[];sceneCount:number;shotCount:number;approvedShotCount:number;
  approvedSceneCount:number;pipeline:{mode:string;plannedSteps:number;paidProviderDispatchEnabled:boolean;automaticPaidRetries:number};
  families:Array<{id:string;label:string;agents:readonly string[]}>};
@@ -25,6 +25,19 @@ export default function V7SceneProductionBoard({filmId}:{filmId:string}){
     const timer=setInterval(()=>{void refresh().catch(()=>undefined);},12000);
     return ()=>clearInterval(timer);
   },[refresh]);
+  async function assemble(sceneId:string){
+    if(!token){setNotice('Introduce el token administrativo para iniciar el montaje local.');return;}
+    setWorking(sceneId);setNotice('');
+    try{
+      const response=await fetch(endpoint,{method:'POST',
+        headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
+        body:JSON.stringify({action:'assemble-local',sceneId})});
+      const data=await response.json() as {ok?:boolean;error?:string};
+      if(!response.ok||!data.ok)throw new Error(data.error||'Montaje incompleto');
+      await refresh();setNotice('Escena ensamblada con FFmpeg local; revisa el MP4 y aprueba. Sin gastos.');
+    }catch(e){setNotice(e instanceof Error?e.message:String(e));}
+    finally{setWorking('');}
+  }
   async function approve(kind:'shot'|'scene',id:string) {
     if(!token){setNotice('Introduce primero el token del servidor en esta misma página.');return;}
     setWorking(id);setNotice('');
@@ -91,6 +104,16 @@ export default function V7SceneProductionBoard({filmId}:{filmId:string}){
               </span>
             </summary>
             <p className="mt-3 text-xs text-slate-400">{scene.reason}</p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button type="button" className="button-secondary"
+                disabled={!scene.readyForAssembly||!token||!!working}
+                onClick={()=>void assemble(scene.id)}>
+                {scene.assembled?'Montaje listo':working===scene.id?'Montando…':'Montar escena completa · Sin costo'}
+              </button>
+              {scene.assembled&&<a className="button-secondary"
+                href={endpoint+'/video?sceneId='+encodeURIComponent(scene.id)}
+                target="_blank" rel="noreferrer">Revisar escena MP4</a>}
+            </div>
             <button type="button" className="button-primary mt-3"
               disabled={!scene.readyForApproval||!token||!!working}
               onClick={()=>void approve('scene',scene.id)}>
