@@ -11,6 +11,9 @@ type VideoStatus = {
   automaticRetries: number;
   referenceReady: boolean;
   referenceSha256: string | null;
+  promptSha256: string;
+  providerMode: 'text-to-video';
+  imageReferenceNotSentToGoogle: boolean;
   flagsEnabled: boolean;
   rateVerifiedInEnv: boolean;
   capVerifiedInEnv: boolean;
@@ -30,6 +33,7 @@ export default function V7DosToquesShotRenderPanel({ filmId }: { filmId: string 
   const [status, setStatus] = useState<VideoStatus | null>(null);
   const [adminToken, setAdminToken] = useState('');
   const [checked, setChecked] = useState(false);
+  const [familyConfirmed, setFamilyConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -56,9 +60,10 @@ export default function V7DosToquesShotRenderPanel({ filmId }: { filmId: string 
     try {
       const body = kind === 'submit' ? {
         action: 'submit',
-        referenceSha256: status?.referenceSha256 || '',
+        promptSha256: status?.promptSha256 || '',
         approvedEstimateUsd: status?.estimatedUsd,
-        confirm: checked
+        confirm: checked,
+        compositionConfirmed: familyConfirmed ? 'gabriel-daniel-lucia-on-motorcycle-v2' : ''
       } : { action: 'resume' };
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -76,6 +81,7 @@ export default function V7DosToquesShotRenderPanel({ filmId }: { filmId: string 
             ? 'Solicitud única enviada. Guarda la sesión y utiliza Recuperar operación.'
             : 'Estado de la operación: ' + data.status);
       setChecked(false);
+      setFamilyConfirmed(false);
       await refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
@@ -87,7 +93,7 @@ export default function V7DosToquesShotRenderPanel({ filmId }: { filmId: string 
 
   const missing: string[] = [];
   if (status) {
-    if (!status.referenceReady) missing.push('Importar el fotograma inicial 16:9 en la sección anterior');
+
     if (!status.rateVerifiedInEnv) missing.push('V7_VEO_USD_PER_SECOND=0.10 (tarifa oficial verificada)');
     if (!status.capVerifiedInEnv) missing.push('V7_CINEMA_MAX_USD=2 (máximo local)');
     if (!status.credentialConfigured) missing.push('GEMINI_API_KEY debe estar configurada en el servidor');
@@ -103,7 +109,9 @@ export default function V7DosToquesShotRenderPanel({ filmId }: { filmId: string 
       </div>
       <p className="mt-3 text-sm leading-6 text-slate-300">
         Una única generación de ocho segundos con Veo 3.1 Fast a 720p, destinada a
-        E01-P01. El resultado se almacena como <strong>candidato</strong>, no sustituye
+        E01-P01. Para incluir a Daniel y Lucía, utiliza <strong>texto-a-video</strong>:
+        la imagen familiar sirve de guía editorial, pero Google no la recibirá.
+        La continuidad facial tendrá que verificarse después. El resultado se almacena como <strong>candidato</strong>, no sustituye
         la previsualización ni se considera aprobado hasta revisar su calidad.
       </p>
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -154,6 +162,16 @@ export default function V7DosToquesShotRenderPanel({ filmId }: { filmId: string 
           placeholder="No publiques este token ni la clave de Google" />
         {!status?.hasSubmittedOrReserved && (
           <label className="mt-4 flex cursor-pointer items-start gap-3 text-sm">
+            <input type="checkbox" className="mt-1" checked={familyConfirmed}
+              onChange={event => setFamilyConfirmed(event.target.checked)} />
+            <span>Confirmo la puesta en escena: aparecen Gabriel, Daniel y Lucía juntos,
+              con cascos y edades correctas, llegando a la escuela. Esta generación
+              es de texto a video; no se envía una imagen de referencia a Google,
+              y los rostros deben comprobarse al recibir el clip.</span>
+          </label>
+        )}
+        {!status?.hasSubmittedOrReserved && (
+          <label className="mt-4 flex cursor-pointer items-start gap-3 text-sm">
             <input type="checkbox" className="mt-1" checked={checked}
               onChange={event => setChecked(event.target.checked)} />
             <span>Confirmo la primera y única solicitud Veo E01-P01 de 8 segundos,
@@ -164,7 +182,7 @@ export default function V7DosToquesShotRenderPanel({ filmId }: { filmId: string 
         <div className="mt-4 flex flex-wrap gap-3">
           {!status?.hasSubmittedOrReserved ? (
             <button type="button" className="button-primary"
-              disabled={busy || !checked || !adminToken || !status?.canSubmitAfterUserClick}
+              disabled={busy || !checked || !familyConfirmed || !adminToken || !status?.canSubmitAfterUserClick}
               onClick={() => void action('submit')}>
               <Film className="h-4 w-4" />
               {busy ? 'Enviando una operación...' : 'Generar una sola toma — US$0.80 previsto'}

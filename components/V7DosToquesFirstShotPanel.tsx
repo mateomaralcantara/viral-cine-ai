@@ -14,17 +14,17 @@ type Preflight = {
 };
 
 const firstShotPrompt = [
-  'Single continuous cinematic realistic 8-second establishing shot, 16:9.',
-  'Early morning outside a fictional neighborhood school in the Dominican Republic.',
-  'A worn dark-blue commuter motorcycle with a black-tape patched seat gently',
-  'enters the frame and comes to a full stop along the curb.',
-  'An adult Dominican father (39) in a faded blue work shirt and a matte black',
-  'protective helmet rides the motorcycle; keep his face turned away from camera.',
-  'One small light-blue child helmet hangs on the RIGHT side of the handlebar.',
-  'Warm golden dawn, believable Caribbean urban street textures,',
-  'slow stable 35mm lateral tracking, physically realistic wheels and braking.',
-  'No speaking, no facial animation, no children visible, no invented logos,',
-  'no subtitles, no hard cuts, no camera teleportation.'
+  'Cinematic single-take 8-second 16:9 720p live-action drama, golden dawn in a modest Dominican neighborhood.',
+  'Gabriel Santos (39) arrives slowly at the school on an old dark-blue motorcycle with patched seat.',
+  'Daniel Santos (11) is clearly visible sitting behind Gabriel, wearing a protective helmet and holding on safely.',
+  'Lucía Santos (7) is also clearly visible, with two braids and a light-blue protective helmet,',
+  'safely staged as a cinematic composite, with no physical dangerous stunt.',
+  'All three people remain identical and visible for the whole wide tracking shot.',
+  'Bike moving at walking pace on a controlled street, then gentle braking.',
+  'Realistic physics, softly moving nearby cars, birds and natural street ambience.',
+  'Restrained emotional piano should be mixed afterward as an independent track.',
+  'No dialogue, no unsafe unhelmeted riding, no name cards, no titles, no text overlays,',
+  'no slideshow, no generated captions, no identity swaps, no anatomy distortions.'
 ].join(' ');
 
 export default function V7DosToquesFirstShotPanel({ filmId }: { filmId: string }) {
@@ -79,9 +79,10 @@ export default function V7DosToquesFirstShotPanel({ filmId }: { filmId: string }
         <h2 className="text-xl font-black">Siguiente paso · Primera toma real E01-P01 (8 s)</h2>
       </header>
       <p className="mt-3 text-sm leading-6 text-slate-300">
-        Apertura de la película: Gabriel estaciona su motocicleta azul junto a la escuela al amanecer.
-        El encuadre muestra a un conductor adulto de espaldas; los niños aparecen a partir de
-        los planos posteriores. **No se generará video desde esta pantalla:** primero validamos
+        Apertura de la película: Gabriel llega lentamente en su motocicleta azul con
+        <strong> Daniel y Lucía visibles desde el inicio</strong>. Los tres llevan cascos
+        adecuados. La cámara acompaña el vehículo hacia la escuela y muestra la llegada
+        sin tarjetas de nombres ni fotografías estáticas. **No se generará video desde esta pantalla:** primero validamos
         la referencia y el presupuesto, sin duplicar ni gastar operaciones.
       </p>
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -92,7 +93,7 @@ export default function V7DosToquesFirstShotPanel({ filmId }: { filmId: string }
         </div>
         <div className="rounded-xl border border-white/10 p-3">
           <p className="text-xs text-slate-400">Referencia inicial</p>
-          <p className="mt-1 text-sm font-bold">{state?.referenceReady ? 'Importada, QA pendiente' : 'Pendiente'}</p>
+          <p className="mt-1 text-sm font-bold">{state?.referenceReady ? 'Guía editorial importada' : 'Opcional'}</p>
         </div>
         <div className="rounded-xl border border-white/10 p-3">
           <p className="text-xs text-slate-400">Costo de proveedor</p>
@@ -115,13 +116,29 @@ export default function V7DosToquesFirstShotPanel({ filmId }: { filmId: string }
         </button>
       </details>
 
+      {state?.referenceReady && (
+        <div className="mt-5">
+          <p className="mb-2 text-sm font-bold">Revisa el fotograma familiar V2 que recibirá Veo</p>
+          <img src={endpoint + '/reference'} alt="Fotograma inicial familiar E01-P01: verificar a Gabriel, Daniel y Lucía juntos con cascos"
+            className="aspect-video w-full rounded-xl border border-white/10 object-contain bg-black" />
+          <p className="mt-2 text-xs text-amber-200">
+            La presencia de las tres personas y sus identidades requiere confirmación humana.
+            Un PNG técnicamente válido no garantiza que el contenido sea correcto.
+            Por la limitación de Veo, esta imagen no será enviada al modelo.
+          </p>
+        </div>
+      )}
+
       {!state?.referenceReady && (
         <div className="mt-5 rounded-2xl border border-dashed border-white/20 p-4">
-          <h3 className="text-sm font-bold">Fotograma inicial 16:9 para esta toma</h3>
+          <h3 className="text-sm font-bold">Fotograma inicial familiar 16:9 — Gabriel, Daniel y Lucía</h3>
           <p className="mt-2 text-xs leading-5 text-slate-400">
-            Importa una imagen propia PNG de al menos 1280×720 con el motor azul,
-            el casco infantil en el manubrio derecho y el conductor adulto de espaldas.
-            No reutilices el póster general ni inventes personas o logotipos.
+            Importa un fotograma PNG nuevo de al menos 1280×720 donde se vean
+            Gabriel, Daniel y Lucía juntos, con cascos y posiciones físicamente
+            coherentes. La referencia anterior de Gabriel solo es incompatible.
+            Se guardará separada, sin sobrescribir el fotograma antiguo.
+            Este PNG es **solo guía editorial**: la generación con menores se hará
+            como texto-a-video, sin subirlo a Google.
           </p>
           <input type="file" accept=".png,image/png" className="mt-3 block w-full text-xs"
             aria-label="Referencia inicial 16:9 E01-P01"
@@ -143,8 +160,9 @@ export default function V7DosToquesFirstShotPanel({ filmId }: { filmId: string }
           aproximadamente 7,17 s, para no descuadrar los 10 minutos.
           El creador autorizó hasta US$2.00 para una sola generación de E01-P01 a 720p,
           sin reintentos automáticos. El costo previsto según Google es US$0.80.
-          Ninguna llamada pagada ha sido enviada; antes de ejecutarla es obligatorio
-          importar el fotograma y comprobar credenciales y límites locales.
+          Ninguna llamada pagada ha sido enviada. Antes de ejecutarla verifica el
+          guion, las identidades previstas, las credenciales y el límite local.
+          La imagen familiar es opcional: Google recibirá solo el prompt de texto.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-emerald-300">
           <span>Autorización de esta toma:</span>

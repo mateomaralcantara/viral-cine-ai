@@ -4,7 +4,7 @@ $ErrorActionPreference = 'Stop'
 $work = 'C:\Users\martin\Desktop\VSC\BestS\viral-cine-v7-cinema-core'
 $integration = 'C:\Users\martin\Desktop\VSC\BestS\viral-cine-v7-integration'
 $legacy = 'C:\Users\martin\Desktop\VSC\BestS\viral-cine-ai'
-$branch = 'feat/v7-dos-toques-p01-one-shot-render'
+$branch = 'feat/v7-dos-toques-p01-family-arrival'
 $filmId = 'film-dos-toques-de-bocina-v7'
 
 Write-Host ''
@@ -83,6 +83,10 @@ Write-Host $env:V7_CINEMA_ADMIN_TOKEN -ForegroundColor Magenta
 $url = "http://localhost:3010/v7/films/$filmId" + '?tab=scene01'
 Write-Host "[4/4] Abriendo: $url" -ForegroundColor Green
 Start-Process $url
-Write-Host 'Importa el PNG 16:9, revisa la toma y confirma la unica solicitud.'
+Write-Host 'Generacion Veo: TEXTO-A-VIDEO para incluir a Gabriel, Daniel y Lucia.' -ForegroundColor Green
+Write-Host 'El fotograma familiar 16:9 es OPCIONAL, solo referencia editorial; no se envia a Google.'
+Write-Host 'Comprueba el prompt con los tres personajes y sus cascos antes de confirmar.'
+Write-Host 'No reutilices ni importes como obligatoria la antigua imagen solo de Gabriel.'
+Write-Host 'Confirma manualmente la UNICA solicitud pagada; no se permite reintento.'
 Write-Host 'Una vez enviada, utiliza Recuperar operacion. No reintentes.'
 npm run dev -- -p 3010

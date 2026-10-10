@@ -21,7 +21,7 @@ const specs: SceneSpec[] = [
     summary: 'Gabriel deja a sus hijos en la escuela. Dos toques de bocina significan te amo.',
     cast: ['gabriel', 'daniel', 'lucia'], wardrobe: 'Gabriel camisa azul gastada; escolares con uniforme; casco infantil azul celeste',
     beats: [
-      { image: 'Motor azul oscuro con asiento remendado llega a escuela dominicana al amanecer', camera: 'Plano general descendente' },
+      { image: 'Gabriel llega muy despacio a una escuela dominicana al amanecer en su motor azul oscuro con asiento remendado, junto a Daniel de 11 años y Lucía de 7 años, ambos visibles y con cascos, en un montaje cinematográfico seguro; no texto en pantalla', camera: 'Plano general 35 mm con travelling lateral fluido, sin cortes' },
       { image: 'Gabriel se quita casco negro y ayuda a Daniel a desabrochar casco infantil', camera: 'Plano medio lateral' },
       { image: 'Lucía baja con mochila de estrellas y entrega dibujo doblado a Gabriel', camera: 'Plano detalle de manos', line: 'Para que no te olvides de nosotros en el trabajo.', voice: 'lucia' },
       { image: 'Gabriel guarda el dibujo y sonríe mirando hacia los niños', camera: 'Primer plano de reacción', line: 'No existe un día que yo pudiera olvidarme de ustedes.', voice: 'gabriel' },
