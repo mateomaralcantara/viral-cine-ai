@@ -134,7 +134,7 @@ function client() {
 
 function prompt() {
   return [
-    'Single continuous 8-second cinematic realistic image-to-video shot; 16:9 720p.',
+    'Single continuous 8-second cinematic realistic TEXT-TO-VIDEO shot; 16:9 720p.',
     'Generate this as TEXT-TO-VIDEO; there is no uploaded first-frame image.',
     'Outside a fictional Dominican neighborhood school at golden dawn.',
     'A Dominican father Gabriel Santos, 39 years old, faded blue work shirt,',
@@ -146,7 +146,7 @@ function prompt() {
     '(7-year-old girl, two braids, school uniform, well-fitted light blue',
     'protective helmet), also clearly visible in a safely composited',
     'cinematic riding arrangement. The three characters keep the same',
-    'apparent ages, clothes and helmets across all frames. No additional riders.'
+    'apparent ages, clothes and helmets across all frames. No additional riders.',
     'Three human beings and one intact motorcycle throughout. The bike travels',
     'at walking pace on a quiet controlled street, approaching school then',
     'braking gently. Film as a safely staged cinematic composite, not real',
