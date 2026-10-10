@@ -25,6 +25,17 @@ test('E01-P02 exactly follows approved P01, preserves continuity and has no new 
   assert.equal(spec.provider.submitted, false);
   assert.ok(spec.continuityLocks.length >= 4);
   assert.match(spec.sound.horn, /ningún pitido/);
+  const complete = JSON.parse(await readFile(new URL(
+    '../films/dos-toques-de-bocina/E01-P02-SE-DETIENEN-V1.json', import.meta.url
+  ), 'utf8')) as { action: string[]; staging: string; promptEnglish: string;
+    provider: { maxSubmissions: number; approvedNewBudgetUsd: number } };
+  assert.match(complete.staging, /Daniel sigue delante de Gabriel y Lucía detrás/);
+  assert.match(complete.staging, /No hay descenso/);
+  assert.match(complete.promptEnglish, /All three remain seated, wearing their helmets/);
+  assert.match(complete.promptEnglish, /Children dismount only in the NEXT shot/);
+  assert.match(complete.action.join(' '), /apoya firmemente un pie/);
+  assert.equal(complete.provider.maxSubmissions, 0);
+  assert.equal(complete.provider.approvedNewBudgetUsd, 0);
 });
 
 test('preparation verifies P01 approval hash, extracts FFmpeg still locally, never calls paid Veo', async () => {
