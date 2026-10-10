@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react';
 import { Clapperboard, Film, LoaderCircle, ShieldCheck, Volume2 } from 'lucide-react';
 import V7DosToquesFirstShotPanel from '@/components/V7DosToquesFirstShotPanel';
+import V7DosToquesShot02Panel from '@/components/V7DosToquesShot02Panel';
 
 const shots = [
   { id: 'E01-P01', start: '00:00', end: '00:08', seconds: 8, text: 'Llegada a la escuela y presentación de la familia.' },
-  { id: 'E01-P02', start: '00:08', end: '00:15', seconds: 7, text: 'Gabriel y Daniel: gestos de confianza cotidiana.' },
+  { id: 'E01-P02', start: '00:08', end: '00:15', seconds: 7, text: 'Moto detenida: Gabriel apaga el motor y mira con cariño a Daniel y Lucía en la acera.' },
   { id: 'E01-P03', start: '00:15', end: '00:22', seconds: 7, text: 'Lucía entrega un dibujo a su padre.' },
   { id: 'E01-P04', start: '00:22', end: '00:29', seconds: 7, text: 'Gabriel promete que nunca olvidará a sus hijos.' },
   { id: 'E01-P05', start: '00:29', end: '00:36', seconds: 7, text: 'Daniel se burla cariñosamente del motor.' },
@@ -67,6 +68,7 @@ export default function V7DosToquesScene01Panel({ filmId }: { filmId: string }) 
   return (
     <section className="mt-6 space-y-5">
       <V7DosToquesFirstShotPanel filmId={filmId} />
+      <V7DosToquesShot02Panel filmId={filmId} />
       <header className="panel rounded-3xl p-6 md:p-8">
         <div className="flex items-center gap-3">
           <Clapperboard className="h-6 w-6 text-violet-300" />
