@@ -12,15 +12,21 @@ async function serve(request:Request,context:Context,head:boolean){
   if(!['localhost','127.0.0.1','::1'].includes(url.hostname)||
       (request.headers.get('origin')&&request.headers.get('origin')!==url.origin))return new Response(null,{status:403});
   const id=url.searchParams.get('shotId');
-  if(!id||id.length>240)return new Response(null,{status:400});
+  const sceneId=url.searchParams.get('sceneId');
+  if((Boolean(id)===Boolean(sceneId))||(id&&id.length>240)||(sceneId&&sceneId.length>240))
+    return new Response(null,{status:400});
   try{
     const {filmId}=await context.params;
     const bundle=await readV7FilmBundle(filmId);
     const board=await readSceneApprovalBoard(bundle.film);
-    const shot=board.scenes.flatMap(s=>s.shots).find(s=>s.id===id);
-    if(!shot||!shot.hasVideo)return new Response(null,{status:404});
-    const filename=shot.label+'-veo-candidato.mp4';
-    const file=path.join(v7FilmRoot(filmId),shot.label.toLowerCase(),filename);
+    const scene=sceneId?board.scenes.find(s=>s.id===sceneId):null;
+    const shot=id?board.scenes.flatMap(s=>s.shots).find(s=>s.id===id):null;
+    if(sceneId&&(!scene||!scene.assembled))return new Response(null,{status:404});
+    if(id&&(!shot||!shot.hasVideo))return new Response(null,{status:404});
+    const filename=scene?'scene-cut.mp4':shot!.label+'-veo-candidato.mp4';
+    const file=scene
+      ?path.join(v7FilmRoot(filmId),'scenes',scene.label.toLowerCase(),filename)
+      :path.join(v7FilmRoot(filmId),shot!.label.toLowerCase(),filename);
     const metadata=await stat(file);
     if(!metadata.isFile()||metadata.size<10000)return new Response(null,{status:404});
     const requested=request.headers.get('range');
