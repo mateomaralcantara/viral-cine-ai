@@ -41,14 +41,14 @@ export default function V7DosToquesE01VisualConsole({filmId}:{filmId:string}){
  },[refresh]);
  const notice=(id:string,value:string)=>setMessages(old=>({...old,[id]:value}));
  async function act(id:string,action:'preflight'|'submit'|'resume',pkt?:Packet){
-  if(!token){notice(id,'Introduce tu token administrativo en el campo superior.');return;}
+  if(action!=='preflight'&&!token){notice(id,'Introduce tu token administrativo en el campo superior.');return;}
   if(action==='submit'&&(!pkt||!accepted[id]||!production?.providerEnabled)){
    notice(id,'Falta confirmación del importe o está bloqueado el proveedor.');return;
   }
   setBusy(id);notice(id,'');
   try{
    const reply=await fetch(url,{method:'POST',
-    headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
+    headers:action==='preflight'?{'Content-Type':'application/json'}:{'Content-Type':'application/json',Authorization:'Bearer '+token},
     body:JSON.stringify({action,shotId:id,...(action==='submit'?{
       confirm:true,pricingConfirmed:true,promptSha256:pkt!.promptSha256,
       approvedUsd:pkt!.estimatedUsd}:{})})});
@@ -154,7 +154,7 @@ export default function V7DosToquesE01VisualConsole({filmId}:{filmId:string}){
            Confirmar una generación · US$0.80
           </label>
           <button className="button-primary text-sm" type="button"
-           disabled={!accepted[p.id]||!production.providerEnabled||!!busy}
+           disabled={!accepted[p.id]||!production?.providerEnabled||!!busy}
            onClick={()=>void act(p.id,'submit',p)}>Generar toma · US$0.80</button>
          </>
         }
