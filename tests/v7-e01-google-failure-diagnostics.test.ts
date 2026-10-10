@@ -33,14 +33,14 @@ test('Sanitize sensitive strings returned by provider',()=>{
   assert.equal(diagnosis.providerMessage?.includes('AIzaabcde1234567890'),false);
   assert.equal(diagnosis.providerMessage?.includes('https://'),false);
 });
-test('E01 scene freezes further paid submissions until unknown failures are reconciled',async()=>{
+test('E01 scene preserves failed attempts and allows only explicit second attempts without touching old IDs',async()=>{
   const route=await readFile(new URL('../app/api/v7/films/[filmId]/scene01-production/route.ts',import.meta.url),'utf8');
   const ui=await readFile(new URL('../components/V7DosToquesE01VisualConsole.tsx',import.meta.url),'utf8');
   assert.match(route,/body.action==='inspect'/);
   assert.match(route,/getVideosOperation/);
   assert.match(route,/newGenerationRequests:0/);
-  assert.match(route,/haltedForReconciliation/);
-  assert.match(route,/unresolved.some\(r=>r\?\.status==='failed-unknown'\)/);
+  assert.match(route,/failedShotIds/);
+  assert.match(route,/provider-operation-attempt-02.json/);
   assert.match(ui,/Diagnosticar en Google · Sin nuevo render/);
-  assert.match(ui,/haltedForReconciliation/);
+  assert.match(ui,/Producir Escena 01 · bloques faltantes/);
 });
