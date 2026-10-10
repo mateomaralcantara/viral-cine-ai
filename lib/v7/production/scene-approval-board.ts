@@ -59,9 +59,13 @@ async function shotSnapshot(filmId:string,shotId:string,label:string,title:strin
   const approved=hasVideo && Boolean(approval && approval.filmId===filmId && approval.shotId===label &&
     approval.status==='artistic-approved' && approval.sourceVideoName===chosen?.filename &&
     /^[a-f0-9]{64}$/.test(approval.sourceVideoSha256 ?? ''));
+  // The vendor-neutral resolver already requires a matching completed record
+  // or an approved historical asset. Avoid adding a SECOND, stricter filename
+  // predicate here: that previously disabled Runway's Approve button after
+  // successful recovery of a valid MP4.
   const readyForApproval=!approved && hasVideo && Boolean(record && record.filmId===filmId &&
     record.shotId===label && record.status==='review-required' &&
-    record.candidateName===chosen?.filename && (record.providerOperationName||record.taskId));
+    (record.providerOperationName||record.taskId));
   return {id:shotId,label,title,approved,readyForApproval,hasVideo,
     reason:approved?'Aprobada artísticamente':readyForApproval?'MP4 disponible; aprobar al revisar':
       hasVideo?'MP4 requiere reconciliación del registro':'Falta producir/importar MP4',

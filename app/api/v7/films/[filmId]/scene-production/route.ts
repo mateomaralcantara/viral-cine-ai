@@ -83,7 +83,17 @@ export async function POST(request:Request,ctx:Context){
     const e=error as NodeJS.ErrnoException;
     if(e.code==='EEXIST')return responseError(409,'Aprobación concurrente; actualiza tablero.');
     if(e.code==='ENOENT')return responseError(409,'Falta un archivo de la toma.');
-    // Never leak provider errors, secrets or filesystem paths to the browser.
-    return responseError(409,'Aprobación no disponible. Verifica el MP4 y las dependencias de la escena.');
+    // Display only known film-workflow validation failures, never raw provider,
+    // filesystem or FFprobe errors.
+    const reason=e.message;
+    if ([
+      'Falta producir/importar MP4',
+      'MP4 requiere reconciliación del registro',
+      'La toma no existe en el guion.',
+      'El MP4 de esta toma no está disponible.',
+      'MP4 no supera comprobación técnica.',
+      'Duración de la toma fuera del perfil de ocho a diez segundos.'
+    ].includes(reason)) return responseError(409,reason);
+    return responseError(409,'No se pudo aprobar esta toma. Comprueba el registro y que su MP4 esté íntegro.');
   }
 }

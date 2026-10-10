@@ -25,6 +25,7 @@ on:
       - feat/v7-e01-production-unblock
       - fix/v7-admin-token-persistent-local
       - feat/v7-e01-runway-gen4-turbo-primary
+      - fix/v7-runway-shot-approval-ui
   pull_request:
     branches:
       - feat/v7-dos-toques-p01-artistic-approval
