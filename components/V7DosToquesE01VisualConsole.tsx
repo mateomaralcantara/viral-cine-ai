@@ -152,7 +152,7 @@ export default function V7DosToquesE01VisualConsole({filmId}:{filmId:string}){
            disabled={!!busy||!p.providerOperationKnown} onClick={()=>void act(p.id,'inspect')}>
            <ShieldCheck className="mr-1 inline h-4 w-4"/> Diagnosticar en Google · Sin nuevo render
           </button>
-          {p.recordStatus!=='failed-unknown'&&
+          {(p.recordStatus!=='failed-unknown'||p.diagnosis?.classification==='video-ready')&&
            <button className="button-secondary text-sm" type="button"
             disabled={!!busy||!p.providerOperationKnown} onClick={()=>void act(p.id,'resume')}>
             <RefreshCcw className="mr-1 inline h-4 w-4"/> Recuperar mismo render
