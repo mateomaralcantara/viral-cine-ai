@@ -16,8 +16,10 @@ on:
       - feat/v7-dos-toques-p01-one-shot-render
       - feat/v7-dos-toques-p01-family-arrival
       - fix/v7-dos-toques-p01-sdk-resume
+      - feat/v7-dos-toques-p01-artistic-approval
   pull_request:
     branches:
+      - fix/v7-dos-toques-p01-sdk-resume
       - feat/v7-dos-toques-p01-family-arrival
       - feat/v7-dos-toques-p01-one-shot-render
       - feat/v7-dos-toques-p01-usd2-approval
