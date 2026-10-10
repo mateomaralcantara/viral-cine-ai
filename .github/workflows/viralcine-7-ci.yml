@@ -26,6 +26,7 @@ on:
       - fix/v7-admin-token-persistent-local
       - feat/v7-e01-runway-gen4-turbo-primary
       - fix/v7-runway-shot-approval-ui
+      - feat/v7-e02-runway-scene-production
   pull_request:
     branches:
       - feat/v7-dos-toques-p01-artistic-approval
