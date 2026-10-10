@@ -36,7 +36,7 @@ test('Image references are created from MP4 with FFmpeg and transmitted as priva
  assert.match(code,/flag:'wx'/);
  assert.match(code,/image_to_video/);
  assert.match(code,/tasks\//);
- assert.match(code,/status==='SUCCEEDED'/); // API uses positive success state
+ assert.match(code,/status!=='SUCCEEDED'/); // non-success results must not be accepted as MP4
  assert.match(code,/runwayCandidatePath/);
  assert.doesNotMatch(code,/OPENAI_API_KEY/);
 });
