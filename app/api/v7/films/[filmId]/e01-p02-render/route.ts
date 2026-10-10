@@ -92,7 +92,7 @@ async function getRecord(): Promise<ShotRecord | null> {
     const record = JSON.parse(await readFile(recordPath(), 'utf8')) as ShotRecord;
     if (record.filmId !== FILM_ID || record.shotId !== SHOT_ID ||
         record.model !== MODEL || record.estimatedUsd !== 0.8 ||
-        record.maximumApprovedUsd !== 0) {
+        record.maximumApprovedUsd !== 0.8) {
       throw new Error('Registro pagado inesperado; detener y auditar');
     }
     return record;
@@ -182,7 +182,7 @@ async function statusBody(context: Context) {
     videoUrl: record?.status === 'review-required'
       ? '/api/v7/films/' + encodeURIComponent(FILM_ID) + '/e01-p02-render/video' : null,
     error: record?.error || null,
-    canSubmitAfterUserClick: GRANT.maxProviderSubmissions > 0 && record === null && flagsEnabled() &&
+    canSubmitAfterUserClick: GRANT.executionEnabled && GRANT.maxProviderSubmissions > 0 && record === null && flagsEnabled() &&
       envRateMatches() && envCapEnough() && Boolean(process.env.GEMINI_API_KEY) &&
       Boolean(process.env.V7_CINEMA_ADMIN_TOKEN)
   };
@@ -270,7 +270,7 @@ export async function POST(request: Request, context: Context) {
 
       // ONE text-to-video attempt (allows children); save reservation BEFORE external call.
       if (existing) throw new Error('Esta toma ya tiene una reserva/operación. No se permite otro intento.');
-      if (GRANT.maxTotalUsd === 0 || GRANT.maxProviderSubmissions === 0) throw new Error('P02 sin autorización económica. No se admite ninguna llamada pagada.');
+      if (Number(GRANT.maxTotalUsd) === 0 || Number(GRANT.maxProviderSubmissions) === 0) throw new Error('P02 sin autorización económica. No se admite ninguna llamada pagada.');
       if (!flagsEnabled()) throw new Error('Generación pagada desactivada en el servidor.');
       if (!envRateMatches()) throw new Error('Tarifa diferente a US$0.10/s; detén la solicitud.');
       if (!envCapEnough()) throw new Error('Esta toma no tiene presupuesto aprobado. Se requiere autorización independiente.');
@@ -279,6 +279,7 @@ export async function POST(request: Request, context: Context) {
           body.approvedEstimateUsd !== secondShotQuotedUsd(RATE)) {
         throw new Error('Debes confirmar la referencia vigente y el importe estimado.');
       }
+      if (!GRANT.executionEnabled) throw new Error('Ejecución no habilitada.');
       if (!maySubmitSecondShot({
         shotId: SHOT_ID, model: MODEL, rateUsdPerSecond: RATE,
         providerSubmissions: 0, referenceReady: true, alreadyReserved: false,
@@ -289,7 +290,7 @@ export async function POST(request: Request, context: Context) {
       const record: ShotRecord = {
         filmId: FILM_ID, shotId: SHOT_ID, model: MODEL,
         status: 'reserved', providerSeconds: 8,
-        maximumApprovedUsd: 0, estimatedUsd: 0.8,
+        maximumApprovedUsd: 0.8, estimatedUsd: 0.8,
         referenceSha256: 'NO_IMAGE_INPUT', promptSha256: sha, createdAt: now, updatedAt: now
       };
       await writeFile(recordPath(), JSON.stringify(record, null, 2) + '\n', { flag: 'wx' });

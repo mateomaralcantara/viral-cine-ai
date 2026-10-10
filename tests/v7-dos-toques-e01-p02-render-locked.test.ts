@@ -1,18 +1,33 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
-import { DOS_TOQUES_SECOND_SHOT_BUDGET, maySubmitSecondShot } from '../lib/v7/production/dos-toques-p02-budget';
-test('E01-P02 refuses all paid submits before independent approval', async () => {
- assert.equal(DOS_TOQUES_SECOND_SHOT_BUDGET.maxTotalUsd,0.80);
- assert.equal(DOS_TOQUES_SECOND_SHOT_BUDGET.requiresFinalPanelConfirmation,true);
- assert.equal(DOS_TOQUES_SECOND_SHOT_BUDGET.executionEnabled,false);
- assert.equal(DOS_TOQUES_SECOND_SHOT_BUDGET.maxProviderSubmissions,0);
- assert.equal(maySubmitSecondShot({}),false);
+import { DOS_TOQUES_SECOND_SHOT_BUDGET as b, maySubmitSecondShot as may } from '../lib/v7/production/dos-toques-p02-budget';
+const valid = {shotId:'E01-P02',model:'veo-3.1-fast-generate-preview',rateUsdPerSecond:0.10,providerSubmissions:0,referenceReady:true,alreadyReserved:false,localCapUsd:0.80};
+test('P02 limits strictly to USD 0.80 and one attempted provider submission', () => {
+ assert.equal(b.maxTotalUsd,0.80);
+ assert.equal(b.maxProviderSubmissions,1);
+ assert.equal(b.automaticRetries,0);
+ assert.equal(b.requiresFinalPanelConfirmation,true);
+ assert.equal(may(valid),true);
+ assert.equal(may({...valid,providerSubmissions:1}),false);
+ assert.equal(may({...valid,alreadyReserved:true}),false);
+ assert.equal(may({...valid,localCapUsd:2}),false);
+ assert.equal(may({...valid,localCapUsd:0.79}),false);
+ assert.equal(may({...valid,rateUsdPerSecond:0.20}),false);
+ assert.equal(may({...valid,shotId:'E01-P01'}),false);
+});
+test('P02 requires authenticated final click, persisted one-shot and resume', async () => {
  const route=await readFile(new URL('../app/api/v7/films/[filmId]/e01-p02-render/route.ts',import.meta.url),'utf8');
- assert.match(route,/GRANT.maxTotalUsd === 0/);
- assert.match(route,/GRANT.maxProviderSubmissions === 0/);
- assert.match(route,/providerOperationName/);
+ const panel=await readFile(new URL('../components/V7DosToquesShot02Panel.tsx',import.meta.url),'utf8');
+ assert.match(route,/authorized\(request\)/);
+ assert.match(route,/body.confirm !== true/);
+ assert.match(route,/promptSha256 !== sha/);
+ assert.match(route,/flag: 'wx'/);
+ assert.match(route,/if \(existing\) throw/);
  assert.match(route,/getVideosOperation/);
- assert.match(route,/E01-P02-veo-candidato.mp4/);
- assert.match(route,/shotPlan.promptEnglish/);
+ assert.match(route,/providerOperationName/);
+ assert.match(panel,/finalApproval/);
+ assert.match(panel,/finalToken/);
+ assert.match(panel,/Generar E01-P02/);
+ assert.match(panel,/Recuperar MISMA operación/);
 });

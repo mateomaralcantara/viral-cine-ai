@@ -18,6 +18,7 @@ on:
       - fix/v7-dos-toques-p01-sdk-resume
       - feat/v7-dos-toques-p01-artistic-approval
       - feat/v7-dos-toques-e01-p02-continuity
+      - feat/v7-p02-final-confirmation-safe
   pull_request:
     branches:
       - feat/v7-dos-toques-p01-artistic-approval
