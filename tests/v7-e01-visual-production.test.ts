@@ -23,7 +23,7 @@ test('backend never submits existing P01 or P02, requires explicit independent p
   assert.match(s,/body.pricingConfirmed!==true/);
   assert.match(s,/body.promptSha256!==digest/);
   assert.match(s,/V7_SCENE01_PAID_ENABLED/);
-  assert.match(s,/RESERVED_TOTAL_LIMIT_USD=4.00/);
+  assert.match(s,/RESERVED_TOTAL_LIMIT_USD=5.60/);
   assert.match(s,/await writeFile\(name,JSON.stringify\(record,null,2\)/);
   assert.match(s,/flag:'wx'/);
   assert.match(s,/saved.name=existing.providerOperationName/);
@@ -41,4 +41,17 @@ test('visual panel includes all seven packets, preflight, resume, cost consent a
   assert.match(s,/Confirmar una generación/);
   assert.match(s,/scene-production/);
   assert.match(main,/V7DosToquesE01VisualConsole/);
+});
+
+test('film production panel authorizes the combined remaining shots and keeps originals',async()=> {
+ const ui=await readFile(new URL('../components/V7DosToquesE01VisualConsole.tsx',import.meta.url),'utf8');
+ const api=await readFile(new URL('../app/api/v7/films/[filmId]/scene01-production/route.ts',import.meta.url),'utf8');
+ assert.match(ui,/Producir Escena 01 · bloques faltantes/);
+ assert.match(ui,/pendingCleanShots/);
+ assert.match(ui,/batchApproved/);
+ assert.match(ui,/action:shot.retryAvailable\?'submit-retry':'submit'/);
+ assert.match(api,/provider-operation-attempt-02.json/);
+ assert.match(api,/readAttempt\(id,2\)/);
+ assert.match(api,/body.action==='submit-retry'/);
+ assert.match(api,/await writeFile\(name,JSON.stringify\(record,null,2\)/);
 });

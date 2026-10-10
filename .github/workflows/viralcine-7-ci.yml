@@ -22,6 +22,7 @@ on:
       - feat/v7-scene-families-approval-engine
       - feat/v7-e01-visual-production-console
       - fix/v7-e01-provider-failure-diagnostics
+      - feat/v7-e01-production-unblock
   pull_request:
     branches:
       - feat/v7-dos-toques-p01-artistic-approval
