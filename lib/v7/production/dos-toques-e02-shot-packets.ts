@@ -38,7 +38,7 @@ export const E02_SHOTS:readonly Shot[]=canon.shots.slice().sort((a,b)=>a.order-b
  const prefix='Film: DOS TOQUES DE BOCINA. Scene 2: La casa en silencio. Dominican Republic, modest home, late afternoon. Visual-only 16:9 720p 10-second cinematic take, serious family drama, consistent identity and setting. No subtitles, dialogue, music, lip-synced speech or watermarks. ';
  const prompt=prefix+moves[i];
  return {id:'E02-P'+String(i+1).padStart(2,'0'),shotId:shot.id,title:shot.title,
-  action:shot.description??moves[i],camera:['Static detail','Backlit medium','Side medium',
+  action:shot.intention||moves[i],camera:['Static detail','Backlit medium','Side medium',
   'Slow push-in','Reaction close-up','Locked wide','Hands close-up'][i],
   dialog:voices[i]?.line??null,voiceCode:voices[i]?.name??null,
   editSeconds:E02_EDIT_SECONDS[i],prompt,
