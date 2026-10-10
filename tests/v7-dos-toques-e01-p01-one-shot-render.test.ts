@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
+import { GenerateVideosOperation } from '@google/genai';
 import {
   DOS_TOQUES_FIRST_SHOT_BUDGET as AUTH,
   maySubmitFirstShot
@@ -31,6 +32,9 @@ test('the new Veo first-shot endpoint honors one-shot budget and stores reservat
   assert.match(source, /if \(!requestAllowed\(request\) \|\| !authorized\(request\)\)/);
   assert.match(source, /process\.env\.NODE_ENV !== 'development'/);
   assert.match(source, /ai\.operations\.getVideosOperation\(/);
+  assert.match(source, /new GenerateVideosOperation\(\)/);
+  assert.match(source, /savedOperation\.name = existing\.providerOperationName/);
+  assert.doesNotMatch(source, /operation: \{ name: existing\.providerOperationName \}/);
   assert.match(source, /record\.providerOperationName = operation\.name/);
   assert.match(source, /status = 'failed-unknown'/);
   assert.ok(!source.includes('retry:'));
@@ -58,4 +62,12 @@ test('render candidate only streams from a recorded completed operation', async 
   assert.match(source, /'Content-Type': 'video\/mp4'/);
   assert.match(source, /createFileByteRangeStream/);
   assert.match(source, /process\.env\.NODE_ENV !== 'development'/);
+});
+
+
+test('Veo polling uses Google SDK operation instance, not an ID-only object', () => {
+  const restored = new GenerateVideosOperation();
+  restored.name = 'operations/example-existing-operation';
+  assert.equal(restored.name, 'operations/example-existing-operation');
+  assert.equal(typeof restored._fromAPIResponse, 'function');
 });

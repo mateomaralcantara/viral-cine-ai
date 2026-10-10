@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import { mkdir, open, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { GoogleGenAI } from '@google/genai';
+import { GenerateVideosOperation, GoogleGenAI } from '@google/genai';
 import { NextResponse } from 'next/server';
 import { readV7FilmBundle, v7FilmRoot } from '@/lib/v7/storage/film-store';
 import {
@@ -237,9 +237,14 @@ export async function POST(request: Request, context: Context) {
           throw new Error('La operación pudo cobrarse, pero no se registró ID del proveedor. Prohibido reintentar.');
         }
         const ai = client();
+        // The SDK calls operation._fromAPIResponse() internally. Restoring a
+        // plain { name } loses that method and breaks polling after restart.
+        // Reconstruct the SDK class with the EXISTING provider operation ID.
+        // This path NEVER submits a new generateVideos request.
+        const savedOperation = new GenerateVideosOperation();
+        savedOperation.name = existing.providerOperationName;
         const operation = await ai.operations.getVideosOperation({
-          operation: { name: existing.providerOperationName } as
-            Parameters<typeof ai.operations.getVideosOperation>[0]['operation']
+          operation: savedOperation
         });
         if (!operation.done) {
           existing.status = 'processing';
