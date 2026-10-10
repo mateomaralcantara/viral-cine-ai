@@ -62,8 +62,9 @@ export default function V7SceneProductionBoard({filmId}:{filmId:string}){
         <h2 className="text-2xl font-black">Producción por escenas · Familias de agentes</h2>
       </div>
       <p className="mt-2 text-sm leading-6 text-slate-300">
-        Cada escena se procesa por bloques, se revisa y se ensambla antes de aprobarse. Los botones de aprobación
-        permanecen visibles y se habilitan al existir los archivos requeridos. Aprobar nunca genera video ni pagos.
+        Revisa cada MP4 y pulsa «Aprobar toma». Los botones se pueden pulsar para mostrar
+        cualquier bloqueo, sin repetir generaciones. La aprobación artística no genera videos ni cargos.
+        La aprobación de la escena completa se habilita después del montaje.
       </p>
       <div className="mt-4 grid gap-3 sm:grid-cols-4">
         {[
@@ -133,8 +134,13 @@ export default function V7SceneProductionBoard({filmId}:{filmId:string}){
                     {shot.hasVideo&&
                       <a className="button-secondary text-sm" target="_blank" rel="noreferrer"
                         href={endpoint+'/video?shotId='+encodeURIComponent(shot.id)}>Ver MP4</a>}
+                    {!shot.approved&&!shot.readyForApproval&&
+                      <span className="max-w-[280px] text-xs text-amber-200" role="status">
+                        {shot.reason}
+                      </span>}
                     <button type="button" className="button-primary"
-                      disabled={!shot.readyForApproval||!!working}
+                      disabled={shot.approved||!!working}
+                      title={shot.readyForApproval?'MP4 listo para aprobación':shot.reason}
                       onClick={()=>void approve('shot',shot.id)}>
                       {shot.approved?'Aprobada':working===shot.id?'Guardando…':'Aprobar toma'}
                     </button>
