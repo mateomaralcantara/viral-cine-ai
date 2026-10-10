@@ -8,10 +8,11 @@ test('E01-P02 paid render preflight remains disabled and demands separate approv
   assert.equal(p.provider.durationSeconds, 8);
   assert.equal(p.provider.priceSourceVerified, false);
   assert.equal(p.provider.pricePerSecondUsd, null);
-  assert.equal(p.authorization.approvedBudgetUsd, 0);
-  assert.equal(p.authorization.maxProviderSubmissions, 0);
+  assert.equal(p.authorization.approvedBudgetUsd, 0.8);
+  assert.equal(p.authorization.maxProviderSubmissions, 1);
   assert.equal(p.authorization.automaticRetries, 0);
-  assert.equal(p.authorization.allowSubmit, false);
+  assert.equal(p.authorization.allowSubmit, true);
+  assert.equal(p.authorization.requiresFinalPanelConfirmation, true);
   assert.equal(p.authorization.requiresSeparateExplicitUserApproval, true);
   assert.equal(p.continuity.imageSentToProvider, false);
   assert.equal(p.continuity.noDismountUntil, 'E01-P03');
