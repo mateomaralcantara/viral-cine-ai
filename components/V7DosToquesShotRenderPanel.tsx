@@ -36,6 +36,10 @@ export default function V7DosToquesShotRenderPanel({ filmId }: { filmId: string 
   const [familyConfirmed, setFamilyConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [artisticApproved, setArtisticApproved] = useState(false);
+  const [watched, setWatched] = useState(false);
+  const [approveChecked, setApproveChecked] = useState(false);
+  const [approvalNotes, setApprovalNotes] = useState('');
 
   async function refresh() {
     const response = await fetch(endpoint, { cache: 'no-store' });
@@ -52,6 +56,46 @@ export default function V7DosToquesShotRenderPanel({ filmId }: { filmId: string 
     }).catch(error => { if (active) setMessage(error instanceof Error ? error.message : String(error)); });
     return () => { active = false; };
   }, [endpoint]);
+
+  const approvalEndpoint = '/api/v7/films/' + encodeURIComponent(filmId) + '/e01-p01-approval';
+  useEffect(() => {
+    let active = true;
+    void fetch(approvalEndpoint, { cache: 'no-store' })
+      .then(async response => {
+        if (!response.ok) return;
+        const result = await response.json() as { artisticApproved?: boolean };
+        if (active) setArtisticApproved(result.artisticApproved === true);
+      }).catch(() => undefined);
+    return () => { active = false; };
+  }, [approvalEndpoint]);
+
+  async function approveArtistic() {
+    if (!status?.videoReady || !adminToken || !watched || !approveChecked || artisticApproved) {
+      setMessage('Antes de aprobar debes ver el video completo, confirmar la decisión e introducir el token.');
+      return;
+    }
+    setBusy(true);
+    setMessage('');
+    try {
+      const response = await fetch(approvalEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + adminToken },
+        body: JSON.stringify({
+          action: 'approve-artistic',
+          confirmWatched: true, confirmArtistic: true,
+          notes: approvalNotes
+        })
+      });
+      const result = await response.json() as { ok?: boolean; error?: string };
+      if (!response.ok || !result.ok) {
+        throw new Error(result.error || 'No se pudo guardar la aprobación.');
+      }
+      setArtisticApproved(true);
+      setMessage('E01-P01: APROBADA ARTÍSTICAMENTE. Original intacto. Pendientes QA técnico, continuidad y montaje.');
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : String(cause));
+    } finally { setBusy(false); }
+  }
 
   async function action(kind: 'submit' | 'resume') {
     if (!adminToken) { setMessage('Introduce primero el token administrativo local.'); return; }
@@ -135,9 +179,48 @@ export default function V7DosToquesShotRenderPanel({ filmId }: { filmId: string 
           <video src={status.videoUrl} controls preload="metadata"
             className="mt-3 aspect-video w-full rounded-xl bg-black" />
           <p className="mt-2 text-xs text-amber-200">
-            Revisa que el vehículo, el casco y el movimiento correspondan a E01-P01.
-            Todavía falta recortar el bruto de 8 s a la duración editorial de V7.
+            Revisa los 8 segundos, los personajes, los cascos y el movimiento.
+            La aprobación artística NO certifica identidad exacta, seguridad ni continuidad.
+            El bruto permanece intacto; el recorte editorial de V7 se hará por separado.
           </p>
+          {artisticApproved ? (
+            <div className="mt-4 rounded-xl border border-emerald-400/30 p-4 text-emerald-200"
+              role="status">
+              <strong>E01-P01 · APROBADA ARTÍSTICAMENTE</strong>
+              <p className="mt-1 text-xs">Original preservado · Gastos adicionales US$0 · QA técnico y continuidad pendientes.</p>
+            </div>
+          ) : (
+            <div className="mt-4 rounded-xl border border-white/15 p-4">
+              <h4 className="text-base font-bold">Decisión artística sobre E01-P01</h4>
+              <p className="mt-2 text-xs text-slate-400">
+                Esta aprobación guarda un registro separado con fecha y huella SHA-256 del MP4.
+                No vuelve a llamar a Google ni incorpora automáticamente el video al montaje.
+              </p>
+              <label className="mt-3 flex items-start gap-2 text-sm">
+                <input type="checkbox" checked={watched}
+                  onChange={event => setWatched(event.target.checked)} className="mt-1" />
+                <span>He reproducido y revisado los 8 segundos completos.</span>
+              </label>
+              <label className="mt-3 flex items-start gap-2 text-sm">
+                <input type="checkbox" checked={approveChecked}
+                  onChange={event => setApproveChecked(event.target.checked)} className="mt-1" />
+                <span>Apruebo artísticamente esta toma como candidata para el montaje.
+                  Entiendo que falta QA de cascos, identidades y continuidad.</span>
+              </label>
+              <label className="mt-3 block text-xs font-bold" htmlFor="e01-approval-notes">
+                Observaciones para montaje (opcional)
+              </label>
+              <textarea id="e01-approval-notes" rows={2} maxLength={1000}
+                value={approvalNotes} onChange={event => setApprovalNotes(event.target.value)}
+                placeholder="Ej.: conservar llegada y luz; revisar cascos/rostros en QA."
+                className="mt-2 w-full rounded-lg border border-white/20 bg-slate-950 p-3 text-sm" />
+              <button type="button" className="button-primary mt-3"
+                disabled={busy || !adminToken || !watched || !approveChecked}
+                onClick={() => void approveArtistic()}>
+                Aprobar E01-P01 · Sin costo adicional
+              </button>
+            </div>
+          )}
         </div>
       ) : null}
 
