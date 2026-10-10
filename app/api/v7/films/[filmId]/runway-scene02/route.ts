@@ -3,7 +3,7 @@ import {readV7FilmBundle} from '@/lib/v7/storage/film-store';
 import {E02_FILM_ID} from '@/lib/v7/production/dos-toques-e02-shot-packets';
 import {readRunwayRecord,runwayReservedUsd,runwayEnabled,runwayShotSpecs,
  runwayPreflight,runwayAdminAuthorized,submitRunwayShot,resumeRunwayShot,
- saveE02Seed,e02SeedReady,
+ saveE02Seed,e02SeedReady,saveE02ShotImage,e02ShotImageReady,
  RUNWAY_MAX_SCENE_USD,RUNWAY_SHOT_USD} from '@/lib/v7/production/runway-e02-engine';
 
 export const runtime='nodejs';
@@ -43,9 +43,10 @@ export async function GET(request:Request,ctx:Context){
    maxSceneUsd:RUNWAY_MAX_SCENE_USD,reservedUsd:await runwayReservedUsd(),
    configured:Boolean(process.env.RUNWAYML_API_SECRET),
    enabled:runwayEnabled(),newGenerationRequests:0,
-   shots:specs.map((s,i)=>({...s,status:records[i]?.status??'not-started',
+   shots:await Promise.all(specs.map(async(s,i)=>({...s,
+    imageReady:await e02ShotImageReady(s.id),status:records[i]?.status??'not-started',
     taskKnown:Boolean(records[i]?.taskId),videoReady:records[i]?.status==='review-required',
-    referenceShotId:records[i]?.referenceShotId??null,error:records[i]?.error??null}))},
+    referenceShotId:records[i]?.referenceShotId??null,error:records[i]?.error??null})))},
    {headers:{'Cache-Control':'private, no-store'}});
  }catch{return responseError(404,'No se pudo abrir el tablero de Runway.');}
 }
@@ -58,14 +59,22 @@ export async function POST(request:Request,ctx:Context){
   try{
    await filmAllowed(ctx);
    const data=await request.formData();
-   if(data.get('action')!=='upload-seed')return responseError(400,'Acción no válida.');
+   if(!['upload-seed','upload-shot-image'].includes(String(data.get('action'))))
+    return responseError(400,'Acción no válida.');
    const image=data.get('image');
    if(!(image instanceof File))return responseError(400,'Selecciona una imagen.');
    if(!['image/jpeg','image/png','image/webp'].includes(image.type))
     return responseError(415,'Formato admitido: JPG, PNG o WebP.');
    if(image.size>4000000||image.size<3000)return responseError(413,'Imagen fuera del tamaño permitido.');
-   return NextResponse.json({ok:true,...await saveE02Seed(Buffer.from(await image.arrayBuffer())),
-    additionalSpendUsd:0,newGenerationRequests:0});
+   const action=String(data.get('action'));
+   const id=data.get('shotId');
+   if(action==='upload-shot-image'&&(typeof id!=='string'||!/^E02-P0[1-7]$/.test(id)))
+    return responseError(400,'Toma de imagen inválida.');
+   const result=action==='upload-seed'
+    ?await saveE02Seed(Buffer.from(await image.arrayBuffer()))
+    :await saveE02ShotImage(id as string,Buffer.from(await image.arrayBuffer()));
+   return NextResponse.json({ok:true,...result,additionalSpendUsd:0,newGenerationRequests:0},
+    {headers:{'Cache-Control':'no-store'}});
   }catch(e){return responseError(409,scrub(e));}
  }
  if(!rawType.includes('application/json'))return responseError(415,'Se requiere JSON.');
