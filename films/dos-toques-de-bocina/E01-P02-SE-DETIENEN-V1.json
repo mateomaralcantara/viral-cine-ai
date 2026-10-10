@@ -3,7 +3,7 @@
   "filmId": "film-dos-toques-de-bocina-v7",
   "scene": "E01",
   "shotId": "E01-P02",
-  "title": "Se detienen — la ternura después de la llegada",
+  "title": "Se detienen — parada segura y continuidad real",
   "status": "PREPRODUCTION_NO_PROVIDER_SUBMISSION",
   "editorial": {
     "sourceOfTruth": "canonical-existing-film-v7",
@@ -26,20 +26,20 @@
     "sourceApprovalRemainsUntouched": true
   },
   "action": [
-    "La moto azul oscura ya está completamente detenida junto a la acera de la escuela.",
-    "Gabriel sostiene el manubrio, apaga el motor y mira a Daniel y Lucía con cansancio y ternura.",
-    "Los dos niños están colocados de forma segura en la acera junto al motor estacionado; no se representa a menores circulando sin casco.",
-    "Gabriel se quita su propio casco negro; con calma se acerca a los niños. La ayuda a bajar ocurrirá en E01-P03 según continuidad.",
-    "Cerrar con sonrisa natural de Gabriel y el gesto de Daniel acercándose a su padre."
+    "La motocicleta azul oscura llega desacelerando de manera natural frente a la misma escuela.",
+    "Gabriel mantiene ambas manos en el manubrio mientras Daniel permanece delante de él y Lucía detrás, conservando exactamente el orden de E01-P01.",
+    "Gabriel detiene completamente la motocicleta, apoya firmemente un pie en el suelo, estabiliza el vehículo y apaga el motor.",
+    "Los tres permanecen sentados y con sus cascos durante toda la toma; Gabriel intercambia una mirada cariñosa con los niños solo cuando están detenidos.",
+    "Nadie baja en E01-P02. El descenso asistido y seguro se realizará exclusivamente en E01-P03."
   ],
-  "staging": "Un solo plano medio lateral sin cortes. Cámara a nivel de la acera. Motocicleta completamente parada y apoyada. Niños en la acera o quietos en la moto sin movimiento ni acrobacias.",
+  "staging": "Plano medio lateral único, misma dirección de desplazamiento y eje visual de E01-P01. La motocicleta desacelera, se detiene junto a la acera y queda estable. Daniel sigue delante de Gabriel y Lucía detrás. No hay descenso, cambio de asientos ni desaparición de personajes.",
   "continuityLocks": [
-    "Mismo motor azul oscuro usado y asiento de cinta negra que en la toma real E01-P01.",
-    "Misma fachada escolar y luz dorada; conservar dirección de la calle y la posición de la moto.",
-    "Gabriel: camisa azul de trabajo y casco negro; los niños con uniformes azules y blancos.",
-    "Casco infantil: verificar qué aparece realmente en E01-P01; no dar por verificada su colocación.",
-    "Gabriel, Daniel y Lucía: identidad aparente y número exacto de personajes; revisar manualmente.",
-    "La composición E01-P01 presenta posible inconsistencia de casco/posición trasera: no reproducir una conducción insegura."
+    "Misma motocicleta azul oscura usada y asiento con cinta negra de E01-P01.",
+    "Misma fachada escolar azul y crema, luz dorada, eje lateral y orientación de la moto.",
+    "Gabriel mantiene camisa azul y casco oscuro; Daniel delante y Lucía detrás, ambos con uniformes blancos y azules y cascos visibles.",
+    "No trasladar instantáneamente a los niños a la acera; conservar las posiciones observadas al final de E01-P01.",
+    "Parada completa, pie apoyado y motor apagado antes de cualquier interacción; descenso solo en E01-P03.",
+    "Tres personajes exactos, sin duplicaciones, transformaciones faciales, cambios de casco o saltos de posición."
   ],
   "camera": {
     "framing": "plano medio lateral de los tres, foco gradual al rostro de Gabriel",
@@ -54,28 +54,28 @@
     "music": "piano/cuerdas emotivo original en mezcla posterior",
     "horn": "ningún pitido antes de E01-P07"
   },
-  "promptEnglish": "One continuous cinematic 8-second TEXT-TO-VIDEO 16:9 720p shot, naturalistic Dominican family drama, seamless emotional continuation of a morning drop-off outside a fictional neighborhood school. The same old dark-blue commuter motorcycle with worn black-tape patched seat is now COMPLETELY STOPPED and stable next to the curb. Gabriel Santos, tired yet gentle Dominican father of 39, in faded blue work shirt, stands still next to it and switches off the engine, looking fondly at his two children. Daniel (11, short curly hair) and Lucía (7, braids) wear consistent white-and-navy school uniforms, safely positioned on the sidewalk beside the stopped motorcycle; no riding or unsafe dismount. Gabriel removes his black helmet, offers a small natural smile, checks on both children. Warm golden Caribbean sunrise, same modest blue-and-cream school exterior, modest Dominican street, gentle continuous lateral medium shot at pedestrian eye height, 35mm optics, physically accurate motorcycle, lifelike movements. No conversation, no lip synchronization, no superimposed text, no name cards, no branding, no slideshow, no cuts, no duplicated children, no helmet or clothing morphing. Ambient engine stops, distant birds and schoolyard sound; restrained original piano added later in post.",
+  "promptEnglish": "One continuous cinematic 8-second 16:9 720p TEXT-TO-VIDEO shot, realistic Dominican family drama, directly continuing the final moment of the preceding shot outside the same blue-and-cream neighborhood school at golden Caribbean sunrise. SAME old dark-blue commuter motorcycle with visibly patched black-tape seat, moving from left to right in the same lateral screen direction. Gabriel, 39, wearing a faded blue work shirt and dark helmet, is driving with his son Daniel, 11, wearing a white-and-navy school uniform and helmet, seated directly IN FRONT of Gabriel; daughter Lucía, 7, wearing a matching school uniform and helmet, remains seated BEHIND Gabriel. Keep precisely this rider order throughout the entire shot. The motorcycle gently decelerates, reaches a complete stop by the curb, and Gabriel plants one foot firmly on the ground, steadies the motorcycle and switches the engine off. Only after the stop he exchanges a gentle, affectionate glance with his children. All three remain seated, wearing their helmets until the end of the shot. Children dismount only in the NEXT shot, never in this shot. Single continuous lateral medium shot, natural realistic motion and motorcycle physics, warm consistent sunlight and matching school facade. Ambient engine idling then stopping, soft birds and quiet schoolyard. No dialogue, no horns, no music baked into provider video, no cuts, no sudden teleportation, no children appearing on sidewalk, no helmet removal, no extra riders, no face or clothing morphing, no onscreen titles.",
   "negative": [
-    "no title cards",
-    "no names on screen",
-    "no generated dialogue",
-    "no motorcycle movement with children onboard",
-    "no impossible bike geometry",
-    "no unsafe dismount",
+    "no children teleporting to sidewalk",
+    "no dismounting in E01-P02",
+    "no helmet removal",
+    "no change of seating order",
+    "no riding without helmets",
+    "no extra person",
+    "no abrupt cuts or background reversals",
     "no face morphing",
-    "no sudden changes in wardrobes",
-    "no fourth person riding",
-    "no fabricated signage"
+    "no motorcycle geometry changes",
+    "no dialogue or text"
   ],
   "reviewChecklist": [
-    "Gabriel, Daniel, Lucía visibles y edades aparentes correctas",
-    "Moto completamente inmóvil antes de interactuar con los niños",
-    "Motor azul usado, uniforme y colegio coherentes con P01",
-    "No se repite el posible error de casco/posición de P01",
-    "Física y rostros sin artefactos, un plano continuo",
-    "Sin labios artificiales ni texto o nombres",
-    "Corte editorial a duración exacta nativa V7 de 172/24 segundos",
-    "Audio original preservado y música añadida solo en mezcla"
+    "Daniel seated in front of Gabriel and Lucía behind until final frame",
+    "Exactly three helmeted riders throughout E01-P02",
+    "Deceleration precedes full stop; Gabriel plants foot and steadies motorcycle",
+    "Same dark-blue bike, patched seat, uniform and school as E01-P01",
+    "No dismount; E01-P03 reserves assisted exit",
+    "Single continuous shot without artifacts or characters duplicating",
+    "Editorial trim target 172 frames at 24 fps only after future authorized render",
+    "Original approved P01 remains untouched; P02 paid generation remains disabled"
   ],
   "provider": {
     "mode": "text-to-video",
