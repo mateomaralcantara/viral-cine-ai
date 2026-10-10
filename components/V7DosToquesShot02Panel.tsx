@@ -24,6 +24,16 @@ export default function V7DosToquesShot02Panel({ filmId }: { filmId: string }) {
   const [token, setToken] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [renderStatus, setRenderStatus] = useState<{ok:boolean;shotId:string;recordStatus:string;flagsEnabled:boolean;canSubmitAfterUserClick:boolean;estimatedUsd:number;maxProviderSubmissions:number;videoReady:boolean;videoUrl:string|null;error?:string}|null>(null);
+  const [renderError, setRenderError] = useState('');
+  async function refreshRender() {
+    try {
+      const response = await fetch('/api/v7/films/' + encodeURIComponent(filmId) + '/e01-p02-render', { cache:'no-store' });
+      const result = await response.json();
+      if (!response.ok || !result.ok || result.shotId !== 'E01-P02') throw new Error(result.error || 'Estado P02 no disponible');
+      setRenderStatus(result); setRenderError('');
+    } catch (error) { setRenderError(error instanceof Error ? error.message : String(error)); }
+  }
 
   async function refresh() {
     const response = await fetch(endpoint, { cache: 'no-store' });
@@ -60,6 +70,7 @@ export default function V7DosToquesShot02Panel({ filmId }: { filmId: string }) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally { setBusy(false); }
   }
+  useEffect(() => { void refreshRender(); }, [filmId]);
   const canPrepare = state?.p01ArtisticApproved && !state.p02ContinuityFrameReady;
   return (
     <section className="panel rounded-3xl p-6 md:p-8">
@@ -68,9 +79,9 @@ export default function V7DosToquesShot02Panel({ filmId }: { filmId: string }) {
         <h2 className="text-xl font-black">Siguiente toma · E01-P02 — Se detienen</h2>
       </div>
       <p className="mt-3 text-sm leading-6 text-slate-300">
-        El motor azul ya está completamente detenido. Gabriel apaga el motor y sonríe a
-        Daniel y Lucía, que se encuentran junto a la acera en posición segura.
-        Una toma lateral continua con la misma escuela y la luz cálida de E01-P01.
+        La moto azul desacelera y se detiene ante la escuela. Daniel permanece delante
+        de Gabriel y Lucía detrás, con sus cascos. Gabriel apoya el pie, estabiliza
+        el vehículo y apaga el motor. Nadie desciende hasta E01-P03.
         No hay diálogos ni nombres en pantalla.
       </p>
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -130,6 +141,42 @@ export default function V7DosToquesShot02Panel({ filmId }: { filmId: string }) {
             setMessage(error instanceof Error ? error.message : String(error)))}>
           <RefreshCcw className="h-4 w-4" /> Actualizar estado
         </button>
+      </div>
+      <div className="mt-5 rounded-2xl border border-white/10 p-4">
+        <h3 className="font-bold">Producción real E01-P02 · Estado del backend</h3>
+        <p className="mt-2 text-sm text-slate-300">Una toma de 8 segundos. La preparación no autoriza cargos.</p>
+        <p className="mt-2 text-sm">Estado: {renderStatus?.recordStatus ?? 'No comprobado'}</p>
+        <p className="mt-1 text-sm">Estimación técnica: {renderStatus?.estimatedUsd != null ? 'US
+        <summary className="cursor-pointer font-bold">Prompt cinematográfico de E01-P02 (preproducción)</summary>
+        <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-300">
+          {plan.promptEnglish}
+        </p>
+        <button type="button" className="button-secondary mt-3"
+          onClick={() => void navigator.clipboard.writeText(plan.promptEnglish)
+            .then(() => setMessage('Prompt copiado; todavía no autoriza ninguna generación.'))
+            .catch(() => setMessage('No se pudo copiar el prompt.'))}>
+          <Copy className="h-4 w-4" /> Copiar prompt
+        </button>
+      </details>
+      <div className="mt-4 rounded-xl border border-amber-400/20 p-4 text-xs text-amber-200">
+        <strong>Control de calidad pendiente:</strong> continuidad del motor, uniforme y colegio,
+        cascos de ambos niños, tres personajes sin duplicados y corte exacto al guion V7.
+        La aprobación artística de P01 no certifica automáticamente estas condiciones.
+      </div>
+      {message && <p className="mt-3 text-sm text-amber-200" role="status">{message}</p>}
+    </section>
+  );
+}
+ + renderStatus.estimatedUsd.toFixed(2) : 'Pendiente'}</p>
+        <p className="mt-1 text-sm text-amber-200">Autorización: US$0.00 · Envío pagado bloqueado</p>
+        {renderStatus?.videoReady && renderStatus.videoUrl &&
+          <video src={renderStatus.videoUrl} controls preload="metadata" className="mt-3 w-full rounded-xl" />}
+        <button type="button" className="button-secondary mt-3" onClick={() => void refreshRender()}>
+          <RefreshCcw className="h-4 w-4" /> Comprobar backend P02
+        </button>
+        {renderError && <p className="mt-2 text-sm text-amber-200" role="status">{renderError}</p>}
+        {renderStatus?.canSubmitAfterUserClick &&
+          <p className="mt-2 text-sm text-red-300">Alerta: autorización inesperada. No realizar ninguna generación.</p>}
       </div>
       <details className="mt-5 rounded-xl border border-white/10 p-4">
         <summary className="cursor-pointer font-bold">Prompt cinematográfico de E01-P02 (preproducción)</summary>
