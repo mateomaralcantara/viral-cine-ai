@@ -22,12 +22,21 @@ export async function resolveV7ShotVideo(filmId:string,label:string):Promise<{
    const record=await readFile(option.recordFile,'utf8').catch((e:NodeJS.ErrnoException)=>{
     if(e.code==='ENOENT')return null;throw e;
    });
-   if(!record)continue;
-   const operation=JSON.parse(record) as {status?:string;candidateName?:string;filmId?:string;shotId?:string};
-   if(operation.filmId!==filmId||operation.shotId!==label||
-      operation.status!=='review-required'||operation.candidateName!==path.basename(option.file))continue;
+   const approved=await readFile(path.join(dir,'artistic-approval.json'),'utf8')
+    .catch((e:NodeJS.ErrnoException)=>{if(e.code==='ENOENT')return null;throw e;});
+   const approval=approved?JSON.parse(approved) as {
+    filmId?:string;shotId?:string;status?:string;sourceVideoName?:string
+   }:null;
+   const alreadyApproved=approval?.filmId===filmId&&approval.shotId===label&&
+    approval.status==='artistic-approved'&&approval.sourceVideoName===path.basename(option.file);
+   const operation=record?JSON.parse(record) as {
+    status?:string;candidateName?:string;filmId?:string;shotId?:string
+   }:null;
+   const completed=operation?.filmId===filmId&&operation.shotId===label&&
+    operation.status==='review-required'&&operation.candidateName===path.basename(option.file);
+   if(!alreadyApproved&&!completed)continue;
    return {file:option.file,filename:path.basename(option.file),provider:option.provider,
-    recordFile:option.recordFile};
+    recordFile:record?option.recordFile:null};
   }catch(e){
    if((e as NodeJS.ErrnoException).code==='ENOENT')continue;throw e;
   }
