@@ -112,7 +112,9 @@ function publicRecord(r:Ledger|null){
 async function status(ctx:Context){
   await ensureFilm(ctx);
   const ledger=await Promise.all(NEW_SHOTS.map(s=>readLedger(s.id)));
-  const haltedForReconciliation=ledger.some(r=>r?.status==='failed-unknown');
+  // Terminal P03/P05 failures must block those exact operations only.
+  // They MUST NOT prevent submitting a fresh, unreserved P04/P06/P07.
+  const failedShotIds=NEW_SHOTS.filter((_,i)=>ledger[i]?.status==='failed-unknown').map(x=>x.id);
   const packets=E01_SHOTS.map(s=>{
     const idx=NEW_SHOTS.findIndex(x=>x.id===s.id);
     const record=idx>=0?ledger[idx]:null;
@@ -123,8 +125,8 @@ async function status(ctx:Context){
       estimatedUsd:s.existing?0:E01_ESTIMATE_USD,...publicRecord(record)};
   });
   return {ok:true,filmId:E01_FILM_ID,sceneId:'E01',packets,
-    priceConfigurationVerified:priceVerified(),providerEnabled:enabled()&&!haltedForReconciliation&&Boolean(process.env.GEMINI_API_KEY),
-    haltedForReconciliation,
+    priceConfigurationVerified:priceVerified(),providerEnabled:enabled()&&Boolean(process.env.GEMINI_API_KEY),
+    failedShotIds,
     credentialConfigured:Boolean(process.env.GEMINI_API_KEY),
     adminTokenConfigured:Boolean(process.env.V7_CINEMA_ADMIN_TOKEN?.length&&process.env.V7_CINEMA_ADMIN_TOKEN.length>=24),
     priceDisclaimer:'La tarifa de USD 0.10/s es una hipótesis de configuración local, NO verificación de facturación de Google.',
@@ -223,9 +225,9 @@ export async function POST(request:Request,ctx:Context){
       }
       // Paid action can ONLY happen after separate shot-level final click.
       if(existing)throw Error('Operación previamente registrada. Usa Recuperar, nunca Generar.');
-      const unresolved=await Promise.all(NEW_SHOTS.map(s=>readLedger(s.id)));
-      if(unresolved.some(r=>r?.status==='failed-unknown'))
-        throw Error('Nuevas generaciones bloqueadas: conciliar P03/P05 u otros fallos previos con Google.');
+      // An existing record for this same shot was blocked above.
+      // Previously failed OTHER shots are not a reason to block this
+      // virgin shot. Existing spending commitments stay counted.
       if(!enabled())throw Error('Proveedor deshabilitado o tarifa/caps no validados en configuración.');
       if(!process.env.GEMINI_API_KEY||!process.env.V7_CINEMA_ADMIN_TOKEN)throw Error('Faltan credenciales locales.');
       if(body.confirm!==true||body.pricingConfirmed!==true||
