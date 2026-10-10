@@ -19,6 +19,7 @@ on:
       - feat/v7-dos-toques-p01-artistic-approval
       - feat/v7-dos-toques-e01-p02-continuity
       - feat/v7-p02-final-confirmation-safe
+      - feat/v7-scene-families-approval-engine
   pull_request:
     branches:
       - feat/v7-dos-toques-p01-artistic-approval

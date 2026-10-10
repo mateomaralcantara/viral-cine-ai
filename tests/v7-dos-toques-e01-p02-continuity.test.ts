@@ -64,12 +64,13 @@ test('preparation verifies P01 approval hash, extracts FFmpeg still locally, nev
   assert.match(image, /continuidad-final-p01.png/);
 });
 
-test('P02 panel is preproduction, not a duplicate paid trigger', async () => {
+test('P02 panel displays persisted artistic approval instead of a duplicate paid trigger', async () => {
   const ui = await readFile(new URL(
     '../components/V7DosToquesShot02Panel.tsx', import.meta.url
   ), 'utf8');
   assert.match(ui, /Preparar continuidad · Sin costo/);
-  assert.match(ui, /Bloqueada · US\$0 autorizado/);
+  assert.match(ui, /APROBADA ARTÍSTICAMENTE/);
+  assert.match(ui, /e01-p02-approval/);
   assert.match(ui, /referenceUrl/);
   assert.match(ui, /plan.promptEnglish/);
   assert.doesNotMatch(ui, /Generar una sola toma/);

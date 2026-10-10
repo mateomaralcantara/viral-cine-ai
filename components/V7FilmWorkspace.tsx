@@ -7,6 +7,7 @@ import V7ClosedCutPlayer from '@/components/V7ClosedCutPlayer';
 import V7DosToquesMusicPanel from '@/components/V7DosToquesMusicPanel';
 import V7DosToquesCastingPanel from '@/components/V7DosToquesCastingPanel';
 import V7DosToquesScene01Panel from '@/components/V7DosToquesScene01Panel';
+import V7SceneProductionBoard from '@/components/V7SceneProductionBoard';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -318,36 +319,7 @@ export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
         </section>
       )}
 
-      {tab === 'scenes' && (
-        <section className="mt-6 space-y-4">
-          {scenes.length === 0 && <Empty message="Todavía no hay escenas planificadas." />}
-          {scenes.map((scene) => (
-            <article key={scene.id} className="panel rounded-3xl p-5">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="text-xs font-black uppercase tracking-wider text-violet-300">Escena {scene.order}</div>
-                  <h2 className="mt-1 text-xl font-black">{scene.title}</h2>
-                  <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-400">{scene.summary}</p>
-                </div>
-                <div className="rounded-xl bg-white/[.04] px-3 py-2 text-xs text-slate-400">
-                  {scene.durationSeconds}s · {scene.shots.length} shots
-                </div>
-              </div>
-              <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                {scene.shots.map((shot) => (
-                  <div key={shot.id} className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                    <div className="text-xs font-black text-slate-500">TOMA {shot.order}</div>
-                    <div className="mt-1 font-bold">{shot.title}</div>
-                    <div className="mt-2 text-xs text-slate-500">
-                      {shot.durationSeconds}s · {shot.takes.length} take(s)
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </article>
-          ))}
-        </section>
-      )}
+      {tab === 'scenes' && <V7SceneProductionBoard filmId={filmId} />}
 
       {tab === 'takes' && (
         <section className="mt-6">
