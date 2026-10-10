@@ -124,10 +124,8 @@ export async function approveBoardTarget(film:FilmV7,input:{
     schemaVersion:1,filmId:film.id,shotId:shot!.label,status:'artistic-approved',
     approvedAt:new Date().toISOString(),sourceVideoName:chosen!.filename,
     sourceVideoSha256:fingerprint,videoSeconds:seconds,videoBytes:statInfo.size,
-    providerOperationName:(()=>{
-      // The vendor-neutral field stores the original provider task identifier.
-      return undefined;
-    })(),
+    providerOperationName:JSON.parse(await readFile(chosen!.recordFile!,'utf8')).taskId ??
+      JSON.parse(await readFile(chosen!.recordFile!,'utf8')).providerOperationName,
     provider:chosen!.provider,
     productionNotes:input.notes,artisticChecks:input.checks,
     technicalQaStatus:'pending',continuityQaStatus:'pending',editingStatus:'pending',externalApiCalls:0,additionalSpendUsd:0
