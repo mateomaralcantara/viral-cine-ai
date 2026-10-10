@@ -41,13 +41,15 @@ $env:ALLOW_EXTERNAL_API_CALLS = 'false'
 $env:V7_SCENE01_PAID_ENABLED = 'true'
 $env:V7_SCENE01_RATE_USD_PER_SECOND = '0.10'
 $env:V7_SCENE01_PER_SHOT_CAP_USD = '0.80'
-$env:V7_SCENE01_TOTAL_CAP_USD = '4.00'
-$env:V7_CINEMA_ADMIN_TOKEN = [guid]::NewGuid().ToString('N') + [guid]::NewGuid().ToString('N')
+$env:V7_SCENE01_TOTAL_CAP_USD = '5.60'
+if (-not $env:V7_CINEMA_ADMIN_TOKEN -or $env:V7_CINEMA_ADMIN_TOKEN.Length -lt 24) {
+  $env:V7_CINEMA_ADMIN_TOKEN = [guid]::NewGuid().ToString('N') + [guid]::NewGuid().ToString('N')
+}
 $env:V7_CINEMA_ADMIN_TOKEN | Set-Clipboard
 Write-Host 'Token administrativo nuevo copiado al portapapeles. NO lo compartas.' -ForegroundColor Green
 Write-Host 'P01 y P02: existentes, no regenerables desde esta consola.' -ForegroundColor Green
-Write-Host 'P03-P07: preparadas; cada envío exige confirmación individual de hasta USD 0.80.' -ForegroundColor Green
-Write-Host 'Límite acumulado de nuevas solicitudes: USD 4.00. Sin reintentos automáticos.' -ForegroundColor Yellow
+Write-Host 'P03-P07: una autorizacion para nuevos envios. P01/P02 conservadas.' -ForegroundColor Green
+Write-Host 'Limite acumulado, incluidos dos intentos previos: USD 5.60. Autorizacion adicional maxima: USD 4.00.' -ForegroundColor Yellow
 if (-not $env:GEMINI_API_KEY) {
   Write-Host 'AVISO: GEMINI_API_KEY no encontrada; solo preflight/consulta hasta configurarla.' -ForegroundColor Yellow
 }
