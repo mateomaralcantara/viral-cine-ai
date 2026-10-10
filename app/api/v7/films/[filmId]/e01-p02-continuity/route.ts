@@ -125,7 +125,7 @@ export async function POST(request: Request, context: Context) {
     }
     await ensureFilm(context);
     if (await frameExists()) return NextResponse.json({
-      ok: true, alreadyPrepared: true, ...(await responseBody(context))
+      ...(await responseBody(context)), alreadyPrepared: true
     });
     const source = await approvedSource();
     if (!source) {
@@ -147,7 +147,7 @@ export async function POST(request: Request, context: Context) {
     });
     const temp = path.join(targetDir(), '.continuidad-' + process.pid + '-' + Date.now() + '.png');
     try {
-      if (await frameExists()) return NextResponse.json({ ok: true, ...(await responseBody(context)) });
+      if (await frameExists()) return NextResponse.json(await responseBody(context));
       await capture('ffmpeg', [
         '-hide_banner', '-loglevel', 'error', '-nostdin', '-y',
         '-ss', '7.000', '-i', sourceFile(), '-an',
@@ -164,7 +164,7 @@ export async function POST(request: Request, context: Context) {
       await lock.close();
       await unlink(path.join(targetDir(), '.continuity.lock')).catch(() => undefined);
     }
-    return NextResponse.json({ ok: true, ...(await responseBody(context)),
+    return NextResponse.json({ ...(await responseBody(context)),
       madePaidCalls: 0, sourceVideoUntouched: true
     });
   } catch (error) {
