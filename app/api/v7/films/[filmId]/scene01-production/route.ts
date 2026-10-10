@@ -120,7 +120,7 @@ async function status(ctx:Context){
       estimatedUsd:s.existing?0:E01_ESTIMATE_USD,...publicRecord(record)};
   });
   return {ok:true,filmId:E01_FILM_ID,sceneId:'E01',packets,
-    priceConfigurationVerified:priceVerified(),providerEnabled:enabled(),
+    priceConfigurationVerified:priceVerified(),providerEnabled:enabled()&&Boolean(process.env.GEMINI_API_KEY),
     credentialConfigured:Boolean(process.env.GEMINI_API_KEY),
     adminTokenConfigured:Boolean(process.env.V7_CINEMA_ADMIN_TOKEN?.length&&process.env.V7_CINEMA_ADMIN_TOKEN.length>=24),
     priceDisclaimer:'La tarifa de USD 0.10/s es una hipótesis de configuración local, NO verificación de facturación de Google.',
@@ -133,12 +133,14 @@ export async function GET(request:Request,ctx:Context){
   catch{return blank(404,'No se pudo abrir el expediente de E01.');}
 }
 export async function POST(request:Request,ctx:Context){
-  if(!allowed(request)||!authorized(request))return blank(403,'Origen o token administrativo inválido.');
+  if(!allowed(request))return blank(403,'Origen inválido.');
   if(Number(request.headers.get('content-length')||0)>12000)return blank(413,'Solicitud demasiado grande.');
   let body:{action?:string;shotId?:string;confirm?:boolean;
     promptSha256?:string;approvedUsd?:number;pricingConfirmed?:boolean};
   try{body=await request.json() as typeof body;}catch{return blank(400,'JSON inválido.');}
+  if(!body||typeof body!=='object')return blank(400,'Solicitud inválida.');
   if(!['preflight','submit','resume'].includes(body.action||''))return blank(400,'Acción no válida.');
+  if(body.action!=='preflight'&&!authorized(request))return blank(403,'Token administrativo inválido.');
   const shot=e01ShotById(body.shotId||'');
   if(!shot||shot.existing)return blank(403,'Solo P03–P07; P01 y P02 nunca se regeneran.');
   try{
