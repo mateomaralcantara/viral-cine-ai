@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "1.0",
+  "filmId": "film-dos-toques-de-bocina-v7",
+  "shotId": "E01-P02",
+  "phase": "PRE-FLIGHT_ONLY_NO_PAID_API",
+  "sourceBranch": "fix/v7-dos-toques-p02-safe-stop-continuity",
+  "provider": {
+    "modelCandidate": "veo-3.1-fast-generate-preview",
+    "durationSeconds": 8,
+    "aspectRatio": "16:9",
+    "resolution": "720p",
+    "mode": "text-to-video",
+    "pricePerSecondUsd": null,
+    "estimatedTotalUsd": null,
+    "priceSourceVerified": false
+  },
+  "authorization": {
+    "approvedBudgetUsd": 0,
+    "maxProviderSubmissions": 0,
+    "automaticRetries": 0,
+    "allowSubmit": false,
+    "allowResumeExistingOnlyAfterOperationIdSaved": true,
+    "requiresFreshAdminToken": true,
+    "requiresSeparateExplicitUserApproval": true
+  },
+  "continuity": {
+    "priorShot": "E01-P01",
+    "priorArtisticApprovalRequired": true,
+    "priorVideoSha256VerificationRequired": true,
+    "frameReferenceOnlyEditorial": true,
+    "imageSentToProvider": false,
+    "riderOrder": "Daniel in front of Gabriel; Lucía behind Gabriel; three remain helmeted and seated until stop",
+    "noDismountUntil": "E01-P03"
+  },
+  "requiredChecks": [
+    "provider price must be independently verified with source and date",
+    "show exact estimate and maximum cap before accepting approval",
+    "restrict action to film E01-P02 and one user-confirmed submission",
+    "durable reservation written atomically before provider submission",
+    "never auto retry after uncertain provider outcome",
+    "persist provider operation name and resume without generating new video",
+    "confirm original P01 and artistic approval unchanged",
+    "video downloaded to separate P02 filename with validated duration and checksum",
+    "manual artistic and continuity QA after download"
+  ],
+  "status": "DRAFT_NOT_AUTHORIZED"
+}

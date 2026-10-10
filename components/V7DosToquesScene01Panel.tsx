@@ -7,7 +7,7 @@ import V7DosToquesShot02Panel from '@/components/V7DosToquesShot02Panel';
 
 const shots = [
   { id: 'E01-P01', start: '00:00', end: '00:08', seconds: 8, text: 'Llegada a la escuela y presentación de la familia.' },
-  { id: 'E01-P02', start: '00:08', end: '00:15', seconds: 7, text: 'Moto detenida: Gabriel apaga el motor y mira con cariño a Daniel y Lucía en la acera.' },
+  { id: 'E01-P02', start: '00:08', end: '00:15', seconds: 7, text: 'La moto desacelera y se detiene; Daniel sigue delante de Gabriel y Lucía detrás, ambos con casco. Nadie baja todavía.' },
   { id: 'E01-P03', start: '00:15', end: '00:22', seconds: 7, text: 'Lucía entrega un dibujo a su padre.' },
   { id: 'E01-P04', start: '00:22', end: '00:29', seconds: 7, text: 'Gabriel promete que nunca olvidará a sus hijos.' },
   { id: 'E01-P05', start: '00:29', end: '00:36', seconds: 7, text: 'Daniel se burla cariñosamente del motor.' },
