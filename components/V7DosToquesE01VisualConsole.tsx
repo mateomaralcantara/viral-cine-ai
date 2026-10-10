@@ -18,7 +18,6 @@ export default function V7DosToquesE01VisualConsole({filmId}:{filmId:string}){
  const [production,setProduction]=useState<Production|null>(null);
  const [approvals,setApprovals]=useState<ApprovalBoard|null>(null);
  const [token,setToken]=useState('');
- const [chosen,setChosen]=useState<string|null>(null);
  const [accepted,setAccepted]=useState<Record<string,boolean>>({});
  const [busy,setBusy]=useState('');
  const [messages,setMessages]=useState<Record<string,string>>({});
@@ -135,11 +134,7 @@ export default function V7DosToquesE01VisualConsole({filmId}:{filmId:string}){
      </details>
      <div className="mt-4 flex flex-wrap gap-2">
       {videoReady&&<a className="button-secondary text-sm" target="_blank" rel="noreferrer"
-       href={statusUrl+'/video?shotId='+encodeURIComponent(
-        firstScene?.shots.find(s=>s.label===p.id)?.label?
-        firstScene?.shots.find(s=>s.label===p.id)?.label===p.id?
-        (p.id==='E01-P01'||p.id==='E01-P02'?
-        (filmId+'-scene-01-shot-'+p.id.slice(-2)):filmId+'-scene-01-shot-'+p.id.slice(-2)):'':'')}>
+       href={statusUrl+'/video?shotId='+encodeURIComponent(filmId+'-scene-01-shot-'+p.id.slice(-2))}>
        <Play className="mr-1 inline h-4 w-4"/> Ver MP4
       </a>}
       {p.existing?<span className="rounded-lg border border-emerald-400/20 px-3 py-2 text-xs text-emerald-300">
