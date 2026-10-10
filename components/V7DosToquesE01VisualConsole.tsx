@@ -7,7 +7,7 @@ type Packet={
  existing:boolean;action:string;camera:string;continuity:string[];
  voiceCharacter:string|null;voiceLine:string|null;promptEnglish:string|null;promptSha256:string|null;
  estimatedUsd:number;recordStatus:string;providerOperationKnown:boolean;
- videoReady:boolean;hasSubmittedOrReserved:boolean;error:string|null;
+ videoReady:boolean;hasSubmittedOrReserved:boolean;retryAvailable?:boolean;attempt?:number;error:string|null;
  diagnosis?:{classification:string;providerStatus:string|null;providerCode:string|null;providerMessage:string|null;filteredCount:number;filteredReasons:string[];checkedAt:string}|null;
 };
 type Production={ok:boolean;packets:Packet[];providerEnabled:boolean;priceConfigurationVerified:boolean;
@@ -65,8 +65,12 @@ export default function V7DosToquesE01VisualConsole({filmId}:{filmId:string}){
   }catch(e){notice(id,e instanceof Error?e.message:String(e));}
   finally{setBusy('');}
  }
- const pendingCleanShots=(production?.packets??[]).filter(p=>
-  ['E01-P04','E01-P06','E01-P07'].includes(p.id)&&!p.hasSubmittedOrReserved);
+ const pendingCleanShots=(production?.packets??[])
+  .filter(p=>!p.existing&&(!p.hasSubmittedOrReserved||p.retryAvailable))
+  .sort((a,b)=>{
+   const order=['E01-P04','E01-P06','E01-P07','E01-P03','E01-P05'];
+   return order.indexOf(a.id)-order.indexOf(b.id);
+  });
  const batchQuote=Number(pendingCleanShots.reduce((total,p)=>total+p.estimatedUsd,0).toFixed(2));
  async function beginBatch(){
   if(!production?.providerEnabled||!token||!batchApproved||!pendingCleanShots.length||busy)return;
@@ -80,7 +84,7 @@ export default function V7DosToquesE01VisualConsole({filmId}:{filmId:string}){
    for(const shot of pendingCleanShots){
     const res=await fetch(url,{method:'POST',headers:{
       'Content-Type':'application/json',Authorization:'Bearer '+token
-    },body:JSON.stringify({action:'submit',shotId:shot.id,
+    },body:JSON.stringify({action:shot.retryAvailable?'submit-retry':'submit',shotId:shot.id,
       confirm:true,pricingConfirmed:true,promptSha256:shot.promptSha256,
       approvedUsd:shot.estimatedUsd})});
     const body=await res.json() as {ok?:boolean;error?:string;status?:string};
@@ -141,18 +145,19 @@ export default function V7DosToquesE01VisualConsole({filmId}:{filmId:string}){
   </div>
   {error&&<p className="mt-3 text-sm text-red-300" role="alert">{error}</p>}
   <div className="mt-5 rounded-xl border border-emerald-400/20 p-4">
-   <h3 className="font-bold text-emerald-200">Producir los bloques nuevos de E01</h3>
+   <h3 className="font-bold text-emerald-200">Producir Escena 01 · bloques faltantes</h3>
    <p className="mt-1 text-sm text-slate-300">
-    Una sola autorización para {pendingCleanShots.length} tomas sin operación previa
+    Una sola autorización para {pendingCleanShots.length} nuevas solicitudes
     ({pendingCleanShots.map(s=>s.id).join(', ')||'ninguna pendiente'}).
-    P01/P02 aprobadas y P03/P05 fallidas NO se reenvían.
+    P01 y P02 se reutilizan. Los intentos antiguos de P03/P05 no se tocan:
+    cuando su error terminal está verificado, se registra una nueva operación separada.
    </p>
    <p className="mt-2 text-sm font-semibold">Nuevo máximo de esta acción: US$ {batchQuote.toFixed(2)}.
     Comprometido anteriormente: US$ {(production?.committedUsd??0).toFixed(2)}.
     Tope de esta etapa: US$ {(production?.totalCapUsd??4).toFixed(2)}.</p>
    <p className="mt-1 text-xs text-slate-400">
     El compromiso no equivale a facturación confirmada. Cada envío crea su reserva antes de contactar a Google.
-    Un fallo detiene la secuencia y no reintenta automáticamente.
+    Primero se envían P04/P06/P07 y luego P03/P05. Un fallo detiene la secuencia; jamás se reenvía una misma operación.
    </p>
    <label className="mt-3 flex items-center gap-2 text-sm">
     <input type="checkbox" checked={batchApproved} disabled={!!busy||!pendingCleanShots.length}
@@ -168,8 +173,9 @@ export default function V7DosToquesE01VisualConsole({filmId}:{filmId:string}){
    </button>
    {production?.failedShotIds?.length?(
     <p className="mt-2 text-xs text-amber-200">
-      Faltarán {production.failedShotIds.join(', ')}: estas operaciones terminaron sin video
-      y requieren nuevas solicitudes independientes para completar los 50 segundos.
+      Operaciones originales sin video: {production.failedShotIds.join(', ')}.
+      Solo se reintentarán si este panel presenta expresamente un segundo intento disponible
+      y autorizas el presupuesto de toda la escena.
     </p>):null}
    {batchMessage&&<p className="mt-3 text-sm text-slate-200" role="status">{batchMessage}</p>}
   </div>
@@ -223,6 +229,8 @@ export default function V7DosToquesE01VisualConsole({filmId}:{filmId:string}){
             disabled={!!busy||!p.providerOperationKnown} onClick={()=>void act(p.id,'resume')}>
             <RefreshCcw className="mr-1 inline h-4 w-4"/> Recuperar mismo render
            </button>}
+          {p.retryAvailable&&<span className="rounded-lg border border-amber-400/20 px-3 py-2 text-xs text-amber-200">
+           Segundo intento disponible arriba · con nueva autorización</span>}
          </>:
          <>
           <label className="flex items-center gap-2 rounded-lg border border-white/10 p-2 text-xs">
