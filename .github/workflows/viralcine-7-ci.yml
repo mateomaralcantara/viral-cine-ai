@@ -23,6 +23,7 @@ on:
       - feat/v7-e01-visual-production-console
       - fix/v7-e01-provider-failure-diagnostics
       - feat/v7-e01-production-unblock
+      - fix/v7-admin-token-persistent-local
   pull_request:
     branches:
       - feat/v7-dos-toques-p01-artistic-approval
