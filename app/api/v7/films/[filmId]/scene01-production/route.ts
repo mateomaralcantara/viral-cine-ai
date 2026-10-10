@@ -14,7 +14,7 @@ export const runtime='nodejs';
 export const dynamic='force-dynamic';
 const probe=promisify(execFile);
 const NEW_SHOTS=E01_SHOTS.filter(x=>!x.existing);
-const RESERVED_TOTAL_LIMIT_USD=4.00;
+const RESERVED_TOTAL_LIMIT_USD=5.60;
 type Context={params:Promise<{filmId:string}>};
 type RecordState='reserved'|'submitted'|'processing'|'review-required'|'failed-unknown';
 type Ledger={
@@ -22,10 +22,12 @@ type Ledger={
   estimatedUsd:number;maximumApprovedUsd:number;promptSha256:string;
   providerOperationName?:string;candidateName?:string;error?:string;
   createdAt:string;updatedAt:string;
+  attempt?:2;
   diagnosis?:VeoDiagnosis;
 };
 const root=()=>v7FilmRoot(E01_FILM_ID);
-const recordPath=(id:string)=>path.join(root(),id.toLowerCase(),'provider-operation.json');
+const recordPath=(id:string,attempt:1|2=1)=>path.join(root(),id.toLowerCase(),
+  attempt===1?'provider-operation.json':'provider-operation-attempt-02.json');
 const outputPath=(id:string)=>path.join(v7FilmRoot(E01_FILM_ID),id.toLowerCase(),id+'-veo-candidato.mp4');
 function allowed(request:Request){
   const u=new URL(request.url);
@@ -70,17 +72,43 @@ async function ensureFilm(ctx:Context){
   const saved=await readV7FilmBundle(E01_FILM_ID);
   if(saved.film.id!==E01_FILM_ID)throw Error('Bundle incorrecto.');
 }
-async function readLedger(id:string):Promise<Ledger|null>{
+async function readAttempt(id:string,attempt:1|2):Promise<Ledger|null>{
   try{
-    const r=JSON.parse(await readFile(recordPath(id),'utf8')) as Ledger;
+    const r=JSON.parse(await readFile(recordPath(id,attempt),'utf8')) as Ledger;
     if(r.filmId!==E01_FILM_ID||r.shotId!==id||r.model!==E01_PROVIDER_MODEL||
-      r.estimatedUsd!==E01_ESTIMATE_USD||r.maximumApprovedUsd!==E01_ESTIMATE_USD)
+      r.estimatedUsd!==E01_ESTIMATE_USD||r.maximumApprovedUsd!==E01_ESTIMATE_USD||
+      (attempt===2&&r.attempt!==2))
       throw Error('Ledger inesperado: reconciliar antes de continuar.');
     return r;
   }catch(e){if((e as NodeJS.ErrnoException).code==='ENOENT')return null;throw e;}
 }
+async function readLedger(id:string):Promise<Ledger|null>{
+  return (await readAttempt(id,2))??(await readAttempt(id,1));
+}
+function retryPrompt(id:string,original:string){
+  // Legitimate revision for family-safe visual-only staging after Google's
+  // transient capacity failure or audio filtration. Voices are postprocessed.
+  if(id!=='E01-P03'&&id!=='E01-P05')return original;
+  const scenes:Record<string,string>={
+    'E01-P03':[
+      'Family-friendly Dominican cinematic scene at dawn, same Gabriel, Lucía and Daniel with unchanged wardrobe.',
+      'The blue motorcycle is parked and switched off. A father carefully helps his children onto the pavement.',
+      'Lucía silently hands him a small folded drawing. Father accepts it with a warm expression.',
+      'Natural human movement, steady medium shot, school facade in the background.',
+      'Visual storytelling only, no speaking, no songs, no lyrics, no laughing audio. 16:9, 8 seconds, 720p.'
+    ].join(' '),
+    'E01-P05':[
+      'Family-friendly Dominican cinematic scene at dawn, same Gabriel, Lucía and Daniel with unchanged wardrobe.',
+      'The blue motorcycle remains safely parked at the blue and cream school.',
+      'Daniel points at the old motor playfully and the three exchange warm silent smiles.',
+      'Natural movements, no additional characters, no speech, no singing, no voiced laughter or music.',
+      'Visual storytelling only; dialogue and audio are added later by the film editor. 16:9, 8 seconds, 720p.'
+    ].join(' ')
+  };
+  return scenes[id]??original;
+}
 async function storeLedger(r:Ledger){
-  const destination=recordPath(r.shotId),tmp=destination+'.'+randomUUID()+'.tmp';
+  const destination=recordPath(r.shotId,r.attempt===2?2:1),tmp=destination+'.'+randomUUID()+'.tmp';
   r.updatedAt=new Date().toISOString();
   await writeFile(tmp,JSON.stringify(r,null,2)+'\n',{flag:'wx',mode:0o600});
   try{await rename(tmp,destination);}
@@ -89,8 +117,10 @@ async function storeLedger(r:Ledger){
 async function exposure(){
   let commitments=0;
   for(const shot of NEW_SHOTS){
-    const r=await readLedger(shot.id);
-    if(r)commitments+=r.maximumApprovedUsd;
+    const first=await readAttempt(shot.id,1);
+    const second=await readAttempt(shot.id,2);
+    if(first)commitments+=first.maximumApprovedUsd;
+    if(second)commitments+=second.maximumApprovedUsd;
   }
   return Number(commitments.toFixed(2));
 }
@@ -112,16 +142,26 @@ function publicRecord(r:Ledger|null){
 async function status(ctx:Context){
   await ensureFilm(ctx);
   const ledger=await Promise.all(NEW_SHOTS.map(s=>readLedger(s.id)));
+  const primary=await Promise.all(NEW_SHOTS.map(s=>readAttempt(s.id,1)));
   // Terminal P03/P05 failures must block those exact operations only.
   // They MUST NOT prevent submitting a fresh, unreserved P04/P06/P07.
   const failedShotIds=NEW_SHOTS.filter((_,i)=>ledger[i]?.status==='failed-unknown').map(x=>x.id);
   const packets=E01_SHOTS.map(s=>{
     const idx=NEW_SHOTS.findIndex(x=>x.id===s.id);
     const record=idx>=0?ledger[idx]:null;
+    const first=idx>=0?primary[idx]:null;
+    const retryAllowed=(s.id==='E01-P03'&&first?.status==='failed-unknown'&&
+      first.diagnosis?.classification==='provider-error'&&first.diagnosis.providerCode==='14')||
+      (s.id==='E01-P05'&&first?.status==='failed-unknown'&&
+      first.diagnosis?.classification==='rai-filtered');
+    const retryAvailable=Boolean(retryAllowed)&&!record?.attempt;
+    const effectivePrompt=retryAvailable?retryPrompt(s.id,s.promptEnglish):s.promptEnglish;
     return {id:s.id,title:s.title,startSeconds:s.startSeconds,editSeconds:s.editSeconds,
       providerSeconds:8,existing:s.existing,action:s.action,camera:s.camera,
       continuity:s.continuity,voiceCharacter:s.voiceCharacter??null,voiceLine:s.voiceLine??null,
-      promptEnglish:s.existing?null:s.promptEnglish,promptSha256:s.existing?null:digest(s.promptEnglish),
+      promptEnglish:s.existing?null:effectivePrompt,
+      promptSha256:s.existing?null:digest(effectivePrompt),
+      retryAvailable,attempt:record?.attempt??1,
       estimatedUsd:s.existing?0:E01_ESTIMATE_USD,...publicRecord(record)};
   });
   return {ok:true,filmId:E01_FILM_ID,sceneId:'E01',packets,
@@ -145,7 +185,7 @@ export async function POST(request:Request,ctx:Context){
     promptSha256?:string;approvedUsd?:number;pricingConfirmed?:boolean};
   try{body=await request.json() as typeof body;}catch{return blank(400,'JSON inválido.');}
   if(!body||typeof body!=='object')return blank(400,'Solicitud inválida.');
-  if(!['preflight','submit','resume','inspect'].includes(body.action||''))return blank(400,'Acción no válida.');
+  if(!['preflight','submit','resume','inspect','submit-retry'].includes(body.action||''))return blank(400,'Acción no válida.');
   if(body.action!=='preflight'&&!authorized(request))return blank(403,'Token administrativo inválido.');
   const shot=e01ShotById(body.shotId||'');
   if(!shot||shot.existing)return blank(403,'Solo P03–P07; P01 y P02 nunca se regeneran.');
@@ -223,32 +263,48 @@ export async function POST(request:Request,ctx:Context){
         await storeLedger(existing);
         return NextResponse.json({ok:true,status:'review-required',videoReady:true,providerCalls:0});
       }
-      // Paid action can ONLY happen after separate shot-level final click.
-      if(existing)throw Error('Operación previamente registrada. Usa Recuperar, nunca Generar.');
+      // Both first submissions and explicitly authorised second attempts
+      // reserve an immutable record BEFORE reaching the provider.
+      const retry=body.action==='submit-retry';
+      if(existing&&!retry)throw Error('Operación previamente registrada. Usa Recuperar, nunca Generar.');
+      if(retry){
+        const first=await readAttempt(shot.id,1);
+        const second=await readAttempt(shot.id,2);
+        if(second||!first?.providerOperationName||first.status!=='failed-unknown')
+          throw Error('No hay intento 2 disponible o ya quedó reservado.');
+        if(shot.id==='E01-P03'){
+          if(first.diagnosis?.classification!=='provider-error'||first.diagnosis.providerCode!=='14')
+            throw Error('P03 sin error terminal de capacidad verificado.');
+        }else if(shot.id==='E01-P05'){
+          if(first.diagnosis?.classification!=='rai-filtered')
+            throw Error('P05 sin rechazo de audio verificado.');
+        }else throw Error('Esta toma no tiene permiso para un segundo intento.');
+      }
       // An existing record for this same shot was blocked above.
       // Previously failed OTHER shots are not a reason to block this
       // virgin shot. Existing spending commitments stay counted.
       if(!enabled())throw Error('Proveedor deshabilitado o tarifa/caps no validados en configuración.');
       if(!process.env.GEMINI_API_KEY||!process.env.V7_CINEMA_ADMIN_TOKEN)throw Error('Faltan credenciales locales.');
       if(body.confirm!==true||body.pricingConfirmed!==true||
-        body.approvedUsd!==E01_ESTIMATE_USD||body.promptSha256!==digest(shot.promptEnglish)){
+        body.approvedUsd!==E01_ESTIMATE_USD||body.promptSha256!==digest(retry?retryPrompt(shot.id,shot.promptEnglish):shot.promptEnglish)){
         throw Error('Falta confirmación explícita del costo, tarifa y prompt de esta toma.');
       }
       if(await exposure()+E01_ESTIMATE_USD>RESERVED_TOTAL_LIMIT_USD)
         throw Error('Se agotó el máximo reservado para tomas nuevas de E01.');
       const timestamp=new Date().toISOString();
       const record:Ledger={filmId:E01_FILM_ID,shotId:shot.id,model:E01_PROVIDER_MODEL,
+        ...(retry?{attempt:2 as const}:{}),
         status:'reserved',providerSeconds:8,estimatedUsd:E01_ESTIMATE_USD,
         maximumApprovedUsd:E01_ESTIMATE_USD,promptSha256:digest(shot.promptEnglish),
         createdAt:timestamp,updatedAt:timestamp};
-      const name=recordPath(shot.id);
+      const name=recordPath(shot.id,retry?2:1);
       await mkdir(path.dirname(name),{recursive:true});
       await writeFile(name,JSON.stringify(record,null,2)+'\n',{flag:'wx',mode:0o600});
       // A timeout here might have charged. Never automatically submit a second time.
       try{
         const sdk=client();
         const operation=await sdk.models.generateVideos({model:E01_PROVIDER_MODEL,
-          source:{prompt:shot.promptEnglish},
+          source:{prompt:retry?retryPrompt(shot.id,shot.promptEnglish):shot.promptEnglish},
           config:{aspectRatio:'16:9',numberOfVideos:1,durationSeconds:8,
             resolution:'720p',personGeneration:'allow_all'}});
         if(!operation.name)throw Error('Proveedor no devolvió ID: operación incierta.');
