@@ -4,7 +4,7 @@ $ErrorActionPreference = 'Stop'
 $work = 'C:\Users\martin\Desktop\VSC\BestS\viral-cine-v7-cinema-core'
 $integration = 'C:\Users\martin\Desktop\VSC\BestS\viral-cine-v7-integration'
 $legacy = 'C:\Users\martin\Desktop\VSC\BestS\viral-cine-ai'
-$branch = 'fix/v7-dos-toques-p01-sdk-resume'
+$branch = 'feat/v7-dos-toques-p01-artistic-approval'
 $filmId = 'film-dos-toques-de-bocina-v7'
 
 Write-Host ''
@@ -75,7 +75,7 @@ $env:V7_CINEMA_ADMIN_TOKEN = ([guid]::NewGuid().ToString('N') + [guid]::NewGuid(
 Write-Host '[3/4] Permiso de UNA toma, sin activar otras operaciones.' -ForegroundColor Green
 Write-Host 'PRESUPUESTO_MAXIMO=USD 2.00; UNA SOLICITUD; CERO REINTENTOS'
 Write-Host 'ESTIMACION_DE_VIDEO=USD 0.80'
-Write-Host 'RECUPERAR_OPERACION_EXISTENTE_SIN_GENERAR_NUEVAMENTE'
+Write-Host 'APROBAR_TOMA_EXISTENTE_SIN_NUEVA_GENERACION'
 Write-Host ''
 Write-Host 'TOKEN ADMINISTRATIVO PARA EL PANEL (NO LO COMPARTAS):' -ForegroundColor Yellow
 Write-Host $env:V7_CINEMA_ADMIN_TOKEN -ForegroundColor Magenta
@@ -87,7 +87,7 @@ Write-Host 'Generacion Veo: TEXTO-A-VIDEO para incluir a Gabriel, Daniel y Lucia
 Write-Host 'El fotograma familiar 16:9 es OPCIONAL, solo referencia editorial; no se envia a Google.'
 Write-Host 'Comprueba el prompt con los tres personajes y sus cascos antes de confirmar.'
 Write-Host 'No reutilices ni importes como obligatoria la antigua imagen solo de Gabriel.'
-Write-Host 'IMPORTANTE: YA EXISTE UNA OPERACION E01-P01. USA SOLO RECUPERAR LA MISMA OPERACION.' -ForegroundColor Yellow
+Write-Host 'IMPORTANTE: LA TOMA E01-P01 YA ESTA DESCARGADA. USA EL BOTON APROBAR E01-P01.' -ForegroundColor Green
 Write-Host 'PROHIBIDO iniciar una generacion adicional o borrar el provider-operation.json.' -ForegroundColor Yellow
-Write-Host 'Una vez enviada, utiliza Recuperar operacion. No reintentes.'
+Write-Host 'La aprobacion artistica NO llama a Google ni modifica el MP4 original.'
 npm run dev -- -p 3010
