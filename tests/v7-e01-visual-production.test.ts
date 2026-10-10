@@ -1,0 +1,44 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {E01_SHOTS,e01EditDuration,E01_ESTIMATE_USD,e01ShotById} from '../lib/v7/production/dos-toques-e01-shot-packets';
+test('E01 contains seven complete shot packets, two preserved assets and exactly 50 edit seconds',()=>{
+  assert.equal(E01_SHOTS.length,7);
+  assert.equal(e01EditDuration(),50);
+  assert.deepEqual(E01_SHOTS.map(s=>s.id),['E01-P01','E01-P02','E01-P03','E01-P04','E01-P05','E01-P06','E01-P07']);
+  assert.equal(E01_SHOTS.filter(s=>s.existing).length,2);
+  assert.equal(E01_SHOTS.filter(s=>!s.existing).length,5);
+  assert.equal(E01_ESTIMATE_USD,0.8);
+  assert.ok(E01_SHOTS.every(s=>s.continuity.length>0&&s.action.length>10));
+  assert.ok(E01_SHOTS.slice(2).every(s=>s.promptEnglish.includes('8-second take')&&s.promptEnglish.includes('no subtitles')));
+  assert.equal(E01_SHOTS.find(s=>s.id==='E01-P03')?.voiceCharacter,'LUCIA-ESDO-V1');
+  assert.equal(E01_SHOTS.find(s=>s.id==='E01-P04')?.voiceCharacter,'GABRIEL-ESDO-V1');
+  assert.equal(E01_SHOTS.find(s=>s.id==='E01-P05')?.voiceCharacter,'DANIEL-ESDO-V1');
+  assert.equal(e01ShotById('unknown'),undefined);
+});
+test('backend never submits existing P01 or P02, requires explicit independent price consent and blocks automatic retries',async()=>{
+  const s=await readFile(new URL('../app/api/v7/films/[filmId]/scene01-production/route.ts',import.meta.url),'utf8');
+  assert.match(s,/if\(!shot\|\|shot.existing\)/);
+  assert.match(s,/body.confirm!==true/);
+  assert.match(s,/body.pricingConfirmed!==true/);
+  assert.match(s,/body.promptSha256!==digest/);
+  assert.match(s,/V7_SCENE01_PAID_ENABLED/);
+  assert.match(s,/RESERVED_TOTAL_LIMIT_USD=4.00/);
+  assert.match(s,/await writeFile\(name,JSON.stringify\(record,null,2\)/);
+  assert.match(s,/flag:'wx'/);
+  assert.match(s,/saved.name=existing.providerOperationName/);
+  assert.match(s,/getVideosOperation/);
+  assert.match(s,/generateVideos/);
+  assert.match(s,/status:'failed-unknown'/);
+});
+test('visual panel includes all seven packets, preflight, resume, cost consent and existing approval board',async()=>{
+  const s=await readFile(new URL('../components/V7DosToquesE01VisualConsole.tsx',import.meta.url),'utf8');
+  const main=await readFile(new URL('../components/V7DosToquesScene01Panel.tsx',import.meta.url),'utf8');
+  assert.match(s,/production\?\.packets.map/);
+  assert.match(s,/Generar toma · US\$0.80/);
+  assert.match(s,/Preparar toma · Gratis/);
+  assert.match(s,/Recuperar mismo render/);
+  assert.match(s,/Confirmar una generación/);
+  assert.match(s,/scene-production/);
+  assert.match(main,/V7DosToquesE01VisualConsole/);
+});

@@ -8,6 +8,7 @@ import type { FilmV7 } from '@/lib/v7/domain/film';
 import { v7FilmRoot } from '@/lib/v7/storage/film-store';
 import { readSceneApprovalBoard } from './scene-approval-board';
 import { runFreeRepairLoop } from '@/lib/v7/orchestration/scene-family-engine';
+import {E01_FILM_ID,E01_SHOTS} from '@/lib/v7/production/dos-toques-e01-shot-packets';
 
 const run=promisify(execFile);
 async function hashFile(file:string){
@@ -63,7 +64,9 @@ export async function assembleApprovedSceneLocally(film:FilmV7,sceneId:string) {
         throw new Error('La toma '+shot.label+' cambió desde su aprobación. Montaje detenido.');
       const meta=await mediaInfo(src);
       const shotDef=definition.shots.find(s=>s.id===shot.id)!;
-      const wanted=Math.min(shotDef.durationSeconds,meta.duration);
+      const canonicalEditSeconds = film.id===E01_FILM_ID && entry.label==='E01'
+        ? E01_SHOTS[i]?.editSeconds : undefined;
+      const wanted=Math.min(canonicalEditSeconds ?? shotDef.durationSeconds,meta.duration);
       if(wanted<0.5)throw new Error('Duración de montaje inválida.');
       const output=path.join(stage,'block-'+String(i+1).padStart(3,'0')+'.mp4');
       const args=['-nostdin','-v','error','-y','-i',src];

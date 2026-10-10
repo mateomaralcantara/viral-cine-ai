@@ -211,7 +211,7 @@ export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
         <TabButton active={tab === 'production'} onClick={() => setTab('production')} icon={<Clapperboard className="h-4 w-4" />}>Producción</TabButton>
         <TabButton active={tab === 'feature'} onClick={() => setTab('feature')} icon={<Layers3 className="h-4 w-4" />}>Nivel 2 · Largometrajes</TabButton>
         {hasDosToquesProject && (
-          <TabButton active={tab === 'scene01'} onClick={() => setTab('scene01')} icon={<Clapperboard className="h-4 w-4" />}>Prueba E01 · 50 s</TabButton>
+          <TabButton active={tab === 'scene01'} onClick={() => setTab('scene01')} icon={<Clapperboard className="h-4 w-4" />}>ESCENA 01 · 7 TOMAS</TabButton>
         )}
         {hasDosToquesProject && (
           <TabButton active={tab === 'casting'} onClick={() => setTab('casting')} icon={<ShieldCheck className="h-4 w-4" />}>Casting visual</TabButton>
