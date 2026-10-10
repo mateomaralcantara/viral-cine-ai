@@ -65,6 +65,30 @@ export default function V7DosToquesE01VisualConsole({filmId}:{filmId:string}){
   }catch(e){notice(id,e instanceof Error?e.message:String(e));}
   finally{setBusy('');}
  }
+ const activeOperations=(production?.packets??[])
+  .filter(p=>p.providerOperationKnown&&['submitted','processing'].includes(p.recordStatus))
+  .map(p=>p.id).join(',');
+ // Recover the existing Google operation only: no models.generateVideos here.
+ // Stable primitive deps ensure 12-second GET refreshes do not reset the timer.
+ useEffect(()=>{
+  if(!activeOperations||!token||busy)return;
+  let running=false;
+  const timer=setInterval(()=>{
+   if(running)return;
+   running=true;
+   void (async()=>{
+    for(const id of activeOperations.split(',')){
+     const response=await fetch(url,{method:'POST',headers:{
+      'Content-Type':'application/json',Authorization:'Bearer '+token
+     },body:JSON.stringify({action:'resume',shotId:id})});
+     if(!response.ok)break;
+    }
+    await refresh();
+   })().catch(e=>setBatchMessage('Recuperación pendiente: '+
+     (e instanceof Error?e.message:String(e)))).finally(()=>{running=false;});
+  },45000);
+  return()=>clearInterval(timer);
+ },[activeOperations,token,busy,url,refresh]);
  const pendingCleanShots=(production?.packets??[])
   .filter(p=>!p.existing&&(!p.hasSubmittedOrReserved||p.retryAvailable))
   .sort((a,b)=>{
@@ -94,7 +118,7 @@ export default function V7DosToquesE01VisualConsole({filmId}:{filmId:string}){
       '. Recuperar siempre por ID de la misma operación.');
     await refresh();
    }
-   setBatchMessage('Solicitudes registradas. Recupera las operaciones cuando estén listas.');
+   setBatchMessage('Solicitudes registradas. Recuperación automática de la misma operación cada 45 s, sin nuevos renders.');
   }catch(e){
    setBatchMessage('Proceso detenido después de '+sent+' envío(s): '+
      (e instanceof Error?e.message:String(e))+
