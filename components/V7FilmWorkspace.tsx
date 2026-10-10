@@ -7,6 +7,7 @@ import V7ClosedCutPlayer from '@/components/V7ClosedCutPlayer';
 import V7DosToquesMusicPanel from '@/components/V7DosToquesMusicPanel';
 import V7DosToquesCastingPanel from '@/components/V7DosToquesCastingPanel';
 import V7DosToquesScene01Panel from '@/components/V7DosToquesScene01Panel';
+import V7RunwayScene02Panel from '@/components/V7RunwayScene02Panel';
 import V7SceneProductionBoard from '@/components/V7SceneProductionBoard';
 import {
   ArrowLeft,
@@ -102,7 +103,7 @@ type Bundle = {
   voiceProfiles: unknown[];
 };
 
-type Tab = 'overview' | 'scenes' | 'takes' | 'production' | 'feature' | 'music' | 'casting' | 'scene01' | 'master';
+type Tab = 'overview' | 'scenes' | 'takes' | 'production' | 'feature' | 'music' | 'casting' | 'scene01' | 'scene02' | 'master';
 
 export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
   const [bundle, setBundle] = useState<Bundle | null>(null);
@@ -112,7 +113,7 @@ export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
 
   useEffect(() => {
     const requested = new URLSearchParams(window.location.search).get('tab');
-    if (requested === 'scenes' || requested === 'takes' || requested === 'production' || requested === 'feature' || requested === 'music' || requested === 'casting' || requested === 'scene01' || requested === 'master' || requested === 'overview') {
+    if (requested === 'scenes' || requested === 'takes' || requested === 'production' || requested === 'feature' || requested === 'music' || requested === 'casting' || requested === 'scene01' || requested === 'scene02' || requested === 'master' || requested === 'overview') {
       setTab(requested);
     }
   }, []);
@@ -214,6 +215,9 @@ export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
           <TabButton active={tab === 'scene01'} onClick={() => setTab('scene01')} icon={<Clapperboard className="h-4 w-4" />}>ESCENA 01 · 7 TOMAS</TabButton>
         )}
         {hasDosToquesProject && (
+          <TabButton active={tab === 'scene02'} onClick={() => setTab('scene02')} icon={<Clapperboard className="h-4 w-4" />}>ESCENA 02 · 7 TOMAS</TabButton>
+        )}
+        {hasDosToquesProject && (
           <TabButton active={tab === 'casting'} onClick={() => setTab('casting')} icon={<ShieldCheck className="h-4 w-4" />}>Casting visual</TabButton>
         )}
         {hasDosToquesProject && (
@@ -288,6 +292,7 @@ export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
       {tab === 'casting' && hasDosToquesProject && <V7DosToquesCastingPanel filmId={filmId} />}
 
       {tab === 'scene01' && hasDosToquesProject && <V7DosToquesScene01Panel filmId={filmId} />}
+      {tab === 'scene02' && hasDosToquesProject && <V7RunwayScene02Panel filmId={filmId} />}
 
       {tab === 'master' && <V7ClosedCutPlayer filmId={filmId} />}
 
