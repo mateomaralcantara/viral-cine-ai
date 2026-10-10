@@ -295,7 +295,7 @@ export async function POST(request:Request,ctx:Context){
       const record:Ledger={filmId:E01_FILM_ID,shotId:shot.id,model:E01_PROVIDER_MODEL,
         ...(retry?{attempt:2 as const}:{}),
         status:'reserved',providerSeconds:8,estimatedUsd:E01_ESTIMATE_USD,
-        maximumApprovedUsd:E01_ESTIMATE_USD,promptSha256:digest(shot.promptEnglish),
+        maximumApprovedUsd:E01_ESTIMATE_USD,promptSha256:digest(retry?retryPrompt(shot.id,shot.promptEnglish):shot.promptEnglish),
         createdAt:timestamp,updatedAt:timestamp};
       const name=recordPath(shot.id,retry?2:1);
       await mkdir(path.dirname(name),{recursive:true});
