@@ -12,7 +12,7 @@ type Packet={
 };
 type Production={ok:boolean;packets:Packet[];providerEnabled:boolean;priceConfigurationVerified:boolean;
  adminTokenConfigured:boolean;credentialConfigured:boolean;perShotCapUsd:number;totalCapUsd:number;
- committedUsd:number;priceDisclaimer:string;automaticProviderRetries:number;haltedForReconciliation:boolean};
+ committedUsd:number;priceDisclaimer:string;automaticProviderRetries:number;failedShotIds:string[]};
 type ApprovalBoard={ok:boolean;scenes:Array<{label:string;shots:Array<{label:string;approved:boolean;hasVideo:boolean}>}>};
 const routeFor=(filmId:string)=>'/api/v7/films/'+encodeURIComponent(filmId);
 export default function V7DosToquesE01VisualConsole({filmId}:{filmId:string}){
@@ -20,6 +20,8 @@ export default function V7DosToquesE01VisualConsole({filmId}:{filmId:string}){
  const [approvals,setApprovals]=useState<ApprovalBoard|null>(null);
  const [token,setToken]=useState('');
  const [accepted,setAccepted]=useState<Record<string,boolean>>({});
+ const [batchApproved,setBatchApproved]=useState(false);
+ const [batchMessage,setBatchMessage]=useState('');
  const [busy,setBusy]=useState('');
  const [messages,setMessages]=useState<Record<string,string>>({});
  const [error,setError]=useState('');
@@ -63,6 +65,39 @@ export default function V7DosToquesE01VisualConsole({filmId}:{filmId:string}){
   }catch(e){notice(id,e instanceof Error?e.message:String(e));}
   finally{setBusy('');}
  }
+ const pendingCleanShots=(production?.packets??[]).filter(p=>
+  ['E01-P04','E01-P06','E01-P07'].includes(p.id)&&!p.hasSubmittedOrReserved);
+ const batchQuote=Number(pendingCleanShots.reduce((total,p)=>total+p.estimatedUsd,0).toFixed(2));
+ async function beginBatch(){
+  if(!production?.providerEnabled||!token||!batchApproved||!pendingCleanShots.length||busy)return;
+  if(production.committedUsd+batchQuote>production.totalCapUsd+0.001){
+   setBatchMessage('Límite de presupuesto superado. No se enviará nada.');return;
+  }
+  setBusy('batch');setBatchApproved(false);
+  setBatchMessage('Iniciando '+pendingCleanShots.length+' tomas nuevas, una solicitud por toma…');
+  let sent=0;
+  try{
+   for(const shot of pendingCleanShots){
+    const res=await fetch(url,{method:'POST',headers:{
+      'Content-Type':'application/json',Authorization:'Bearer '+token
+    },body:JSON.stringify({action:'submit',shotId:shot.id,
+      confirm:true,pricingConfirmed:true,promptSha256:shot.promptSha256,
+      approvedUsd:shot.estimatedUsd})});
+    const body=await res.json() as {ok?:boolean;error?:string;status?:string};
+    if(!res.ok||!body.ok)throw Error(shot.id+': '+(body.error??'Google no aceptó la solicitud'));
+    sent++;
+    setBatchMessage('Enviadas '+sent+' de '+pendingCleanShots.length+
+      '. Recuperar siempre por ID de la misma operación.');
+    await refresh();
+   }
+   setBatchMessage('Solicitudes registradas. Recupera las operaciones cuando estén listas.');
+  }catch(e){
+   setBatchMessage('Proceso detenido después de '+sent+' envío(s): '+
+     (e instanceof Error?e.message:String(e))+
+     '. No se repetirán las solicitudes registradas.');
+   await refresh().catch(()=>undefined);
+  }finally{setBusy('');}
+ }
  const firstScene=approvals?.scenes.find(s=>s.label==='E01');
  return <section className="panel mt-6 rounded-3xl p-5 md:p-8">
   <header className="flex flex-wrap items-start justify-between gap-4">
@@ -95,11 +130,9 @@ export default function V7DosToquesE01VisualConsole({filmId}:{filmId:string}){
     No hay reintentos pagados automáticos ni gastos al consultar o preparar.
     Las voces se añadirán en producción sonora posterior.
    </p>
-   <p className="mt-2 text-xs text-amber-200">{production?.haltedForReconciliation?
-    'ALTO: P03/P05 u otra toma sin video. Nuevas generaciones bloqueadas hasta conciliar operaciones y facturación.':
-    production?.providerEnabled?
-    'Proveedor habilitado: cada envío requiere confirmación económica separada.':
-    'Generación pagada bloqueada por configuración. Puedes preparar y revisar las tomas sin costo.'}</p>
+   <p className="mt-2 text-xs text-amber-200">{production?.providerEnabled?
+    'Producción habilitada para tomas NUEVAS. P03 y P05 conservan sus fallos originales: no se reenvían.':
+    'El proveedor está desactivado o falta su clave. No habrá gastos hasta habilitarlo.'}</p>
    <p className="mt-1 text-xs text-amber-200">{production?.priceDisclaimer}</p>
    <input type="password" autoComplete="off" aria-label="Token administrativo de Escena 01"
     className="mt-3 w-full rounded-lg border border-white/20 bg-slate-950 p-3 text-sm"
@@ -107,6 +140,39 @@ export default function V7DosToquesE01VisualConsole({filmId}:{filmId:string}){
     placeholder="Token administrativo · solo permanece en esta sesión"/>
   </div>
   {error&&<p className="mt-3 text-sm text-red-300" role="alert">{error}</p>}
+  <div className="mt-5 rounded-xl border border-emerald-400/20 p-4">
+   <h3 className="font-bold text-emerald-200">Producir los bloques nuevos de E01</h3>
+   <p className="mt-1 text-sm text-slate-300">
+    Una sola autorización para {pendingCleanShots.length} tomas sin operación previa
+    ({pendingCleanShots.map(s=>s.id).join(', ')||'ninguna pendiente'}).
+    P01/P02 aprobadas y P03/P05 fallidas NO se reenvían.
+   </p>
+   <p className="mt-2 text-sm font-semibold">Nuevo máximo de esta acción: US$ {batchQuote.toFixed(2)}.
+    Comprometido anteriormente: US$ {(production?.committedUsd??0).toFixed(2)}.
+    Tope de esta etapa: US$ {(production?.totalCapUsd??4).toFixed(2)}.</p>
+   <p className="mt-1 text-xs text-slate-400">
+    El compromiso no equivale a facturación confirmada. Cada envío crea su reserva antes de contactar a Google.
+    Un fallo detiene la secuencia y no reintenta automáticamente.
+   </p>
+   <label className="mt-3 flex items-center gap-2 text-sm">
+    <input type="checkbox" checked={batchApproved} disabled={!!busy||!pendingCleanShots.length}
+     onChange={e=>setBatchApproved(e.target.checked)}/>
+    Autorizo expresamente hasta US$ {batchQuote.toFixed(2)} para estas tomas nuevas
+   </label>
+   <button className="button-primary mt-3" type="button"
+    disabled={!batchApproved||!token||!production?.providerEnabled||
+      !pendingCleanShots.length||!!busy||
+      (production?production.committedUsd+batchQuote>production.totalCapUsd+0.001:true)}
+    onClick={()=>void beginBatch()}>
+    {busy==='batch'?'Produciendo bloques…':'Producir tomas nuevas de E01'}
+   </button>
+   {production?.failedShotIds?.length?(
+    <p className="mt-2 text-xs text-amber-200">
+      Faltarán {production.failedShotIds.join(', ')}: estas operaciones terminaron sin video
+      y requieren nuevas solicitudes independientes para completar los 50 segundos.
+    </p>):null}
+   {batchMessage&&<p className="mt-3 text-sm text-slate-200" role="status">{batchMessage}</p>}
+  </div>
   <div className="mt-5 grid gap-4 lg:grid-cols-2">
    {production?.packets.map(p=>{
     const snapshot=firstScene?.shots.find(s=>s.label===p.id);
