@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import type { FilmV7 } from '@/lib/v7/domain/film';
 import { v7FilmRoot } from '@/lib/v7/storage/film-store';
 import { readSceneApprovalBoard } from './scene-approval-board';
+import { runFreeRepairLoop } from '@/lib/v7/orchestration/scene-family-engine';
 
 const run=promisify(execFile);
 async function hashFile(file:string){
@@ -72,9 +73,23 @@ export async function assembleApprovedSceneLocally(film:FilmV7,sceneId:string) {
         '-af','aresample=async=1,apad','-t',wanted.toFixed(3),
         '-c:v','libx264','-preset','veryfast','-crf','22',
         '-c:a','aac','-ar','48000','-ac','2','-movflags','+faststart',output);
-      await run('ffmpeg',args,{maxBuffer:2*1024*1024,timeout:180000});
-      const result=await stat(output);
-      if(result.size<10000)throw new Error('Bloque de montaje demasiado pequeño.');
+      const checks=await runFreeRepairLoop({
+        maxFreeAttempts:2,
+        inspect:async()=>{
+          try{
+            const info=await mediaInfo(output);
+            const size=(await stat(output)).size;
+            return {passed:size>10000&&info.duration>=wanted-0.25,
+              failure:'local-transient' as const};
+          }catch{return {passed:false,failure:'local-transient' as const};}
+        },
+        repair:async()=>{
+          await rm(output,{force:true});
+          try{await run('ffmpeg',args,{maxBuffer:2*1024*1024,timeout:180000});}
+          catch{/* local retry is allowed, verification decides success */ }
+        }
+      });
+      if(checks.status!=='passed')throw new Error('Autocorrección local agotada: '+shot.label);
       names.push(output);
     }
     const list=path.join(stage,'concat.txt');
