@@ -18,7 +18,7 @@ const safeMissing = async (name: string) => {
 export type BoardShot = { id:string; label:string; title:string; approved:boolean; readyForApproval:boolean;
   hasVideo:boolean; reason:string; videoSeconds?:number };
 export type BoardScene = { id:string; label:string; title:string; approved:boolean;
-  readyForApproval:boolean; assembled:boolean; reason:string; shots:BoardShot[] };
+  readyForApproval:boolean; readyForAssembly:boolean; assembled:boolean; reason:string; shots:BoardShot[] };
 type SceneLocation = { scene: FilmV7['acts'][number]['sequences'][number]['scenes'][number];
   label:string; shots: Array<{ shot: FilmV7['acts'][number]['sequences'][number]['scenes'][number]['shots'][number]; label:string }> };
 
@@ -77,9 +77,10 @@ export async function readSceneApprovalBoard(film:FilmV7) {
     const approved=assembled&&Boolean(approval&&approval.filmId===film.id&&
       approval.sceneId===location.scene.id&&approval.status==='artistic-approved'&&
       /^[a-f0-9]{64}$/.test(approval.sourceVideoSha256??''));
+    const readyForAssembly=!assembled&&shots.length>0&&shots.every(s=>s.approved);
     const readyForApproval=!approved&&shots.length>0&&shots.every(s=>s.approved)&&assembled;
     return {id:location.scene.id,label:location.label,title:location.scene.title,approved,
-      readyForApproval,assembled,shots,reason:approved?'Escena aprobada':readyForApproval?'Corte listo para revisión':
+      readyForApproval,readyForAssembly,assembled,shots,reason:approved?'Escena aprobada':readyForApproval?'Corte listo para revisión':
         !shots.every(s=>s.approved)?'Esperando aprobación de todas las tomas':'Falta montaje MP4 de escena'} satisfies BoardScene;
   }));
   return {filmId:film.id,scenes,sceneCount:scenes.length,
