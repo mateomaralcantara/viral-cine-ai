@@ -106,7 +106,7 @@ export default function V7SceneProductionBoard({filmId}:{filmId:string}){
             <p className="mt-3 text-xs text-slate-400">{scene.reason}</p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <button type="button" className="button-secondary"
-                disabled={!scene.readyForAssembly||!token||!!working}
+                disabled={!scene.readyForAssembly||!!working}
                 onClick={()=>void assemble(scene.id)}>
                 {scene.assembled?'Montaje listo':working===scene.id?'Montando…':'Montar escena completa · Sin costo'}
               </button>
@@ -115,7 +115,7 @@ export default function V7SceneProductionBoard({filmId}:{filmId:string}){
                 target="_blank" rel="noreferrer">Revisar escena MP4</a>}
             </div>
             <button type="button" className="button-primary mt-3"
-              disabled={!scene.readyForApproval||!token||!!working}
+              disabled={!scene.readyForApproval||!!working}
               onClick={()=>void approve('scene',scene.id)}>
               {scene.approved?'Escena aprobada':working===scene.id?'Guardando…':'Aprobar escena completa'}
             </button>
@@ -134,7 +134,7 @@ export default function V7SceneProductionBoard({filmId}:{filmId:string}){
                       <a className="button-secondary text-sm" target="_blank" rel="noreferrer"
                         href={endpoint+'/video?shotId='+encodeURIComponent(shot.id)}>Ver MP4</a>}
                     <button type="button" className="button-primary"
-                      disabled={!shot.readyForApproval||!token||!!working}
+                      disabled={!shot.readyForApproval||!!working}
                       onClick={()=>void approve('shot',shot.id)}>
                       {shot.approved?'Aprobada':working===shot.id?'Guardando…':'Aprobar toma'}
                     </button>
