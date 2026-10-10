@@ -115,3 +115,32 @@ export function chooseSelfHealingAction(input: {
   return { action: input.failure === 'local-deterministic' ? 'repair-free' : 'recheck-free',
     reason: 'Corrección o nueva verificación local sin servicios pagados.', consumesSpendUsd: 0 };
 }
+
+/**
+ * The repair family actually loops: inspect -> diagnose -> repair -> verify.
+ * Only callers explicitly marked free/local may provide these callbacks. The
+ * supervisor never handles provider clients or money. When exhausted it halts.
+ */
+export async function runFreeRepairLoop(input: {
+  inspect: () => Promise<{ passed:boolean; failure?:RepairFailure; details?:string }>;
+  repair: (failure:RepairFailure, attempt:number) => Promise<void>;
+  maxFreeAttempts?:number;
+  hasProviderOperationId?:boolean;
+}):Promise<{status:'passed'|'blocked';attempts:number;history:string[];action?:RepairAction}>{
+  const history:string[]=[];
+  const maximum=input.maxFreeAttempts??3;
+  if(!Number.isInteger(maximum)||maximum<0||maximum>10)throw new Error('Máximo de correcciones inválido.');
+  for(let attempt=0;attempt<=maximum;attempt++){
+    const result=await input.inspect();
+    history.push('QA '+(attempt+1)+': '+(result.passed?'PASS':result.failure??'unclassified'));
+    if(result.passed)return {status:'passed',attempts:attempt,history};
+    const action=chooseSelfHealingAction({failure:result.failure??'quality-critical',
+      freeAttempts:attempt,maxFreeAttempts:maximum,hasProviderOperationId:input.hasProviderOperationId});
+    history.push(action.action+': '+action.reason);
+    if(action.action==='hold-human'||action.action==='resume-existing-operation'){
+      return {status:'blocked',attempts:attempt,history,action:action.action};
+    }
+    await input.repair(result.failure??'quality-critical',attempt+1);
+  }
+  return {status:'blocked',attempts:maximum,history,action:'hold-human'};
+}
