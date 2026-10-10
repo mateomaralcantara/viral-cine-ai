@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { readV7FilmBundle } from '@/lib/v7/storage/film-store';
 import { approveBoardTarget, readSceneApprovalBoard } from '@/lib/v7/production/scene-approval-board';
 import { planCompleteFilmScenes, SCENE_AGENT_FAMILIES } from '@/lib/v7/orchestration/scene-family-engine';
+import { assembleApprovedSceneLocally } from '@/lib/v7/production/scene-local-assembler';
 
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
@@ -47,6 +48,17 @@ export async function POST(request:Request,ctx:Context){
   catch{return responseError(400,'JSON inválido.');}
   if(!body||typeof body!=='object')return responseError(400,'Solicitud inválida.');
   const payload=body as Record<string,unknown>;
+  if(payload.action==='assemble-local'){
+    if(typeof payload.sceneId!=='string'||payload.sceneId.length>240)
+      return responseError(400,'ID de escena inválido.');
+    try{
+      const film=(await readV7FilmBundle((await ctx.params).filmId)).film;
+      const result=await assembleApprovedSceneLocally(film,payload.sceneId);
+      return NextResponse.json({ok:true,...result,externalApiCalls:0,additionalSpendUsd:0});
+    }catch{
+      return responseError(409,'Montaje local no completado. Revisar que todos los clips estén aprobados e íntegros.');
+    }
+  }
   if(payload.action!=='approve-artistic'||payload.confirmHuman!==true||
      !['shot','scene'].includes(String(payload.targetType))||
      typeof payload.targetId!=='string'||payload.targetId.length>240||
