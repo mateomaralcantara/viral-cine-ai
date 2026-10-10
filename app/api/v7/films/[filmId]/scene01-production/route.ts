@@ -22,7 +22,7 @@ type Ledger={
   providerOperationName?:string;candidateName?:string;error?:string;
   createdAt:string;updatedAt:string;
 };
-const root=()=>path.join(v7FilmRoot(E01_FILM_ID),'scene01-paid-shots');
+const root=()=>v7FilmRoot(E01_FILM_ID);
 const recordPath=(id:string)=>path.join(root(),id.toLowerCase(),'provider-operation.json');
 const outputPath=(id:string)=>path.join(v7FilmRoot(E01_FILM_ID),id.toLowerCase(),id+'-veo-candidato.mp4');
 function allowed(request:Request){
