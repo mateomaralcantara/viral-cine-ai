@@ -58,6 +58,7 @@ $env:ALLOW_EXTERNAL_API_CALLS = 'false'
 # Runway es el proveedor visual principal.
 # La variable por si sola NO gasta; cada lote exige checkbox y confirmacion del usuario.
 $env:V7_RUNWAY_E01_ENABLED = 'true'
+$env:V7_RUNWAY_E02_ENABLED = 'true'
 $env:V7_SCENE01_PAID_ENABLED = 'false'
 $env:V7_SCENE01_RATE_USD_PER_SECOND = '0.10'
 $env:V7_SCENE01_PER_SHOT_CAP_USD = '0.80'
@@ -72,6 +73,7 @@ Write-Host "Copiado al portapapeles. Para verlo despues, ejecuta:" -ForegroundCo
 Write-Host "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$tokenScript`" -Mode Show" -ForegroundColor Cyan
 Write-Host "No compartas este token ni lo incluyas en GitHub." -ForegroundColor Yellow
 Write-Host 'Runway Gen-4 Turbo: PROVEEDOR PRINCIPAL (10 s a 0.50 USD estimados).' -ForegroundColor Green
+Write-Host 'Escena 02: 7 tomas, 55 s de corte, presupuesto nuevo hasta USD 3.50.' -ForegroundColor Green
 Write-Host 'Cinco tomas nuevas: autorizacion maxima de USD 2.50, no automatica.' -ForegroundColor Yellow
 if (-not $env:RUNWAYML_API_SECRET) {
   Write-Host 'RUNWAYML_API_SECRET no encontrado. Generacion Runway deshabilitada hasta configurarlo.' -ForegroundColor Yellow
