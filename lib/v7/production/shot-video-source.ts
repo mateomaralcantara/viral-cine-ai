@@ -32,8 +32,15 @@ export async function resolveV7ShotVideo(filmId:string,label:string):Promise<{
    const operation=record?JSON.parse(record) as {
     status?:string;candidateName?:string;filmId?:string;shotId?:string
    }:null;
+   // Runway may have a recovered, validated MP4 while an earlier UI/ledger
+   // version did not populate candidateName. The canonical filename, a real
+   // >10 KB MP4, taskId, matching film/shot and review-required are sufficient
+   // for human review; never silently approve the shot.
+   const recordWithTask=operation as typeof operation & {taskId?:string};
+   const matchesCandidate=operation?.candidateName===path.basename(option.file)||
+     (option.provider==='runway'&&!operation?.candidateName&&Boolean(recordWithTask?.taskId));
    const completed=operation?.filmId===filmId&&operation.shotId===label&&
-    operation.status==='review-required'&&operation.candidateName===path.basename(option.file);
+    operation.status==='review-required'&&matchesCandidate;
    if(!alreadyApproved&&!completed)continue;
    return {file:option.file,filename:path.basename(option.file),provider:option.provider,
     recordFile:record?option.recordFile:null};
