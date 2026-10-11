@@ -1,4 +1,5 @@
 import {decideNextSceneStep,type DirectorShot} from './autonomous-director-policy';
+import {decideCreditOnlyAction,type AutoScene,type AutopilotPolicy} from './v8-credit-only-autopilot';
 
 export type FreeAutonomyJob = {
   id:string;job_key:string;film_id:string;scene_id:string;shot_id?:string|null;
@@ -18,6 +19,9 @@ export type ExistingProviderTask = {status:string;outputUri?:string|null};
 export type AutonomyDependencies = {
   verifyStoredAsset:(file:ReferencedObject)=>Promise<'present'|'missing'|'unauthorized'>;
   reconcileExistingTask:(provider:string,taskId:string)=>Promise<ExistingProviderTask>;
+  // Trusted service-role DB read. NEVER read monetary authorization from a
+  // job's JSON payload or from an unauthenticated browser.
+  getCreditOnlyPolicy?:(filmId:string)=>Promise<AutopilotPolicy|null>;
 };
 
 function safeObjects(value:unknown):ReferencedObject[] {
@@ -97,6 +101,43 @@ export async function executeFreeAutonomyJob(
    const shots=payload.shots;
    if(!Array.isArray(shots)||shots.length===0)
     return {state:'waiting-assets',result:{reason:'No hay tomas registradas en la nube.'}};
+   const trustedPolicy=deps.getCreditOnlyPolicy
+    ?await deps.getCreditOnlyPolicy(job.film_id):null;
+   if(trustedPolicy){
+    // Planning only. Real approval can only be written after trusted
+    // hash-bound QA attestations have been persisted by authorized workers.
+    const source=shots as Array<Record<string,unknown>>;
+    const scene:AutoScene={
+     shots:source.map(s=>({
+      id:String(s.id??''),referenceReady:s.referenceReady===true||s.imageReady===true,
+      videoReady:s.videoReady===true,
+      videoSha256:typeof s.videoSha256==='string'?s.videoSha256:undefined,
+      providerTaskId:typeof s.providerTaskId==='string'?s.providerTaskId:undefined,
+      status:String(s.status??'not-started'),
+      autoApproved:s.autoApproved===true||s.approved===true,
+      freeRepairsUsed:typeof s.freeRepairsUsed==='number'?s.freeRepairsUsed:0,
+      paidRendersUsed:typeof s.paidRendersUsed==='number'?s.paidRendersUsed:0,
+      // Job payload is NOT a trusted QA attestation source.
+      qa:undefined
+     })),
+     montageReady:payload.sceneAssembled===true,
+     montageSha256:typeof payload.montageSha256==='string'?payload.montageSha256:undefined,
+     approved:payload.sceneApproved===true,
+     qa:undefined
+    };
+    const next=decideCreditOnlyAction(scene,trustedPolicy);
+    if(next.kind==='request-credits')return {state:'waiting-approval',result:{
+     nextAction:next,onlyHumanApproval:'credits',moneySpentByWorker:false}};
+    if(next.kind==='hold-internal')return {state:'blocked-unknown',result:{
+     nextAction:next,operatorAction:'internal',humanApprovalRequested:false}};
+    if(next.kind==='reconcile-task')return {state:'completed',result:{
+     nextAction:next,paidCallExecuted:false}};
+    // The free worker never marks a scene approved or dispatches renders:
+    // explicit secure executors/QA workers consume these planned actions.
+    return {state:next.kind==='start-render'?'waiting-approval':'completed',
+     result:{nextAction:next,paidCallExecuted:false,
+      requiresDedicatedAgentExecutor:true,onlyHumanApproval:'credits'}};
+   }
    const plan=decideNextSceneStep({
     shots:shots as DirectorShot[],
     explicitBudgetUsd:0,authorizedBudgetUsd:0, // NEVER infer consent from a queue payload
