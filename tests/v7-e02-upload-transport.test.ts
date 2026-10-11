@@ -8,7 +8,8 @@ test('Local studio pairing supports status GET as required by the browser, not o
  assert.match(client,/fetch\('\/api\/v7\/local-studio-pair'/);
  assert.match(route,/export async function GET\(request:Request\)/);
  assert.match(route,/hasLocalSession\(request\)/);
- assert.match(route,/authenticated,requiresPairing/);
+ assert.match(route,/authenticated:true,requiresPairing:false/);
+ assert.match(route,/authenticated:false,requiresPairing:true/);
  assert.match(route,/V7_STUDIO_PAIR_EXPIRES/);
  assert.match(route,/localOriginAllowed/);
 });
