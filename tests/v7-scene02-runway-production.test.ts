@@ -75,7 +75,8 @@ test('E02 UI, API, launcher and FFmpeg assembly are wired without modifying E01'
   '../lib/v7/production/runway-e02-engine.ts'
  ].map(x=>readFile(new URL(x,import.meta.url),'utf8')));
  assert.match(files[0],/Producir bloques faltantes con Runway/);
- assert.match(files[0],/uploadSeed/);
+ assert.match(files[0],/selectedImage/);
+ assert.match(files[0],/selectedBatch/);
  assert.match(files[1],/tab === 'scene02'/);
  assert.match(files[2],/upload-seed/);
  assert.match(files[2],/runwayAdminAuthorized/);

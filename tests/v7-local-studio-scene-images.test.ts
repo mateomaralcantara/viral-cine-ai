@@ -33,7 +33,9 @@ test('E02 stores all 7 independent director stills and never starts a paid reque
    const p=await runwayPreflight(id);
    assert.equal(p.referenceShotId,id+'-IMAGE');
    assert.equal(p.freePreflight,true);
-   await assert.rejects(saveE02ShotImage(id,photo),/EEXIST|exist/i);
+   const again=await saveE02ShotImage(id,photo);
+   assert.equal(again.alreadySaved,true);
+   assert.equal(again.newGenerationRequests,0);
   }
   assert.equal(await e02SeedReady(),true);
   assert.equal(await runwayReservedUsd(),0);
@@ -51,8 +53,12 @@ test('Studio E02 UI upload buttons cannot be disabled by missing token and scrip
  ];
  const [ui,launch,api]=await Promise.all(paths.map(p=>
   readFile(new URL(p,import.meta.url),'utf8')));
- assert.match(ui,/uploadShotImage/);
- assert.match(ui,/Subir imagen · Gratis/);
+ assert.match(ui,/selectedImage/);
+ assert.match(ui,/selectedBatch/);
+ assert.match(ui,/Importar siete imágenes de Escena 02/);
+ assert.match(ui,/upload-shot-image/);
+ assert.match(ui,/selectedBatch/);
+ assert.match(ui,/Guardar imágenes no cuesta dinero/);
  assert.match(ui,/ensureLocalStudioSession/);
  assert.doesNotMatch(ui,/disabled=\{!seedImage\|\|!token/);
  assert.match(launch,/Read-Host "PRESIONA ENTER/);

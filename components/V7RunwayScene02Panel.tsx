@@ -14,14 +14,14 @@ const wait=(ms:number)=>new Promise<void>(resolve=>setTimeout(resolve,ms));
 export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
  const endpoint='/api/v7/films/'+encodeURIComponent(filmId)+'/runway-scene02';
  const [board,setBoard]=useState<Board|null>(null);
- const [shotImages,setShotImages]=useState<Record<string,File|null>>({});
+ const [uploadingShot,setUploadingShot]=useState<string|null>(null);
+ const [bulkUploading,setBulkUploading]=useState(false);
+ const [uploadMessages,setUploadMessages]=useState<Record<string,string>>({});
+ const [bulkMessage,setBulkMessage]=useState('');
  const [allowSpend,setAllowSpend]=useState(false);
  const [busy,setBusy]=useState(false);
  const [detail,setDetail]=useState('');
  const [error,setError]=useState('');
- const [seedImage,setSeedImage]=useState<File|null>(null);
- const [seedUploading,setSeedUploading]=useState(false);
- const [seedMessage,setSeedMessage]=useState('');
  const [pairNotice,setPairNotice]=useState('');
  const running=useRef(false);
  const cancel=useRef(false);
@@ -29,7 +29,7 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
   const response=await fetch(endpoint,{cache:'no-store'});
   const data=await response.json() as Board&{error?:string};
   if(!response.ok||!data.ok)throw Error(data.error||'Runway no está disponible.');
-  setBoard(data);setError('');
+  setBoard(data);
   return data;
  },[endpoint]);
  useEffect(()=>{
@@ -50,37 +50,74 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
   if(!response.ok||!body.ok)throw Error(shotId+': '+(body.error||'No se completó la solicitud.'));
   return body;
  }
- async function uploadSeed(){
-  if(!seedImage){setError('Selecciona una imagen inicial de la casa.');return;}
-  setSeedUploading(true);setError('');
-  try{
-   const form=new FormData();form.set('action','upload-seed');form.set('image',seedImage);
-   await ensureLocalStudioSession();
-   const response=await fetch(endpoint,{method:'POST',credentials:'same-origin',body:form});
-   const answer=await response.json() as {ok?:boolean;error?:string};
-   if(!response.ok||!answer.ok)throw Error(answer.error||'No se guardó la imagen.');
-   setSeedMessage('Imagen inicial guardada. Runway puede comenzar E02-P01.');
-   setSeedImage(null);await refresh();
-  }catch(e){setError(e instanceof Error?e.message:String(e));}
-  finally{setSeedUploading(false);}
+ const imageName=/E02[-_ ]?P0([1-7])/i;
+ async function saveImage(id:string,file:File){
+  if(!['image/jpeg','image/png','image/webp'].includes(file.type))
+   throw Error(id+': selecciona JPG, PNG o WebP.');
+  if(file.size<3000||file.size>4000000)
+   throw Error(id+': la imagen debe pesar entre 3 KB y 4 MB.');
+  await ensureLocalStudioSession();
+  const form=new FormData();
+  form.set('action','upload-shot-image');
+  form.set('shotId',id);
+  form.set('image',file);
+  const response=await fetch(endpoint,{method:'POST',
+   credentials:'same-origin',body:form,cache:'no-store'});
+  const result=await response.json() as {ok?:boolean;error?:string;alreadySaved?:boolean};
+  if(!response.ok||!result.ok)
+   throw Error(id+': '+(result.error||'Error al guardar la referencia.'));
+  setUploadMessages(old=>({...old,[id]:
+   result.alreadySaved?'Imagen ya guardada: no se duplicó.':'Imagen guardada correctamente en ViralCine.'}));
+  await refresh();
  }
- async function uploadShotImage(id:string){
-  const file=shotImages[id];
-  if(!file){setError('Selecciona una imagen JPG, PNG o WebP para '+id+'.');return;}
-  if(file.size<3000||file.size>4000000){
-   setError('La imagen de '+id+' debe pesar entre 3 KB y 4 MB.');return;
-  }
-  setError('');setSeedMessage('Guardando imagen de '+id+'…');
+ async function selectedImage(id:string,file:File|null){
+  if(!file)return;
+  setError('');
+  setUploadingShot(id);
+  setUploadMessages(old=>({...old,[id]:'Guardando '+file.name+'…'}));
   try{
-   await ensureLocalStudioSession();
-   const form=new FormData();
-   form.set('action','upload-shot-image');form.set('shotId',id);form.set('image',file);
-   const response=await fetch(endpoint,{method:'POST',credentials:'same-origin',body:form});
-   const payload=await response.json() as {ok?:boolean;error?:string};
-   if(!response.ok||!payload.ok)throw Error(payload.error||'No se pudo guardar la imagen.');
-   setSeedMessage(id+' · Imagen cinematográfica guardada sin costo.');
-   await refresh();
-  }catch(e){setError(e instanceof Error?e.message:String(e));}
+   await saveImage(id,file);
+  }catch(e){
+   const message=e instanceof Error?e.message:String(e);
+   setUploadMessages(old=>({...old,[id]:'Error: '+message}));
+   setError(message);
+  }finally{setUploadingShot(null);}
+ }
+ async function selectedBatch(files:FileList|null){
+  if(!files?.length)return;
+  setError('');setBulkMessage('');
+  const uploads=new Map<string,File>();
+  const unknown:string[]=[];
+  for(const file of Array.from(files)){
+   const match=file.name.match(imageName);
+   if(!match){unknown.push(file.name);continue;}
+   const id='E02-P0'+match[1];
+   if(uploads.has(id)){
+    setError('Hay dos imágenes para '+id+'. Selecciona una sola por toma.');
+    return;
+   }
+   uploads.set(id,file);
+  }
+  if(!uploads.size){
+   setError('Ningún nombre contiene E02-P01 … E02-P07. Extrae los JPG del ZIP y selecciónalos.');
+   return;
+  }
+  setBulkUploading(true);
+  let saved=0;const failures:string[]=[];
+  try{
+   for(const [id,file] of uploads){
+    setBulkMessage('Guardando imagen '+(saved+1)+' de '+uploads.size+' · '+id+'…');
+    try{await saveImage(id,file);saved++;}
+    catch(e){
+     const message=e instanceof Error?e.message:String(e);
+     failures.push(message);
+     setUploadMessages(old=>({...old,[id]:'Error: '+message}));
+    }
+   }
+   setBulkMessage(saved+' imagen(es) guardada(s) de '+uploads.size+'.'+
+    (unknown.length?' Se omitieron '+unknown.length+' archivos sin código E02-PXX.':''));
+   if(failures.length)setError('Algunas imágenes no se guardaron: '+failures.join(' | '));
+  }finally{setBulkUploading(false);await refresh().catch(()=>undefined);}
  }
  async function preflight(id:string){
   try{
@@ -175,22 +212,27 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
    No escribas ni pegues el token.
   </p>
   <div className="mt-4 rounded-xl border border-violet-400/25 p-4">
-    <strong className="text-sm">Imagen inicial de E02 · Mesa familiar y vivienda</strong>
-    <p className="mt-1 text-xs text-slate-300">Runway necesita una imagen inicial.
-     Sube JPG, PNG o WebP de la vivienda al atardecer (máximo 4 MB).
-     No modifica E01 ni genera cargos.</p>
-    <p className={'mt-2 text-xs font-semibold '+(board?.seedReady?'text-emerald-300':'text-amber-200')}>
-     {board?.seedReady?'Referencia lista':'Falta referencia inicial'}
+    <strong className="text-sm">Imágenes de la Escena 02 — importación automática</strong>
+    <p className="mt-1 text-xs text-slate-300">
+      Puedes seleccionar los siete JPG del ZIP extraído al mismo tiempo. Cada archivo
+      debe llamarse E02-P01, E02-P02 … E02-P07. También puedes seleccionar
+      las imágenes por separado, debajo de cada toma. Guardar imágenes no cuesta dinero.
     </p>
-    {!board?.seedReady&&<div className="mt-3 flex flex-wrap gap-3">
-     <input type="file" accept="image/jpeg,image/png,image/webp"
-      aria-label="Imagen inicial de la Escena 02"
-      onChange={e=>setSeedImage(e.target.files?.[0]||null)} className="text-xs"/>
-     <button className="button-secondary" type="button"
-      
-      onClick={()=>void uploadSeed()}>{seedUploading?'Guardando…':'Guardar imagen · Gratis'}</button>
-    </div>}
-    {seedMessage&&<p className="mt-2 text-xs text-emerald-200" role="status">{seedMessage}</p>}
+    <p className="mt-2 text-sm font-semibold">
+      {(board?.shots.filter(s=>s.imageReady).length??0)} de 7 imágenes individuales guardadas.
+      {board?.seedReady?' P01 tiene referencia y puede producirse.':
+       ' P01 necesita una imagen guardada para iniciar.'}
+    </p>
+    <input className="mt-3 block max-w-full text-xs" type="file"
+      accept="image/jpeg,image/png,image/webp" multiple
+      aria-label="Importar siete imágenes de Escena 02"
+      onChange={e=>{void selectedBatch(e.target.files);e.target.value='';}}/>
+    <p className="mt-2 text-xs text-slate-400">
+      La carga comienza automáticamente cuando seleccionas las imágenes; no necesitas pulsar Guardar.
+    </p>
+    {bulkUploading&&<p className="mt-2 text-xs text-violet-200" role="status">
+      Importando imágenes…</p>}
+    {bulkMessage&&<p className="mt-2 text-xs text-emerald-200" role="status">{bulkMessage}</p>}
   </div>
   <label className="mt-4 flex items-center gap-3 text-sm">
    <input type="checkbox" checked={allowSpend} disabled={busy||!outstanding.length}
@@ -198,7 +240,7 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
    Autorizo hasta US$ {outstandingCost.toFixed(2)} para los {outstanding.length} clips pendientes, sin reintentos pagados
   </label>
   <button className="button-primary mt-3" type="button" onClick={()=>void produceAll()}
-   disabled={busy||!allowSpend||!board?.enabled||!board?.seedReady||!outstanding.length||
+   disabled={busy||bulkUploading||!!uploadingShot||!allowSpend||!board?.enabled||!board?.seedReady||!outstanding.length||
     (board?board.reservedUsd+outstandingCost>board.maxSceneUsd+0.001:true)}>
    {busy?'Generando y recuperando clips…':'Producir bloques faltantes con Runway'}
   </button>
@@ -231,21 +273,22 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
        <CheckCircle2 className="h-4 w-4"/> MP4 guardado</span>}
     </div>
     <div className="mt-3 rounded-lg border border-violet-400/20 p-3">
-     <p className="text-xs font-semibold text-slate-200">
-      Imagen propia para {s.id}: {s.imageReady?'Guardada y lista':'Pendiente de subir'}
-     </p>
-     <div className="mt-2 flex flex-wrap items-center gap-2">
+      <p className="text-xs font-semibold text-slate-200">
+        {s.id} · {s.imageReady?'Imagen guardada':'Imagen pendiente'}
+      </p>
       <input type="file" accept="image/jpeg,image/png,image/webp"
-       aria-label={'Imagen para '+s.id} className="max-w-[300px] text-xs"
-       onChange={e=>setShotImages(old=>({...old,[s.id]:e.target.files?.[0]||null}))}/>
-      <button className="button-secondary text-xs" type="button"
-       onClick={()=>void uploadShotImage(s.id)}>
-       {s.imageReady?'Verificar o actualizar imagen':'Subir imagen · Gratis'}
-      </button>
-     </div>
-     <p className="mt-1 text-xs text-slate-400">
-      El botón siempre responde. Si la toma ya tiene un render, se explica por qué no se puede sustituir.
-     </p>
+        aria-label={'Importar imagen para '+s.id}
+        onChange={e=>{
+         const file=e.target.files?.[0]??null;
+         e.target.value='';
+         void selectedImage(s.id,file);
+        }} className="mt-2 block max-w-full text-xs"/>
+      {uploadingShot===s.id&&<p role="status" className="mt-1 text-xs text-violet-200">
+        Guardando automáticamente…</p>}
+      {uploadMessages[s.id]&&<p role="status" className="mt-1 text-xs text-amber-100">
+        {uploadMessages[s.id]}</p>}
+      {s.taskKnown&&<p className="mt-1 text-xs text-slate-400">
+        La toma tiene una operación Runway registrada: se conservará su imagen original.</p>}
     </div>
     {s.error&&<p className="mt-2 text-xs text-amber-200">{s.error}</p>}
    </div>)}

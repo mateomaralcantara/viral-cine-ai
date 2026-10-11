@@ -118,8 +118,22 @@ export async function saveE02ShotImage(id:string,bytes:Buffer){
  if(normalized.length<3000||normalized.length>2500000)
   throw new Error('Imagen inválida después de convertir.');
  await mkdir(shotDir(id),{recursive:true});
- await writeFile(dest,normalized,{flag:'wx',mode:0o600});
- return {shotId:id,imageReady:true,bytes:normalized.length,newGenerationRequests:0};
+ if(await fileExists(dest)){
+  const existing=await readFile(dest);
+  if(existing.equals(normalized))return {shotId:id,imageReady:true,bytes:existing.length,
+   alreadySaved:true,newGenerationRequests:0};
+  throw new Error('Esta toma ya tiene una imagen distinta guardada. Se conserva la original.');
+ }
+ try{await writeFile(dest,normalized,{flag:'wx',mode:0o600});}
+ catch(e){
+  if((e as NodeJS.ErrnoException).code!=='EEXIST')throw e;
+  const existing=await readFile(dest);
+  if(!existing.equals(normalized))throw new Error('Ya se guardó otra imagen. No se sobrescribirá.');
+  return {shotId:id,imageReady:true,bytes:existing.length,alreadySaved:true,
+   newGenerationRequests:0};
+ }
+ return {shotId:id,imageReady:true,bytes:normalized.length,alreadySaved:false,
+  newGenerationRequests:0};
 }
 async function existsSeed(){
  try{return (await stat(seedPath())).size>3000;}catch(e){
