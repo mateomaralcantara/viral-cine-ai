@@ -31,6 +31,7 @@ on:
       - fix/v7-e02-binary-upload-recovery
       - fix/v7-e02-auto-local-session
       - fix/v7-loopback-origin-compat
+      - feat/v7-autonomous-director-foundation
   pull_request:
     branches:
       - feat/v7-dos-toques-p01-artistic-approval

@@ -146,7 +146,8 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
   }catch(e){setError(String(e));}
  }
  async function produceAll(){
-  if(running.current||!board?.enabled||!board.seedReady||!allowSpend)return;
+  if(running.current||!board?.enabled||!board.seedReady||!allowSpend||
+     board.shots.some(s=>s.status==='blocked-credits'||s.status==='blocked-credentials'))return;
   const notStarted=board.shots.filter(s=>s.status==='not-started');
   const budget=Number((notStarted.length*.5).toFixed(2));
   if(budget+board.reservedUsd>board.maxSceneUsd+0.001){
@@ -160,6 +161,8 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
     let state=(await refresh()).shots.find(s=>s.id===shot.id)!;
     if(state.status==='review-required'){setDetail(shot.id+' lista.');continue;}
     if(state.status==='failed-unknown')throw Error(shot.id+' tiene una operación fallida. Sin reintento automático.');
+    if(state.status==='blocked-credits'||state.status==='blocked-credentials')
+      throw Error(shot.id+': Runway está bloqueado. No se volverá a enviar ni se consumirá el presupuesto restante.');
     if(state.status==='not-started'){
      setDetail('Solicitando la operación de '+shot.id+' (aún no confirmada por Runway)…');
      await request('submit',shot.id,state);
@@ -190,6 +193,9 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
   }
   finally{running.current=false;setBusy(false);void refresh().catch(()=>undefined);}
  }
+ const blockedCredits=board?.shots.some(s=>s.status==='blocked-credits')??false;
+ const blockedCredentials=board?.shots.some(s=>s.status==='blocked-credentials')??false;
+ const providerBlocked=blockedCredits||blockedCredentials;
  const outstanding=board?.shots.filter(s=>s.status==='not-started')??[];
  const outstandingCost=outstanding.length*.5;
  return <section className="rounded-3xl border border-violet-400/30 bg-violet-400/[.04] p-5 md:p-7">
@@ -202,6 +208,15 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
    de la vivienda. Cada clip de 10 s continúa desde el video anterior y el editor
    recorta 8+8+8+8+8+8+7 segundos. Las voces y música se añaden después.
   </p>
+  {providerBlocked&&<div className="mt-4 rounded-xl border border-amber-400/40 bg-amber-400/10 p-4"
+    role="alert">
+   <strong>Producción pausada: {blockedCredits?'Runway no tiene créditos suficientes.':'Runway rechazó sus credenciales.'}</strong>
+   <p className="mt-1 text-sm text-slate-200">
+    Tus siete fotografías siguen guardadas. No se enviarán más tareas ni se autorizarán nuevos cargos.
+    Para continuar necesitas reponer el saldo del proveedor o aprobar un motor alternativo.
+    El importe que antes figuraba «reservado» era del libro interno de ViralCine, no una confirmación de cobro.
+   </p>
+  </div>}
   <div className="mt-4 grid gap-3 sm:grid-cols-3">
    <div className="rounded-xl border border-white/10 p-3">
     <p className="text-xs text-slate-400">Nuevas solicitudes pendientes</p>
@@ -256,7 +271,7 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
    Autorizo hasta US$ {outstandingCost.toFixed(2)} para los {outstanding.length} clips pendientes, sin reintentos pagados
   </label>
   <button className="button-primary mt-3" type="button" onClick={()=>void produceAll()}
-   disabled={busy||bulkUploading||!!uploadingShot||!allowSpend||!board?.enabled||!board?.seedReady||!outstanding.length||
+   disabled={busy||bulkUploading||!!uploadingShot||providerBlocked||!allowSpend||!board?.enabled||!board?.seedReady||!outstanding.length||
     (board?board.reservedUsd+outstandingCost>board.maxSceneUsd+0.001:true)}>
    {busy?'Generando y recuperando clips…':'Producir bloques faltantes con Runway'}
   </button>
