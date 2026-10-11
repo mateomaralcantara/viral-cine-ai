@@ -2,7 +2,6 @@
 
 import {useCallback,useEffect,useState} from 'react';
 import {CheckCircle2,Clapperboard,RefreshCcw,ShieldAlert} from 'lucide-react';
-import {ensureLocalStudioSession} from '@/lib/v7/security/local-studio-client';
 
 type CloudShot={approved:boolean;readyForScene:boolean;sha256?:string;storagePath?:string};
 type CloudBoard={
@@ -21,7 +20,6 @@ export default function V7E02CloudImageGallery({
  const [refreshing,setRefreshing]=useState(true);
  const base='/api/v7/films/'+encodeURIComponent(filmId)+'/scene02-references';
  const reload=useCallback(async()=>{
-  await ensureLocalStudioSession();
   const response=await fetch(base,{credentials:'same-origin',cache:'no-store'});
   const raw=await response.text();
   let result:CloudBoard;
