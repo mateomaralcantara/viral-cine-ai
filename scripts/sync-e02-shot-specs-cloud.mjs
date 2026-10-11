@@ -31,16 +31,46 @@ async function bundleLocation(){
 function collectShots(bundle){
  if(bundle?.film?.id!==FILM||!Array.isArray(bundle?.film?.acts))
   throw Error('El bundle no corresponde a la película V7 requerida.');
- const found=new Map();
- for(const act of bundle.film.acts)for(const seq of act.sequences||[])
- for(const scene of seq.scenes||[])for(const shot of scene.shots||[]){
+ // V7 uses internally-generated shot IDs; E02-P01...P07 are V8 slot aliases.
+ const all=[];
+ const ordered=(v)=>[...(v||[])].sort((a,b)=>Number(a?.order||0)-Number(b?.order||0));
+ for(const act of ordered(bundle.film.acts))
+  for(const seq of ordered(act.sequences))
+   for(const scene of ordered(seq.scenes))all.push({scene,act,seq});
+ const outline=all.map((entry,i)=>
+  '#'+(i+1)+' sceneId='+String(entry.scene.id)+
+  ' order='+String(entry.scene.order)+
+  ' shots='+String(entry.scene.shots?.length??0)).join(' | ');
+ const exact=new Map();
+ for(const {scene} of all)for(const shot of scene.shots||[]){
   if(!IDS.includes(shot?.id))continue;
-  if(found.has(shot.id))throw Error('Toma duplicada en bundle: '+shot.id);
-  found.set(shot.id,shot);
+  if(exact.has(shot.id))throw Error('ID V8 duplicado dentro del bundle: '+shot.id);
+  exact.set(shot.id,shot);
  }
- const missing=IDS.filter(id=>!found.has(id));
- if(missing.length)throw Error('Tomas originales faltantes en bundle: '+missing.join(', '));
- return IDS.map(id=>found.get(id));
+ if(exact.size===7)return IDS.map(id=>exact.get(id));
+ if(exact.size>0)throw Error('Identificadores E02 parciales: '+[...exact.keys()].join(', ')+
+  '. No se mezcla orden con identificadores; escenas V7: '+outline);
+ const explicit=all.filter(({scene})=>scene.id==='E02');
+ if(explicit.length>1)throw Error('Varias escenas E02; la correspondencia no es única.');
+ const source=explicit.length?explicit[0]:all[1];
+ if(!source||(!explicit.length&&Number(source.scene.order)!==2))
+  throw Error('No se identificó inequívocamente la segunda escena V7. Escenas: '+outline);
+ const scenesShots=source.scene.shots;
+ if(!Array.isArray(scenesShots)||scenesShots.length!==7)
+  throw Error('La segunda escena original no tiene exactamente 7 tomas. Escenas: '+outline);
+ const shots=ordered(scenesShots);
+ const orders=shots.map(x=>Number(x?.order));
+ if(orders.some((order,i)=>order!==i+1))
+  throw Error('Las 7 tomas no tienen orden 1..7 único. Escenas: '+outline);
+ const ids=shots.map(x=>x?.id);
+ if(ids.some(id=>typeof id!=='string'||!id.trim())||new Set(ids).size!==7)
+  throw Error('Identificadores originales ausentes o duplicados.');
+ if(shots.some(x=>x.sceneId&&x.sceneId!==source.scene.id))
+  throw Error('Una toma apunta a otra escena distinta de '+source.scene.id);
+ console.log('MAPEO ORIGINAL V7 -> E02 (por orden inequívoco):');
+ for(let i=0;i<7;i++)console.log(IDS[i]+' <= toma V7 '+shots[i].id+
+  ' (orden '+shots[i].order+')');
+ return shots;
 }
 function sourcePrompt(shot){
  const m=shot.motionSpec&&typeof shot.motionSpec==='object'?shot.motionSpec:{};
@@ -61,11 +91,11 @@ function sourcePrompt(shot){
  return prompt;
 }
 function getSpecs(bundle){
- return collectShots(bundle).map(shot=>{
+ return collectShots(bundle).map((shot,index)=>{
   const original=Number(shot.durationSeconds);
   if(!Number.isFinite(original)||original<=0||original>10)
-   throw Error(shot.id+': duración original no representable en 5/10 s: '+shot.durationSeconds);
-  return {id:shot.id,sourceSha:sha(Buffer.from(JSON.stringify(shot),'utf8')),
+   throw Error(IDS[index]+' (V7 '+shot.id+'): duración original no representable en 5/10 s: '+shot.durationSeconds);
+  return {id:IDS[index],sourceV7ShotId:shot.id,sourceSha:sha(Buffer.from(JSON.stringify(shot),'utf8')),
    original,runwayDuration:original<=5?5:10,
    prompt:sourcePrompt(shot),originalShot:shot};
  });
