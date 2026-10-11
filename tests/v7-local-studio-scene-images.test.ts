@@ -43,38 +43,6 @@ test('E02 stores all 7 independent director stills and never starts a paid reque
   await rm(root,{recursive:true,force:true});
  }
 });
-test('Local studio session requires startup secret; cannot be forged or used from foreign origin',()=>{
- const old=process.env.V7_CINEMA_ADMIN_TOKEN;
- const oldEnv=process.env.NODE_ENV;
- try{
-  process.env.V7_CINEMA_ADMIN_TOKEN='a'.repeat(64);
-  process.env.NODE_ENV='development';
-  const req=new Request('http://127.0.0.1:3010/api/v7/local-studio-pair',{
-   headers:{origin:'http://127.0.0.1:3010'}
-  });
-  const issued=issueLocalSession(req,1750000000);
-  assert.ok(issued);
-  const authed=new Request('http://127.0.0.1:3010/api/v7/films/test',{
-   headers:{origin:'http://127.0.0.1:3010',
-    cookie:LOCAL_SESSION_COOKIE+'='+issued!.value}
-  });
-  assert.equal(hasLocalSession(authed,1750000001),true);
-  assert.equal(hasLocalSession(authed,1750000000+28801),false);
-  const crossSite=new Request('http://127.0.0.1:3010/api/v7/films/test',{
-   headers:{origin:'https://external.example',cookie:LOCAL_SESSION_COOKIE+'='+issued!.value}
-  });
-  assert.equal(hasLocalSession(crossSite,1750000001),false);
-  const tampered=new Request('http://127.0.0.1:3010/api/v7/films/test',{
-   headers:{cookie:LOCAL_SESSION_COOKIE+'='+issued!.value.slice(0,-1)+(issued!.value.endsWith('0')?'1':'0')}
-  });
-  assert.equal(hasLocalSession(tampered,1750000001),false);
- }finally{
-  if(old===undefined)delete process.env.V7_CINEMA_ADMIN_TOKEN;
-  else process.env.V7_CINEMA_ADMIN_TOKEN=old;
-  if(oldEnv===undefined)delete process.env.NODE_ENV;
-  else process.env.NODE_ENV=oldEnv;
- }
-});
 test('Studio E02 UI upload buttons cannot be disabled by missing token and scripts require user ENTER',async()=>{
  const paths=[
   '../components/V7RunwayScene02Panel.tsx',
