@@ -45,7 +45,7 @@ function objectPath(id:string,hash:string){
  return E02_FILM_ID+'/e02/'+id.toLowerCase()+'/'+hash+'.jpg';
 }
 export async function approvedE02References():Promise<E02ReferenceBoard>{
- const shots=Object.fromEntries(E02_SHOTS.map(s=>[s.id,
+ const shots:E02ReferenceBoard['shots']=Object.fromEntries(E02_SHOTS.map(s=>[s.id,
   {approved:false,readyForScene:false}]));
  if(!e02CloudConfigured())return {ok:true,configured:false,approvedCount:0,
   requiredCount:7,referencesReady:false,generationQueueEnabled:false,shots};
@@ -60,7 +60,7 @@ export async function approvedE02References():Promise<E02ReferenceBoard>{
  }>;
  for(const ref of records){
   if(!(ref.shot_id in shots))continue;
-  (shots as Record<string,unknown>)[ref.shot_id]={
+  shots[ref.shot_id]={
    approved:ref.approved===true,readyForScene:ref.approved===true&&ref.status==='ready'&&ref.active,
    sha256:ref.sha256,storagePath:ref.storage_path
   };
