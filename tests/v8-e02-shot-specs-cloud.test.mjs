@@ -58,3 +58,47 @@ test('env parser reads private server config without writing',()=>{
  assert.equal(env.SUPABASE_SERVICE_ROLE_KEY,'test-key');
  assert.equal(env.NEXT_PUBLIC_SUPABASE_URL,'https://example.supabase.co');
 });
+
+const uuidBundle=()=>{
+ const firstScene={id:'scene-v7-01',order:1,shots:[]};
+ const secondScene={id:'scene-v7-02',order:2,shots:
+  Array.from({length:7},(_,i)=>({
+   ...makeShot(i+1),id:'v7-original-uuid-shot-'+(i+1),
+   sceneId:'scene-v7-02',order:i+1
+  }))};
+ return {film:{id:'film-dos-toques-de-bocina-v7',acts:[{
+  order:1,sequences:[{order:1,scenes:[firstScene,secondScene]}]
+ }]}};
+};
+test('UUID-based V7 scene 2 maps shot order 1..7 to E02 aliases',()=>{
+ const original=uuidBundle();
+ const extracted=collectShots(original);
+ assert.equal(extracted.length,7);
+ assert.equal(extracted[0].id,'v7-original-uuid-shot-1');
+ const specs=getSpecs(original);
+ assert.equal(specs[0].id,'E02-P01');
+ assert.equal(specs[6].id,'E02-P07');
+ assert.equal(specs[0].originalShot.id,'v7-original-uuid-shot-1');
+ assert.equal(specs[0].originalShot.order,1);
+ assert.equal(specs[0].original,8);
+});
+test('UUID mapping requires exactly seven second-scene shots, fail closed',()=>{
+ const x=uuidBundle();
+ x.film.acts[0].sequences[0].scenes[1].shots.pop();
+ assert.throws(()=>collectShots(x),/no tiene exactamente 7 tomas/);
+});
+test('UUID mapping blocks nonunique or out-of-order original shots',()=>{
+ const x=uuidBundle();
+ x.film.acts[0].sequences[0].scenes[1].shots[6].order=3;
+ assert.throws(()=>collectShots(x),/orden 1\.\.7 único/);
+});
+test('UUID mapping checks original scene association, not just order',()=>{
+ const x=uuidBundle();
+ x.film.acts[0].sequences[0].scenes[1].shots[2].sceneId='scene-elsewhere';
+ assert.throws(()=>collectShots(x),/otra escena/);
+});
+test('does not silently map an unrelated second scene of order 1',()=>{
+ const x=uuidBundle();
+ x.film.acts[0].sequences[0].scenes[1].order=1;
+ assert.throws(()=>collectShots(x),/segunda escena V7/);
+});
