@@ -66,7 +66,11 @@ async function loadConfig(){
  for(const folder of [...new Set(roots)]){
   for(const name of ['.env','.env.local']){
    const file=path.join(folder,name);
-   if(await exists(file))Object.assign(merged,parseEnv(await readFile(file,'utf8')));
+   if(await exists(file)){
+    const values=parseEnv(await readFile(file,'utf8'));
+    for(const [key,value] of Object.entries(values))
+     if(!merged[key])merged[key]=value;
+   }
   }
  }
  Object.assign(merged,process.env);
