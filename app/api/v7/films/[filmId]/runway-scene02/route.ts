@@ -1,4 +1,5 @@
 import {NextResponse} from 'next/server';
+import {localOriginAllowed} from '@/lib/v7/security/local-studio-session';
 import {readV7FilmBundle} from '@/lib/v7/storage/film-store';
 import {E02_FILM_ID} from '@/lib/v7/production/dos-toques-e02-shot-packets';
 import {readRunwayRecord,runwayReservedUsd,runwayEnabled,runwayShotSpecs,
@@ -9,12 +10,7 @@ import {readRunwayRecord,runwayReservedUsd,runwayEnabled,runwayShotSpecs,
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 type Context={params:Promise<{filmId:string}>};
-function localOnly(request:Request){
- const url=new URL(request.url);
- return process.env.NODE_ENV==='development'&&
-  ['localhost','127.0.0.1','::1'].includes(url.hostname)&&
-  (!request.headers.get('origin')||request.headers.get('origin')===url.origin);
-}
+function localOnly(request:Request){return localOriginAllowed(request);}
 async function filmAllowed(ctx:Context){
  const {filmId}=await ctx.params;
  if(filmId!==E02_FILM_ID)throw new Error('Película no habilitada.');

@@ -1,5 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
-import {hasLocalSession} from '@/lib/v7/security/local-studio-session';
+import {hasLocalSession,localOriginAllowed} from '@/lib/v7/security/local-studio-session';
 import { NextResponse } from 'next/server';
 import { readV7FilmBundle } from '@/lib/v7/storage/film-store';
 import { approveBoardTarget, readSceneApprovalBoard } from '@/lib/v7/production/scene-approval-board';
@@ -9,13 +9,7 @@ import { assembleApprovedSceneLocally } from '@/lib/v7/production/scene-local-as
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 type Context={params:Promise<{filmId:string}>};
-function localOnly(request:Request){
-  const url=new URL(request.url);
-  const origin=request.headers.get('origin');
-  return process.env.NODE_ENV==='development' &&
-    ['localhost','127.0.0.1','::1'].includes(url.hostname) &&
-    (!origin||origin===url.origin);
-}
+function localOnly(request:Request){return localOriginAllowed(request);}
 function administrator(request:Request){
   if(hasLocalSession(request))return true; // Already paired in the local, HttpOnly studio session.
   const secret=process.env.V7_CINEMA_ADMIN_TOKEN||'';

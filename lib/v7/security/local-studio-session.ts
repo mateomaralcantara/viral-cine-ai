@@ -4,13 +4,26 @@ export const LOCAL_SESSION_COOKIE='viralcine_v7_local_session';
 const lifetime=8*60*60;
 const localhost=new Set(['localhost','127.0.0.1','::1']);
 export function localOriginAllowed(request:Request){
- const url=new URL(request.url);
- const origin=request.headers.get('origin');
+ // Next.js may normalize the internal Request URL to "localhost" while the
+ // real browser is on 127.0.0.1. Compare loopback host identities, protocol
+ // and port, never the literal hostname string. Keep external origins blocked.
+ if(process.env.NODE_ENV!=='development')return false;
+ let target:URL;
+ try{target=new URL(request.url);}
+ catch{return false;}
+ if(target.protocol!=='http:'||!localhost.has(target.hostname))return false;
  const site=request.headers.get('sec-fetch-site');
- return process.env.NODE_ENV==='development' &&
-  localhost.has(url.hostname) &&
-  (!origin||origin===url.origin) &&
-  (!site||site==='same-origin'||site==='none');
+ if(site&&site!=='same-origin'&&site!=='none')return false;
+ const origin=request.headers.get('origin');
+ if(!origin)return true; // Native local scripts or same-origin GETs.
+ let source:URL;
+ try{source=new URL(origin);}
+ catch{return false;}
+ if(source.protocol!=='http:'||!localhost.has(source.hostname)||
+    source.port!==(process.env.V7_STUDIO_LOCAL_PORT||'3010')||
+    source.username||source.password||source.pathname!=='/'||
+    source.search||source.hash)return false;
+ return true;
 }
 function secret(){
  const token=process.env.V7_CINEMA_ADMIN_TOKEN?.trim()??'';
