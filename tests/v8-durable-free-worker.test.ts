@@ -40,6 +40,19 @@ test('Runway insufficient credits blocks without POST or retry, preserving the r
  assert.equal(called,0);
  assert.match(String(r.result.reason),/sin créditos/);
 });
+test('Runway is the only authorized provider, without fallback and without a paid submission',async()=>{
+ let providerCalls=0;
+ const deps={...dependencies(),reconcileExistingTask:async()=>{
+  providerCalls++;return {status:'completed'};
+ }};
+ const r=await executeFreeAutonomyJob(template('provider-reconcile',{
+  provider:'veo',taskId:'8f27c3ae-1764-4eba-8c7c-620e6a9dc432'
+ }),deps);
+ assert.equal(r.state,'waiting-provider');
+ assert.equal(providerCalls,0);
+ assert.match(String(r.result.reason),/exclusivamente Runway/);
+});
+
 test('An existing known task can be polled safely until ready, with idempotent task ID',async()=>{
  let called=0;
  const id='8f27c3ae-1764-4eba-8c7c-620e6a9dc432';

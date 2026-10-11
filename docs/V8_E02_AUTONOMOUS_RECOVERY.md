@@ -13,6 +13,19 @@ las siete fotografías locales ni las aprobaciones de E01. Por tanto, **aún no 
 producción autónoma desplegada para esta película.** No hay funciones Edge ni
 programador permanente instalado.
 
+## Decisión del director: solo Runway por ahora
+
+- Motor de video autorizado para la Escena 02: **Runway Gen-4 Turbo**.
+- **Sin cambio automático** a Veo, Fal, WAN u otros proveedores.
+- Avatares continúa totalmente excluido.
+- Se mantienen las siete fotos ya guardadas. El fallo de créditos de Runway
+  es un bloqueo de proveedor, no un error que se pueda corregir enviando
+  otra generación.
+- Elegir Runway **no autoriza recargas, compras, nuevos cargos o reintentos
+  pagados**. Se exige presupuesto explícito y saldo antes de generar.
+- La reanudación en la nube depende todavía de trasladar los activos desde
+  Windows y de desplegar el trabajador; no está funcionando 24/7.
+
 ## Qué ya puede hacer el código de esta rama
 
 - `supabase/migrations/20261011_v8_autonomy_jobs.sql` crea una cola durable
