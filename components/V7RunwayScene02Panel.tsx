@@ -161,8 +161,9 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
     if(state.status==='review-required'){setDetail(shot.id+' lista.');continue;}
     if(state.status==='failed-unknown')throw Error(shot.id+' tiene una operación fallida. Sin reintento automático.');
     if(state.status==='not-started'){
-     setDetail('Generando '+shot.id+' con Runway · costo autorizado US$0.50');
+     setDetail('Solicitando la operación de '+shot.id+' (aún no confirmada por Runway)…');
      await request('submit',shot.id,state);
+     setDetail(shot.id+': operación registrada en Runway. Recuperando el MP4…');
      state=(await refresh()).shots.find(s=>s.id===shot.id)!;
     }
     if(!state.taskKnown)throw Error(shot.id+' sin identificador de Runway. Detenido para evitar gasto duplicado.');
@@ -183,7 +184,10 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
       '. Puedes recuperar la misma tarea desde su botón, sin volver a pagar.');
    }
    if(!cancel.current)setDetail('Los siete MP4 de E02 disponibles. Aprueba las tomas en Escenas y monta el corte de 55 segundos.');
-  }catch(e){setError(e instanceof Error?e.message:String(e));}
+  }catch(e){
+   setDetail('');
+   setError(e instanceof Error?e.message:String(e));
+  }
   finally{running.current=false;setBusy(false);void refresh().catch(()=>undefined);}
  }
  const outstanding=board?.shots.filter(s=>s.status==='not-started')??[];
