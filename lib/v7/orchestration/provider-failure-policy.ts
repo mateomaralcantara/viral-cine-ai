@@ -11,7 +11,7 @@ export type ProviderSubmissionDecision =
 
 export function classifyRunwaySubmitError(httpStatus:number,body:string):ProviderSubmissionDecision{
  const normalized=body.trim().toLowerCase();
- const credit=/\b(not enough credits|insufficient credits|insufficient balance|credit balance too low|out of credits)\b/.test(normalized);
+ const credit=/\b(not enough credits|not have enough credits|insufficient credits|insufficient balance|credit balance too low|out of credits)\b/.test(normalized);
  if([400,402].includes(httpStatus)&&credit)
   return {kind:'blocked-credits',canReuseSubmission:false,needsUserChoice:true,autoRetry:false,exposure:'rejected'};
  if([401,403].includes(httpStatus))
