@@ -9,7 +9,15 @@ export function ensureLocalStudioSession(){
   if(typeof window==='undefined')return;
   const hash=new URLSearchParams(window.location.hash.replace(/^#/,''));
   const code=hash.get('studio-pair');
-  if(!code)return; // Existing cookie remains valid across refreshes.
+  if(!code){
+   const status=await fetch('/api/v7/local-studio-pair',{
+    credentials:'same-origin',cache:'no-store'
+   });
+   const body=await status.json() as {ok?:boolean;authenticated?:boolean};
+   if(!status.ok||!body.authenticated)
+    throw Error('El navegador no está enlazado. Abre ViralCine desde el iniciador de PowerShell para conectar la sesión.');
+   return;
+  }
   // Erase the fragment before networking (including from back button history).
   const clean=window.location.pathname+window.location.search;
   window.history.replaceState(null,'',clean);
