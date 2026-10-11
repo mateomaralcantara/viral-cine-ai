@@ -57,17 +57,24 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
   if(file.size<3000||file.size>4000000)
    throw Error(id+': la imagen debe pesar entre 3 KB y 4 MB.');
   await ensureLocalStudioSession();
-  const form=new FormData();
-  form.set('action','upload-shot-image');
-  form.set('shotId',id);
-  form.set('image',file);
   const response=await fetch(endpoint,{method:'POST',
-   credentials:'same-origin',body:form,cache:'no-store'});
-  const result=await response.json() as {ok?:boolean;error?:string;alreadySaved?:boolean};
-  if(!response.ok||!result.ok)
-   throw Error(id+': '+(result.error||'Error al guardar la referencia.'));
+   credentials:'same-origin',
+   headers:{'Content-Type':file.type,'X-V7-Shot-ID':id},
+   body:file,cache:'no-store'});
+  // The Next.js proxy or the server may return an empty 4xx/5xx response.
+  // Never report "Unexpected end of JSON input" to the artist.
+  const raw=await response.text();
+  if(!raw.trim())throw new Error(id+': el servidor respondió vacío (HTTP '+
+   response.status+'). No se guardó la imagen. Revisa la terminal de Next.js.');
+  let result:{ok?:boolean;error?:string;alreadySaved?:boolean;imageReady?:boolean};
+  try{result=JSON.parse(raw) as typeof result;}
+  catch{throw new Error(id+': respuesta inválida del servidor (HTTP '+
+   response.status+'). Revisa el registro de Next.js.');}
+  if(!response.ok||!result.ok||!result.imageReady)
+   throw Error(id+': '+(result.error||'El servidor no confirmó que el JPG quedara guardado.')+
+    ' (HTTP '+response.status+').');
   setUploadMessages(old=>({...old,[id]:
-   result.alreadySaved?'Imagen ya guardada: no se duplicó.':'Imagen guardada correctamente en ViralCine.'}));
+   result.alreadySaved?'Imagen ya guardada: no se duplicó.':'Imagen guardada y verificada en disco.'}));
   await refresh();
  }
  async function selectedImage(id:string,file:File|null){
@@ -112,9 +119,14 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
      const message=e instanceof Error?e.message:String(e);
      failures.push(message);
      setUploadMessages(old=>({...old,[id]:'Error: '+message}));
+     if(/respondió vacío|respuesta inválida|sin JSON válido|Sesión administrativa|sesión local|El navegador no está enlazado|emparejamiento|HTTP 403|HTTP 405/i.test(message)){
+      setBulkMessage('Carga detenida por error de comunicación. No se volverán a enviar las demás imágenes.');
+      break;
+     }
     }
    }
-   setBulkMessage(saved+' imagen(es) guardada(s) de '+uploads.size+'.'+
+   setBulkMessage(old=>old.startsWith('Carga detenida')?old:
+    saved+' imagen(es) guardada(s) de '+uploads.size+'.'+
     (unknown.length?' Se omitieron '+unknown.length+' archivos sin código E02-PXX.':''));
    if(failures.length)setError('Algunas imágenes no se guardaron: '+failures.join(' | '));
   }finally{setBulkUploading(false);await refresh().catch(()=>undefined);}
