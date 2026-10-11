@@ -13,8 +13,13 @@ export function ensureLocalStudioSession(){
    const status=await fetch('/api/v7/local-studio-pair',{
     credentials:'same-origin',cache:'no-store'
    });
-   const body=await status.json() as {ok?:boolean;authenticated?:boolean};
-   if(!status.ok||!body.authenticated)
+   const reply=await status.text();
+   let body:{ok?:boolean;authenticated?:boolean;error?:string};
+   try{body=JSON.parse(reply) as typeof body;}
+   catch{throw Error('La verificación de sesión devolvió HTTP '+status.status+
+    ' sin JSON válido. Revisa la terminal del servidor local.');}
+   if(!status.ok)throw Error(body.error||'No se pudo verificar la sesión local (HTTP '+status.status+').');
+   if(!body.authenticated)
     throw Error('El navegador no está enlazado. Abre ViralCine desde el iniciador de PowerShell para conectar la sesión.');
    return;
   }
@@ -26,7 +31,11 @@ export function ensureLocalStudioSession(){
    credentials:'same-origin',cache:'no-store',
    body:JSON.stringify({pairCode:code})
   });
-  const body=await res.json() as {ok?:boolean;error?:string};
+  const reply=await res.text();
+  let body:{ok?:boolean;error?:string};
+  try{body=JSON.parse(reply) as typeof body;}
+  catch{throw Error('El emparejamiento devolvió HTTP '+res.status+
+   ' sin JSON válido. Reinicia el estudio desde PowerShell.');}
   if(!res.ok||!body.ok)throw Error(body.error||'No se pudo autorizar la sesión local.');
  })().catch(e=>{pairing=null;throw e;});
  return pairing;
