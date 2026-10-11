@@ -15,7 +15,7 @@
         "3010"
       ],
       "cwd": "${workspaceFolder}",
-      "console": "integratedTerminal",
+      "console": "internalConsole",
       "internalConsoleOptions": "neverOpen",
       "skipFiles": [
         "<node_internals>/**"
