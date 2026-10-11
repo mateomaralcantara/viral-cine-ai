@@ -23,7 +23,8 @@ Deno.serve(async (req:Request):Promise<Response>=>{
    signal:AbortSignal.timeout(12000),cache:"no-store"
   });
   if(!res.ok)throw new Error("supabase-api-"+res.status+":"+route.split("?")[0]);
-  return await res.json();
+  const raw=await res.text();
+  return raw.trim()?JSON.parse(raw):{};
  };
  const token=req.headers.get("x-v8-cron-token")||"";
  if(token.length!==96||!/^[a-f0-9]+$/.test(token))
