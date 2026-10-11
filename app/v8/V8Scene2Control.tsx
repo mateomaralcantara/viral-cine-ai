@@ -145,7 +145,7 @@ export default function V8Scene2Control(){
      </section>
     </aside>
    </div>
-   <footer className={s.footer}><a href="/">← Volver a ViralCine</a> · Solo Runway · Sin avatares · Sin terminal</footer>
+   <footer className={s.footer}><a href="/v7">← Abrir ViralCine V7</a> · Solo Runway · Sin avatares · Sin terminal</footer>
   </>}
  </main>;
 }
