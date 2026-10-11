@@ -128,7 +128,8 @@ Deno.serve(async (request:Request):Promise<Response>=>{
   if(p.status!=="ready"||p.provider_balance_confirmed!==true||
      Number(p.authorized_spend_usd)<=Number(p.spent_or_reserved_usd))
     return fail("waiting-credit-authorization",{
-     authorizedUsd:Number(p.authorized_spend_usd),reservedUsd:Number(p.spent_or_reserved_usd)
+     authorizedUsd:Number(p.authorized_spend_usd),reservedUsd:Number(p.spent_or_reserved_usd),
+     runwayKeyConfigured:runwayKey.length>=8,providerBalanceConfirmed:p.provider_balance_confirmed===true
     });
   if(runwayKey.length<8)return fail("blocked-runway-key",{runwayKeyConfigured:false});
   const shots=await api("/rest/v1/v8_e02_render_intents?film_id=eq."+
