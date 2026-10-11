@@ -57,7 +57,8 @@ test('Studio E02 UI upload buttons cannot be disabled by missing token and scrip
  assert.match(ui,/selectedBatch/);
  assert.match(ui,/Importar siete imágenes de Escena 02/);
  assert.match(ui,/upload-shot-image/);
- assert.match(ui,/Subir imagen · Gratis/);
+ assert.match(ui,/selectedBatch/);
+ assert.match(ui,/Guardar imágenes no cuesta dinero/);
  assert.match(ui,/ensureLocalStudioSession/);
  assert.doesNotMatch(ui,/disabled=\{!seedImage\|\|!token/);
  assert.match(launch,/Read-Host "PRESIONA ENTER/);
