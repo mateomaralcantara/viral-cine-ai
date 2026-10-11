@@ -68,6 +68,7 @@ if (!(Test-Path -LiteralPath $tokenScript)) { throw 'No se encontro el gestor de
 $env:V7_CINEMA_ADMIN_TOKEN = (& $tokenScript -Mode Get).Trim()
 # Código independiente de un solo uso; NO es la clave administrativa.
 $env:V7_STUDIO_PAIR_CODE = [guid]::NewGuid().ToString('N') + [guid]::NewGuid().ToString('N')
+$env:V7_STUDIO_PAIR_EXPIRES = [DateTimeOffset]::UtcNow.AddMinutes(10).ToUnixTimeSeconds().ToString()
 Write-Host "`nTOKEN ADMINISTRATIVO GENERADO Y GUARDADO CIFRADO" -ForegroundColor Green
 Write-Host "El navegador se conectará automáticamente: no hay que pegar credenciales." -ForegroundColor Green
 Write-Host "Para recuperar manualmente el token: .\scripts\V7-ADMIN-TOKEN.ps1 -Mode Show" -ForegroundColor DarkGray
