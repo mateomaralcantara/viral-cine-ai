@@ -104,7 +104,7 @@ async function selectDataRoot(){
 function createClient({url,secret}){
  const headers={
   apikey:secret,
-  ...(secret.startsWith('eyJ')?{Authorization:'Bearer '+secret}:{})
+  Authorization:'Bearer '+secret
  };
  return async (api,method,body,otherHeaders={})=>{
   let last;
@@ -138,15 +138,24 @@ async function uploadPhoto(client,id,bytes,filename){
  const objectName=filmId+'/e02/'+id.toLowerCase()+'/'+hash+'.jpg';
  const encoded=objectName.split('/').map(encodeURIComponent).join('/');
  const endpoint='/storage/v1/object/authenticated/'+bucket+'/'+encoded;
- let object=await client(endpoint,'GET');
- if(object.status===404){
+ // Query object metadata before upload; an absent object is not a failed private download.
+ const prefix=filmId+'/e02/'+id.toLowerCase();
+ const listing=await client('/storage/v1/object/list/'+bucket,'POST',
+  Buffer.from(JSON.stringify({prefix,limit:100,offset:0})),
+  {'Content-Type':'application/json'});
+ if(!listing.ok)
+  throw Error('Storage list HTTP '+listing.status+': '+(await listing.text()).slice(0,300));
+ const existing=await listing.json();
+ if(!Array.isArray(existing))throw Error('Storage list returned invalid data');
+ if(!existing.some(item=>item.name===hash+'.jpg')){
   const write=await client('/storage/v1/object/'+bucket+'/'+encoded,
    'POST',bytes,{'Content-Type':'image/jpeg','x-upsert':'false'});
   if(!write.ok&&write.status!==409)
-   throw Error('Storage HTTP '+write.status+': '+(await write.text()).slice(0,160));
-  object=await client(endpoint,'GET');
+   throw Error('Storage upload HTTP '+write.status+': '+(await write.text()).slice(0,300));
  }
- if(!object.ok)throw Error('El archivo no se pudo leer en Storage (HTTP '+object.status+')');
+ const object=await client(endpoint,'GET');
+ if(!object.ok)
+  throw Error('Storage download HTTP '+object.status+': '+(await object.text()).slice(0,300));
  const remote=Buffer.from(await object.arrayBuffer());
  if(sha(remote)!==hash)throw Error('Hash SHA256 diferente: se detuvo la aprobacion');
  const req={
