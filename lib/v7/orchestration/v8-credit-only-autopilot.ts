@@ -115,8 +115,9 @@ export function decideCreditOnlyAction(
    return creditDecision(p,shot.id)??{kind:'start-render',shotId:shot.id,
     maximumUsd:p.pricePerRenderUsd,requiresAtomicLedger:true};
   }
-  if(shot.autoApproved)continue;
+  // Approval never overrides a missing or mismatched evidence hash.
   const qa=qaStatus(shot.qa,shot.videoSha256,requiredShotGates);
+  if(shot.autoApproved&&qa==='pass')continue;
   if(qa==='missing')
    return {kind:'run-shot-qa',shotId:shot.id,required:requiredShotGates};
   if(qa==='fail'){
