@@ -119,7 +119,7 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
      const message=e instanceof Error?e.message:String(e);
      failures.push(message);
      setUploadMessages(old=>({...old,[id]:'Error: '+message}));
-     if(/respondió vacío|respuesta inválida|Sesión administrativa|El navegador no está enlazado/i.test(message)){
+     if(/respondió vacío|respuesta inválida|sin JSON válido|Sesión administrativa|sesión local|El navegador no está enlazado|emparejamiento|HTTP 403|HTTP 405/i.test(message)){
       setBulkMessage('Carga detenida por error de comunicación. No se volverán a enviar las demás imágenes.');
       break;
      }
