@@ -242,6 +242,11 @@ export async function submitRunwayShot(id:string,confirmHash:string,approvedUsd:
  return lock(async()=>{
   const existing=await readRunwayRecord(id);
   if(existing)throw new Error('Runway ya tiene una operación para esta toma. Recupera la misma, sin reenviar.');
+  // Provider-wide balance block: refuse direct API submissions of P02-P07
+  // too, not just clicks on the browser's disabled button.
+  const sceneRecords=await Promise.all(E02_SHOTS.map(s=>readRunwayRecord(s.id)));
+  if(sceneRecords.some(r=>r&&['blocked-credits','blocked-credentials'].includes(r.status)))
+   throw new Error('Producción pausada: Runway carece de saldo o credenciales. No se enviará ninguna toma nueva.');
   if(await runwayReservedUsd()+RUNWAY_SHOT_USD>RUNWAY_MAX_SCENE_USD+0.001)
    throw new Error('Límite de Runway para Escena 02 alcanzado.');
   const ref=await nearestReference(id);
