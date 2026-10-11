@@ -53,8 +53,26 @@ export async function GET(request:Request,ctx:Context){
 export async function POST(request:Request,ctx:Context){
  if(!localOnly(request))return responseError(403,'Origen no autorizado.');
  if(Number(request.headers.get('content-length')??0)>5000000)return responseError(413,'Solicitud demasiado grande.');
- const rawType=request.headers.get('content-type')??'';
- if(rawType.startsWith('multipart/form-data')){
+ const rawType=(request.headers.get('content-type')??'').split(';')[0].trim().toLowerCase();
+ // Binary transport: avoid multipart formData() parsing and proxy upload
+ // transformations. One file per request; guaranteed JSON responses here.
+ if(['image/jpeg','image/png','image/webp'].includes(rawType)){
+  if(!runwayAdminAuthorized(request))return responseError(403,'Sesión administrativa expirada. Reinicia el estudio local.');
+  const id=request.headers.get('x-v7-shot-id')??'';
+  if(!/^E02-P0[1-7]$/.test(id))return responseError(400,'Identificador de toma inválido.');
+  try{
+   await filmAllowed(ctx);
+   const bytes=Buffer.from(await request.arrayBuffer());
+   if(bytes.length<3000||bytes.length>4000000)
+    return responseError(413,'La imagen debe medir entre 3 KB y 4 MB.');
+   const saved=await saveE02ShotImage(id,bytes);
+   const onDisk=await e02ShotImageReady(id);
+   if(!onDisk)return responseError(500,'La imagen no quedó en disco. No se ha iniciado ningún render.');
+   return NextResponse.json({ok:true,...saved,imageReady:onDisk,additionalSpendUsd:0,
+    newGenerationRequests:0,transport:'binary'},{headers:{'Cache-Control':'private,no-store'}});
+  }catch(e){return responseError(409,scrub(e));}
+ }
+ if(rawType==='multipart/form-data'){
   if(!runwayAdminAuthorized(request))return responseError(403,'Token incorrecto.');
   try{
    await filmAllowed(ctx);
