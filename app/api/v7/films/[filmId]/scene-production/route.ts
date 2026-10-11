@@ -1,4 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
+import {hasLocalSession} from '@/lib/v7/security/local-studio-session';
 import { NextResponse } from 'next/server';
 import { readV7FilmBundle } from '@/lib/v7/storage/film-store';
 import { approveBoardTarget, readSceneApprovalBoard } from '@/lib/v7/production/scene-approval-board';
@@ -16,6 +17,7 @@ function localOnly(request:Request){
     (!origin||origin===url.origin);
 }
 function administrator(request:Request){
+  if(hasLocalSession(request))return true; // Already paired in the local, HttpOnly studio session.
   const secret=process.env.V7_CINEMA_ADMIN_TOKEN||'';
   const supplied=request.headers.get('authorization')?.replace(/^Bearer /i,'')||'';
   if(secret.length<24||supplied.length!==secret.length)return false;

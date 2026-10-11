@@ -66,12 +66,12 @@ $env:V7_SCENE01_TOTAL_CAP_USD = '5.60'
 $tokenScript = Join-Path $PSScriptRoot 'V7-ADMIN-TOKEN.ps1'
 if (!(Test-Path -LiteralPath $tokenScript)) { throw 'No se encontro el gestor de token persistente.' }
 $env:V7_CINEMA_ADMIN_TOKEN = (& $tokenScript -Mode Get).Trim()
-$env:V7_CINEMA_ADMIN_TOKEN | Set-Clipboard
-Write-Host "`n=== TOKEN ADMINISTRATIVO VIRALCINE V7 ===" -ForegroundColor Cyan
-Write-Host $env:V7_CINEMA_ADMIN_TOKEN -ForegroundColor Yellow
-Write-Host "Copiado al portapapeles. Para verlo despues, ejecuta:" -ForegroundColor Green
-Write-Host "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$tokenScript`" -Mode Show" -ForegroundColor Cyan
-Write-Host "No compartas este token ni lo incluyas en GitHub." -ForegroundColor Yellow
+# Código independiente de un solo uso; NO es la clave administrativa.
+$env:V7_STUDIO_PAIR_CODE = [guid]::NewGuid().ToString('N') + [guid]::NewGuid().ToString('N')
+$env:V7_STUDIO_PAIR_EXPIRES = [DateTimeOffset]::UtcNow.AddMinutes(10).ToUnixTimeSeconds().ToString()
+Write-Host "`nTOKEN ADMINISTRATIVO GENERADO Y GUARDADO CIFRADO" -ForegroundColor Green
+Write-Host "El navegador se conectará automáticamente: no hay que pegar credenciales." -ForegroundColor Green
+Write-Host "Para recuperar manualmente el token: .\scripts\V7-ADMIN-TOKEN.ps1 -Mode Show" -ForegroundColor DarkGray
 Write-Host 'Runway Gen-4 Turbo: PROVEEDOR PRINCIPAL (10 s a 0.50 USD estimados).' -ForegroundColor Green
 Write-Host 'Escena 02: 7 tomas, 55 s de corte, presupuesto nuevo hasta USD 3.50.' -ForegroundColor Green
 Write-Host 'Cinco tomas nuevas: autorizacion maxima de USD 2.50, no automatica.' -ForegroundColor Yellow
@@ -84,7 +84,24 @@ Write-Host 'Veo: envios pagados deshabilitados. Runway es el proveedor principal
 if (-not $env:GEMINI_API_KEY) {
   Write-Host 'AVISO: GEMINI_API_KEY no encontrada; solo preflight/consulta hasta configurarla.' -ForegroundColor Yellow
 }
-$url = "http://localhost:3010/v7/films/$expectedFilm" + "?tab=scene01"
-Write-Host "Panel: $url" -ForegroundColor Cyan
-Write-Host 'Cuando Next muestre Ready, abre el panel y presiona Ctrl+F5.' -ForegroundColor Cyan
-npm run dev -- -p 3010
+$url = "http://127.0.0.1:3010/v7/films/$expectedFilm" + "?tab=scene02"
+$pairedUrl = $url + "#studio-pair=" + $env:V7_STUDIO_PAIR_CODE
+Write-Host "Panel Escena 02: $url" -ForegroundColor Cyan
+Read-Host "PRESIONA ENTER: levantar servidor y conectar token automaticamente" | Out-Null
+# Un trabajo local espera a que Next esté listo y abre el navegador con
+# un código de emparejamiento de un solo uso, distinto al token cifrado.
+Start-Job -Name "V7-LocalPair" -ArgumentList $pairedUrl -ScriptBlock {
+ param($link)
+ for($i=0;$i -lt 60;$i++){
+  try {
+   $probe=Invoke-WebRequest -Uri "http://127.0.0.1:3010/" -UseBasicParsing -TimeoutSec 2
+   if($probe.StatusCode -ge 200){
+    Start-Process $link
+    return
+   }
+  } catch {}
+  Start-Sleep -Seconds 2
+ }
+} | Out-Null
+# Fundamental: no publicar el token ni el estudio por la IP de red.
+npm run dev -- -p 3010 -H 127.0.0.1

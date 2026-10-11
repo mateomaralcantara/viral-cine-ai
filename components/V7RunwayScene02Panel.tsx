@@ -1,10 +1,11 @@
 'use client';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {Clapperboard,CheckCircle2,RefreshCcw,ShieldCheck,Film} from 'lucide-react';
+import {ensureLocalStudioSession} from '@/lib/v7/security/local-studio-client';
 
 type Shot={id:string;title:string;action:string;editSeconds:number;
  promptText:string;promptHash:string;estimateUsd:number;
- status:string;taskKnown:boolean;videoReady:boolean;referenceShotId:string|null;error:string|null;
+ status:string;taskKnown:boolean;videoReady:boolean;referenceShotId:string|null;error:string|null;imageReady:boolean;
  voiceCode?:string|null;dialog?:string|null};
 type Board={ok:boolean;enabled:boolean;configured:boolean;seedReady:boolean;shots:Shot[];
  reservedUsd:number;maxSceneUsd:number;estimatedUsdPerShot:number;durationSeconds:number};
@@ -13,7 +14,7 @@ const wait=(ms:number)=>new Promise<void>(resolve=>setTimeout(resolve,ms));
 export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
  const endpoint='/api/v7/films/'+encodeURIComponent(filmId)+'/runway-scene02';
  const [board,setBoard]=useState<Board|null>(null);
- const [token,setToken]=useState('');
+ const [shotImages,setShotImages]=useState<Record<string,File|null>>({});
  const [allowSpend,setAllowSpend]=useState(false);
  const [busy,setBusy]=useState(false);
  const [detail,setDetail]=useState('');
@@ -21,6 +22,7 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
  const [seedImage,setSeedImage]=useState<File|null>(null);
  const [seedUploading,setSeedUploading]=useState(false);
  const [seedMessage,setSeedMessage]=useState('');
+ const [pairNotice,setPairNotice]=useState('');
  const running=useRef(false);
  const cancel=useRef(false);
  const refresh=useCallback(async()=>{
@@ -31,14 +33,16 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
   return data;
  },[endpoint]);
  useEffect(()=>{
+  void ensureLocalStudioSession().then(()=>setPairNotice('Sesión local lista. No necesitas token.'))
+   .catch(e=>setPairNotice(e instanceof Error?e.message:String(e)));
   void refresh().catch(e=>setError(String(e)));
   const timer=setInterval(()=>{if(!running.current)void refresh().catch(()=>undefined);},14000);
   return ()=>{cancel.current=true;clearInterval(timer);};
  },[refresh]);
  async function request(action:'preflight'|'submit'|'resume',shotId:string,shot?:Shot){
-  const response=await fetch(endpoint,{method:'POST',
-   headers:action==='preflight'?{'Content-Type':'application/json'}:
-    {'Content-Type':'application/json',Authorization:'Bearer '+token},
+  await ensureLocalStudioSession();
+  const response=await fetch(endpoint,{method:'POST',credentials:'same-origin',
+   headers:{'Content-Type':'application/json'},
    body:JSON.stringify({action,shotId,...(action==='submit'?{
     confirmHuman:true,explicitSpendConsent:true,approvedUsd:0.5,
     promptHash:shot?.promptHash}:{})})});
@@ -47,18 +51,36 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
   return body;
  }
  async function uploadSeed(){
-  if(!seedImage||!token){setError('Selecciona una imagen inicial e introduce tu token.');return;}
+  if(!seedImage){setError('Selecciona una imagen inicial de la casa.');return;}
   setSeedUploading(true);setError('');
   try{
    const form=new FormData();form.set('action','upload-seed');form.set('image',seedImage);
-   const response=await fetch(endpoint,{method:'POST',
-    headers:{Authorization:'Bearer '+token},body:form});
+   await ensureLocalStudioSession();
+   const response=await fetch(endpoint,{method:'POST',credentials:'same-origin',body:form});
    const answer=await response.json() as {ok?:boolean;error?:string};
    if(!response.ok||!answer.ok)throw Error(answer.error||'No se guardó la imagen.');
    setSeedMessage('Imagen inicial guardada. Runway puede comenzar E02-P01.');
    setSeedImage(null);await refresh();
   }catch(e){setError(e instanceof Error?e.message:String(e));}
   finally{setSeedUploading(false);}
+ }
+ async function uploadShotImage(id:string){
+  const file=shotImages[id];
+  if(!file){setError('Selecciona una imagen JPG, PNG o WebP para '+id+'.');return;}
+  if(file.size<3000||file.size>4000000){
+   setError('La imagen de '+id+' debe pesar entre 3 KB y 4 MB.');return;
+  }
+  setError('');setSeedMessage('Guardando imagen de '+id+'…');
+  try{
+   await ensureLocalStudioSession();
+   const form=new FormData();
+   form.set('action','upload-shot-image');form.set('shotId',id);form.set('image',file);
+   const response=await fetch(endpoint,{method:'POST',credentials:'same-origin',body:form});
+   const payload=await response.json() as {ok?:boolean;error?:string};
+   if(!response.ok||!payload.ok)throw Error(payload.error||'No se pudo guardar la imagen.');
+   setSeedMessage(id+' · Imagen cinematográfica guardada sin costo.');
+   await refresh();
+  }catch(e){setError(e instanceof Error?e.message:String(e));}
  }
  async function preflight(id:string){
   try{
@@ -67,7 +89,7 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
   }catch(e){setError(String(e));}
  }
  async function resume(id:string){
-  if(!token){setError('Pega el token administrativo para recuperar la tarea.');return;}
+  await ensureLocalStudioSession();
   try{
    setError('');const r=await request('resume',id);
    setDetail(id+': '+r.status+'. Sin una nueva generación.');
@@ -75,7 +97,7 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
   }catch(e){setError(String(e));}
  }
  async function produceAll(){
-  if(running.current||!board?.enabled||!board.seedReady||!token||!allowSpend)return;
+  if(running.current||!board?.enabled||!board.seedReady||!allowSpend)return;
   const notStarted=board.shots.filter(s=>s.status==='not-started');
   const budget=Number((notStarted.length*.5).toFixed(2));
   if(budget+board.reservedUsd>board.maxSceneUsd+0.001){
@@ -148,10 +170,10 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
    'RUNWAYML_API_SECRET no configurada: el panel puede preparar pero no generar.'}
    Ninguna solicitud pagada se inicia automáticamente por abrir esta página.
   </div>
-  <input className="mt-3 w-full rounded-lg border border-white/20 bg-slate-950 p-3 text-sm"
-   aria-label="Token administrativo de Runway" type="password" autoComplete="off"
-   placeholder="Token administrativo local (el mismo de ViralCine)" value={token}
-   onChange={e=>setToken(e.target.value)}/>
+  <p className="mt-3 rounded-lg border border-emerald-400/20 p-3 text-sm text-emerald-200">
+   Sesión administrativa automática · {pairNotice||'Conectando al estudio local…'}
+   No escribas ni pegues el token.
+  </p>
   <div className="mt-4 rounded-xl border border-violet-400/25 p-4">
     <strong className="text-sm">Imagen inicial de E02 · Mesa familiar y vivienda</strong>
     <p className="mt-1 text-xs text-slate-300">Runway necesita una imagen inicial.
@@ -165,7 +187,7 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
       aria-label="Imagen inicial de la Escena 02"
       onChange={e=>setSeedImage(e.target.files?.[0]||null)} className="text-xs"/>
      <button className="button-secondary" type="button"
-      disabled={!seedImage||!token||seedUploading}
+      
       onClick={()=>void uploadSeed()}>{seedUploading?'Guardando…':'Guardar imagen · Gratis'}</button>
     </div>}
     {seedMessage&&<p className="mt-2 text-xs text-emerald-200" role="status">{seedMessage}</p>}
@@ -176,7 +198,7 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
    Autorizo hasta US$ {outstandingCost.toFixed(2)} para los {outstanding.length} clips pendientes, sin reintentos pagados
   </label>
   <button className="button-primary mt-3" type="button" onClick={()=>void produceAll()}
-   disabled={busy||!token||!allowSpend||!board?.enabled||!board?.seedReady||!outstanding.length||
+   disabled={busy||!allowSpend||!board?.enabled||!board?.seedReady||!outstanding.length||
     (board?board.reservedUsd+outstandingCost>board.maxSceneUsd+0.001:true)}>
    {busy?'Generando y recuperando clips…':'Producir bloques faltantes con Runway'}
   </button>
@@ -202,11 +224,28 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
       Preparar sin costo
      </button>
      {s.taskKnown&&<button className="button-secondary text-xs" type="button"
-       disabled={!token||busy} onClick={()=>void resume(s.id)}>
+       disabled={busy} onClick={()=>void resume(s.id)}>
        <RefreshCcw className="mr-1 inline h-4 w-4"/> Recuperar misma tarea
       </button>}
      {s.videoReady&&<span className="inline-flex items-center gap-1 text-xs text-emerald-200">
        <CheckCircle2 className="h-4 w-4"/> MP4 guardado</span>}
+    </div>
+    <div className="mt-3 rounded-lg border border-violet-400/20 p-3">
+     <p className="text-xs font-semibold text-slate-200">
+      Imagen propia para {s.id}: {s.imageReady?'Guardada y lista':'Pendiente de subir'}
+     </p>
+     <div className="mt-2 flex flex-wrap items-center gap-2">
+      <input type="file" accept="image/jpeg,image/png,image/webp"
+       aria-label={'Imagen para '+s.id} className="max-w-[300px] text-xs"
+       onChange={e=>setShotImages(old=>({...old,[s.id]:e.target.files?.[0]||null}))}/>
+      <button className="button-secondary text-xs" type="button"
+       onClick={()=>void uploadShotImage(s.id)}>
+       {s.imageReady?'Verificar o actualizar imagen':'Subir imagen · Gratis'}
+      </button>
+     </div>
+     <p className="mt-1 text-xs text-slate-400">
+      El botón siempre responde. Si la toma ya tiene un render, se explica por qué no se puede sustituir.
+     </p>
     </div>
     {s.error&&<p className="mt-2 text-xs text-amber-200">{s.error}</p>}
    </div>)}
