@@ -32,6 +32,7 @@ on:
       - fix/v7-e02-auto-local-session
       - fix/v7-loopback-origin-compat
       - feat/v7-autonomous-director-foundation
+      - feat/v8-e02-durable-autonomy-worker
   pull_request:
     branches:
       - feat/v7-dos-toques-p01-artistic-approval
