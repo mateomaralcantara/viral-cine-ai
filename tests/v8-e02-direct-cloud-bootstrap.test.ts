@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
+// @ts-ignore Standalone .mjs has no TS declarations; only pure helpers imported.
 import {jpegDimensions,parseEnv} from '../scripts/sync-e02-refs-cloud.mjs';
 
 test('direct E02 bootstrap reads only local .env values and preserves Unicode in quotes',()=>{
