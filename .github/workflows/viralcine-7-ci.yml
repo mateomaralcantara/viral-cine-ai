@@ -35,6 +35,7 @@ on:
       - feat/v8-e02-durable-autonomy-worker
       - feat/v8-e02-runway-only
       - feat/v8-credit-only-agent-autopilot
+      - feat/v8-e02-supabase-photo-autosave
   pull_request:
     branches:
       - feat/v7-dos-toques-p01-artistic-approval
