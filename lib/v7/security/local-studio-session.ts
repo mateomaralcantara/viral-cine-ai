@@ -20,7 +20,7 @@ export function localOriginAllowed(request:Request){
  try{source=new URL(origin);}
  catch{return false;}
  if(source.protocol!=='http:'||!localhost.has(source.hostname)||
-    source.port!==target.port||
+    source.port!==(process.env.V7_STUDIO_LOCAL_PORT||'3010')||
     source.username||source.password||source.pathname!=='/'||
     source.search||source.hash)return false;
  return true;
