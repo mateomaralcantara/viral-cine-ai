@@ -21,7 +21,8 @@ async function validFilm(ctx:Ctx){
 }
 export async function GET(req:Request,ctx:Ctx){
  if(!localOriginAllowed(req))return failure(403,'Solo estudio local.');
- if(!localAdminAuthorized(req))return failure(403,'Sesión local no autorizada.');
+ // Read-only status is available to the same-origin localhost studio.
+ // POST and any writes continue requiring a private admin session.
  try{
   await validFilm(ctx);
   return NextResponse.json(await approvedE02References(),{
