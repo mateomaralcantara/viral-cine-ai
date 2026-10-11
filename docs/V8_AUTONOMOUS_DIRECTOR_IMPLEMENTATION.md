@@ -11,6 +11,28 @@
 - El runner actual `scripts/worker-v7.ts` todavía es un placeholder `SAFE_FOUNDATION`. El plan `scene-family-engine.ts` tiene 12 familias pero no ejecuta en background.
 - El Supabase `wrxeerltoapvybhaxlmu` está operativo, con esquemas como `generation_jobs`, `provider_tasks`, `spend_ledger`, `incidents` y `repair_plans`, pero no hay cola de escenas E02 alimentada ni Edge Functions desplegadas. Los MP4/JPG actuales son locales, no se han migrado.
 
+## Restricción vigente: Avatares excluido
+
+**Decisión del director:** Avatares NO participa todavía. El worker, el router de
+medios y las familias de agentes de ViralCine no deben llamar a ninguna API,
+generación, sincronización, librería de imágenes, librería de voces ni scraping
+de Avatares. No se solicitarán claves ni despliegues de Avatares. El módulo
+`media-source-policy.ts` deniega expresamente ese origen, incluso si alguien
+configura variables de entorno.
+
+Para estas escenas las entradas válidas son exclusivamente **fotos entregadas
+por el director y recursos ya guardados en ViralCine**; el motor visual puede
+ser Runway u otro proveedor que el director apruebe, sujeto a saldo y presupuesto.
+Las voces y música se gestionan independientemente en ViralCine, usando recursos
+propios con derechos o proveedores de audio aprobados. No existe todavía la
+integración automática de esos servicios en el worker. Ningún proveedor alterno
+se seleccionará silenciosamente tras una falla o falta de créditos.
+
+**La integración futura de Avatares será otro proyecto/fase**, con su propia
+autorización explícita, contrato API, QA, licencia y pruebas. No forma parte de
+las dependencias críticas de las 80 escenas. El autónomo de ViralCine
+debe funcionar sin Avatares.
+
 ## Resultado requerido
 
 El director entrega imágenes, guion, decisiones artísticas y autorización de presupuesto. **No arranca servidores, no consulta manualmente operaciones, no escribe tokens, no vuelve a subir MP4 y no aprueba cincuenta pasos técnicos.**
@@ -22,7 +44,7 @@ El director entrega imágenes, guion, decisiones artísticas y autorización de 
 3. **Object storage permanente**: buckets privados para referencias, fotogramas, voces, MP4 y masters; no depender de `C:\Users\...` ni de `.data` en el frontend. El worker recupera el artefacto exacto por hash y versión.
 4. **Worker real 24/7 en servidor propio o gestionado** (por ejemplo Cloud Run Jobs/servicio con scheduler o un contenedor de larga vida), desplegado explícitamente. Procesa colas con lease, heartbeats, reintentos **solo locales/gratuitos** y checkpoints. Next.js y Vercel solo proporcionan UI/API; no usar un request HTTP largo como worker.
 5. **Router de proveedores**: comprueba saldo/cuota, autenticación, precio, modelo y capacidad. Si Runway devuelve 400 sin saldo, marca `blocked-credits` y deja toda la escena en HOLD; no reenvía ni salta a un proveedor caro por su cuenta.
-6. **Familias de agentes**: casting/imagen/continuidad/voz/producción/QA/reparación/edición/finanzas bajo un único supervisor; agentes producen evidencias y decisiones, no llamadas pagadas implícitas.
+6. **Familias de agentes internas de ViralCine**: casting/imagen/continuidad/voz/producción/QA/reparación/edición/finanzas bajo un único supervisor, usando archivos existentes y proveedores autorizados; **sin Avatares**, sus APIs, ni su librería de voces/imágenes; agentes producen evidencias y decisiones, no llamadas pagadas implícitas.
 7. **Director humano**: consultas solo para faltantes (fotos, guion, derechos), presupuesto/provider nuevo o validación artística. El supervisor puede recomendar aprobación asistida por QA; jamás sustituir una aprobación creativa solicitada.
 
 ### Estados canónicos y recuperación
