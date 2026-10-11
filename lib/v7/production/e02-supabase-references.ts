@@ -1,4 +1,3 @@
-import 'server-only';
 import {createHash} from 'node:crypto';
 import {readFile,writeFile,mkdir,stat} from 'node:fs/promises';
 import path from 'node:path';
