@@ -5,13 +5,13 @@
   "type": "module",
   "description": "ViralCine 7 Feature Film OS: creación audiovisual modular para cortos y largometrajes con continuidad, Voice DNA, QA, versionado y producción segura.",
   "scripts": {
-    "dev": "next dev --webpack",
+    "dev": "next dev --webpack --hostname 127.0.0.1 --port 3010",
     "worker": "node --import tsx scripts/worker-v7.ts",
     "worker:v8": "node --import tsx scripts/worker-v8.ts",
-    "studio": "next dev --webpack",
+    "studio": "next dev --webpack --hostname 127.0.0.1 --port 3010",
     "build": "next build",
-    "start": "next start",
-    "studio:prod": "next start",
+    "start": "next start --hostname 127.0.0.1 --port 3010",
+    "studio:prod": "next start --hostname 127.0.0.1 --port 3010",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts",
     "smoke": "node --import tsx scripts/smoke-pipeline.ts",
@@ -100,7 +100,8 @@
     "studio:v6-legacy": "concurrently -n WEB,WORKER -c cyan,magenta \"next dev --webpack\" \"node --import tsx scripts/worker.ts\"",
     "studio:prod:v6-legacy": "concurrently -n WEB,WORKER -c cyan,magenta \"next start\" \"node --import tsx scripts/worker.ts\"",
     "migrate:v7": "node --import tsx scripts/migrate-v6-to-v7.ts",
-    "verify:v7": "npm run typecheck && npm test && npm run build"
+    "verify:v7": "npm run typecheck && npm test && npm run build",
+    "dev:v8": "next dev --webpack --hostname 127.0.0.1 --port 3010"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",
