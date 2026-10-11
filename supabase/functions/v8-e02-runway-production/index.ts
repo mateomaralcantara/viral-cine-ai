@@ -62,7 +62,9 @@ Deno.serve(async (request:Request):Promise<Response>=>{
   const p=policyRows[0] as Row|undefined;
   if(!p||p.video_provider!=="runway"||p.director_mode!=="credits-only"||
     p.avatares_enabled!==false)return fail("blocked-policy");
-  const runwayKey=Deno.env.get("RUNWAYML_API_SECRET")||"";
+  // Runway secret is stored encrypted in Supabase Vault from the owner frontend.
+  // Server-side only; never returned to the browser.
+  const runwayKey=(await api("/rest/v1/rpc/v8_e02_get_runway_secret","POST"))||"";
   // Reconcile first: known tasks are never resubmitted and have first priority.
   const reservations=await api("/rest/v1/v8_e02_runway_reservations?film_id=eq."+
    FILM+"&select=id,shot_id,state,provider_task_id,reference_sha256&order=shot_id.asc");
@@ -132,6 +134,23 @@ Deno.serve(async (request:Request):Promise<Response>=>{
      runwayKeyConfigured:runwayKey.length>=8,providerBalanceConfirmed:p.provider_balance_confirmed===true
     });
   if(runwayKey.length<8)return fail("blocked-runway-key",{runwayKeyConfigured:false});
+  // Recheck REAL Runway API project credit balance before each billable POST.
+  // The DB flag alone is not a substitute for a provider GET /v1/organization.
+  let realBalance:number|null=null;
+  try{
+   const balanceResponse=await fetch(RUNWAY+"/v1/organization",{
+    headers:{"Authorization":"Bearer "+runwayKey,"X-Runway-Version":"2024-11-06"},
+    signal:AbortSignal.timeout(12000),cache:"no-store"
+   });
+   if(!balanceResponse.ok)return fail("blocked-provider-balance-http-"+balanceResponse.status);
+   const balanceJson=await balanceResponse.json();
+   realBalance=Number(balanceJson.creditBalance);
+  }catch{return fail("blocked-provider-balance-unverified");}
+  if(!Number.isFinite(realBalance)||realBalance===null||realBalance<50)
+    return fail("blocked-provider-insufficient-credits",{
+      availableCredits:Number.isFinite(realBalance)?realBalance:null,
+      requiredPerShot:50
+    });
   const shots=await api("/rest/v1/v8_e02_render_intents?film_id=eq."+
    FILM+"&scene_id=eq.E02&select=shot_id,state,reference_sha256,reference_bucket,reference_path,prompt_text,duration_seconds,runway_model,output_ratio,runway_task_id&order=shot_id.asc");
   if(!Array.isArray(shots)||shots.length!==7)return fail("incomplete-shot-manifest");
