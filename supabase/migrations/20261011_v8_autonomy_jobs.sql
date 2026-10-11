@@ -61,6 +61,13 @@ begin
     raise exception 'invalid lease';
   end if;
 
+  -- Expired lease on the final allowed attempt must not leave a job
+  -- permanently stuck in RUNNING. The next tick records terminal failure.
+  update public.v8_autonomy_jobs
+   set state='failed',lock_token=null,lease_until=null,updated_at=now(),
+    last_error='Lease expired after maximum free retry attempts'
+   where state='running' and lease_until<now() and attempt>=max_attempts;
+
   select * into chosen
   from public.v8_autonomy_jobs
   where
