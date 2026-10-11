@@ -64,7 +64,9 @@ export async function POST(req:Request,ctx:Ctx){
  if(!E02_SHOTS.some(s=>s.id===id))return failure(400,'Toma inválida.');
  if(!['image/jpeg','image/png','image/webp'].includes(type))
   return failure(415,'Selecciona JPG, PNG o WebP.');
- const filename=(req.headers.get('x-v7-filename')||id+'.jpg').slice(0,240);
+ let filename=id+'.jpg';
+ try{filename=decodeURIComponent(req.headers.get('x-v7-filename')||filename).slice(0,240);}
+ catch{return failure(400,'Nombre de archivo inválido.');}
  try{
   const bytes=Buffer.from(await req.arrayBuffer());
   const result=await uploadAndApproveE02Reference(id,bytes,filename);
