@@ -65,7 +65,7 @@ test('Local studio session requires startup secret; cannot be forged or used fro
   });
   assert.equal(hasLocalSession(crossSite,1750000001),false);
   const tampered=new Request('http://127.0.0.1:3010/api/v7/films/test',{
-   headers:{cookie:LOCAL_SESSION_COOKIE+'='+issued!.value.slice(0,-1)+'0'}
+   headers:{cookie:LOCAL_SESSION_COOKIE+'='+issued!.value.slice(0,-1)+(issued!.value.endsWith('0')?'1':'0')}
   });
   assert.equal(hasLocalSession(tampered,1750000001),false);
  }finally{
