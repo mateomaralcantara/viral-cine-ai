@@ -10,6 +10,7 @@ import {v7FilmRoot} from '@/lib/v7/storage/film-store';
 import {E02_FILM_ID,E02_SHOTS,e02Shot,E02_MAX_USD,E02_COST_PER_SHOT} from '@/lib/v7/production/dos-toques-e02-shot-packets';
 import sharp from 'sharp';
 import {resolveV7ShotVideo} from '@/lib/v7/production/shot-video-source';
+import {e02CloudConfigured,getApprovedE02Image,approvedE02References} from '@/lib/v7/production/e02-supabase-references';
 
 const command=promisify(execFile);
 export const RUNWAY_MODEL='gen4_turbo';
@@ -160,6 +161,19 @@ export async function saveE02Seed(bytes:Buffer){
  return {seedReady:true,bytes:result.length};
 }
 async function nearestReference(id:string){
+ if(e02CloudConfigured()){
+  const approved=await getApprovedE02Image(id);
+  if(!approved)throw Error(id+': primero guarda y aprueba la fotografía en Supabase.');
+  const file=path.join(shotDir(id),id+'-cloud-approved-'+approved.hash+'.jpg');
+  await mkdir(shotDir(id),{recursive:true});
+  if(!(await fileExists(file))){
+   try{await writeFile(file,approved.bytes,{flag:'wx',mode:0o600});}
+   catch(e){if((e as NodeJS.ErrnoException).code!=='EEXIST')throw e;}
+  }
+  if(await hashFile(file)!==approved.hash)
+   throw Error('La copia local no coincide con la referencia aprobada en Supabase.');
+  return {shotId:id+'-CLOUD',file,sha256:approved.hash,still:true};
+ }
  // A director-supplied image takes precedence for its own shot. This allows
  // seven independent storyboard frames and avoids identity drift.
  const own=shotImagePath(id);
@@ -235,6 +249,10 @@ async function runwayRequest(endpoint:string,init:RequestInit){
 }
 export async function submitRunwayShot(id:string,confirmHash:string,approvedUsd:number){
  validShot(id);
+ if(!e02CloudConfigured())throw new Error('Supabase no está configurado: bloqueada la generación hasta guardar las fotos en la nube.');
+ const approved=await approvedE02References();
+ if(!approved.referencesReady)
+  throw new Error('Escena 02: faltan fotografías aprobadas en Supabase (se requieren siete).');
  if(!runwayEnabled())throw new Error('Runway no está habilitado o falta su clave.');
  const prompt=promptFor(id);
  if(confirmHash!==sha(prompt)||approvedUsd!==RUNWAY_SHOT_USD)
