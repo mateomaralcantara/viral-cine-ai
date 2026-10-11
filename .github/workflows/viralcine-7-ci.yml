@@ -33,6 +33,7 @@ on:
       - fix/v7-loopback-origin-compat
       - feat/v7-autonomous-director-foundation
       - feat/v8-e02-durable-autonomy-worker
+      - feat/v8-e02-runway-only
   pull_request:
     branches:
       - feat/v7-dos-toques-p01-artistic-approval
