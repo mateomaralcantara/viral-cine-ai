@@ -158,6 +158,7 @@ export default function V7StudioHome() {
               historia, casting, voces, música, continuidad, producción, QA y master.
             </p>
           </div>
+          <a href="/v8" className="inline-flex items-center gap-2 rounded-2xl border border-violet-400/40 bg-violet-500/20 px-4 py-3 text-sm font-black text-violet-200 hover:bg-violet-500/30">🎬 PANEL DE PRODUCCIÓN V8 · ESCENA 02 <ArrowRight className="h-4 w-4" /></a>
           <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/[.08] px-4 py-3 text-sm font-bold text-emerald-300">
             <ShieldCheck className="mr-2 inline h-4 w-4" />
             CREAR PROYECTO = US$0
