@@ -8,6 +8,7 @@
  */
 import {executeFreeAutonomyJob,type FreeAutonomyJob,type ReferencedObject,
  type AutonomyDependencies} from '../lib/v7/orchestration/v8-free-autonomy-runner';
+import type {AutopilotPolicy} from '../lib/v7/orchestration/v8-credit-only-autopilot';
 
 const enabled=process.env.V8_AUTONOMY_ENABLED==='true';
 const serviceUrl=(process.env.SUPABASE_URL||process.env.V8_SUPABASE_URL||'').replace(/\/$/,'');
@@ -42,6 +43,31 @@ async function rpc<T>(name:string,body:unknown):Promise<T>{
 }
 
 const deps:AutonomyDependencies={
+ async getCreditOnlyPolicy(filmId:string):Promise<AutopilotPolicy|null>{
+  const url='/rest/v1/v8_film_autonomy_policy?film_id=eq.'+
+   encodeURIComponent(filmId)+'&select=*';
+  const r=await request(url,'GET');
+  if(!r.ok)throw Error('Política de autonomía de Supabase HTTP '+r.status);
+  const rows=await r.json() as Array<{
+   director_mode:string;video_provider:string;avatares_enabled:boolean;
+   max_free_repairs_per_shot:number;max_paid_renders_per_shot:number;
+   authorized_spend_usd:number|string;spent_or_reserved_usd:number|string;
+   provider_balance_confirmed:boolean;
+  }>;
+  if(!rows?.length)return null;
+  const p=rows[0];
+  if(p.director_mode!=='credits-only'||p.video_provider!=='runway'||
+     p.avatares_enabled!==false)throw Error('Política del director inválida.');
+  return {
+   provider:'runway',avatares:false,directorInteraction:'credits-only',
+   maxFreeRepairs:p.max_free_repairs_per_shot,
+   maxPaidRendersPerShot:p.max_paid_renders_per_shot,
+   pricePerRenderUsd:0.5,
+   authorizedRemainingUsd:Math.max(0,Number(p.authorized_spend_usd)-
+    Number(p.spent_or_reserved_usd)),
+   creditBalanceConfirmed:p.provider_balance_confirmed===true
+  };
+ },
  async verifyStoredAsset(file:ReferencedObject){
   const bucket=encodeURIComponent(file.bucket);
   const key=file.path.split('/').map(encodeURIComponent).join('/');
