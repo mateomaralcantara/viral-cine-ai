@@ -36,6 +36,7 @@ on:
       - feat/v8-e02-runway-only
       - feat/v8-credit-only-agent-autopilot
       - feat/v8-e02-supabase-photo-autosave
+      - feat/v8-e02-direct-cloud-bootstrap
   pull_request:
     branches:
       - feat/v7-dos-toques-p01-artistic-approval
@@ -92,6 +93,9 @@ jobs:
         run: |
           node --check scripts/finalizar-15-dias-4min.mjs
           node -e "import('sharp').then(() => console.log('LOCAL_EXPORTER_SHARP_READY=YES'))"
+
+      - name: Check independent E02 cloud migration
+        run: node --check scripts/sync-e02-refs-cloud.mjs
 
       - name: Typecheck V6 + V7
         run: npm run typecheck

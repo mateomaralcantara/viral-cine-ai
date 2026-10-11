@@ -47,6 +47,37 @@ if (-not $env:RUNWAYML_API_SECRET) {
     }
   }
 }
+# Supabase E02: load the existing private service key only into process memory.
+# This enables the cloud-approved reference panel after the one-time migration.
+foreach ($name in @('SUPABASE_SERVICE_ROLE_KEY','SUPABASE_SECRET_KEY','SUPABASE_URL','NEXT_PUBLIC_SUPABASE_URL')) {
+  if ([Environment]::GetEnvironmentVariable($name,'Process')) { continue }
+  foreach ($file in @(
+    (Join-Path $root '.env.local'),
+    (Join-Path $integration '.env.local'),
+    (Join-Path $v6 '.env.local')
+  )) {
+    if (!(Test-Path -LiteralPath $file)) { continue }
+    $line = Get-Content -LiteralPath $file | Where-Object {
+      $_ -match ('^\s*' + [regex]::Escape($name) + '\s*=')
+    } | Select-Object -Last 1
+    if ($line) {
+      $value = $line.Substring($line.IndexOf('=')+1).Trim().Trim([char]34,[char]39)
+      if ($value) {
+        [Environment]::SetEnvironmentVariable($name,$value,'Process')
+        break
+      }
+    }
+  }
+}
+if (-not $env:SUPABASE_URL -and -not $env:NEXT_PUBLIC_SUPABASE_URL) {
+  $env:SUPABASE_URL = 'https://wrxeerltoapvybhaxlmu.supabase.co'
+}
+if ($env:SUPABASE_SERVICE_ROLE_KEY -or $env:SUPABASE_SECRET_KEY) {
+  Write-Host 'Supabase E02: credenciales privadas cargadas; fotos aprobadas desde la nube.' -ForegroundColor Green
+} else {
+  Write-Host 'Supabase E02: falta clave de servicio en los .env.local existentes.' -ForegroundColor Yellow
+}
+
 # Global provider switches remain disabled; ONLY per-shot E01 route may submit
 # after explicit auth, a per-shot paid confirmation, and an immutable reservation.
 $env:PRODUCTION_MODE = 'real'

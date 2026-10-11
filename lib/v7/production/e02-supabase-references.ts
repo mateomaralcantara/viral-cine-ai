@@ -33,8 +33,11 @@ export function e02CloudConfigured(){
 }
 async function supabase(pathname:string,init:RequestInit){
  const {url,secret}=config();
+ // Supabase JWT service-role keys use Authorization: Bearer. New sb_secret_
+ // keys authenticate via apikey; they are NOT valid JWT bearer tokens.
  return fetch(url+pathname,{...init,headers:{
-  apikey:secret,Authorization:'Bearer '+secret,
+  apikey:secret,
+  ...(secret.startsWith('eyJ')?{Authorization:'Bearer '+secret}:{}),
   ...(init.headers||{})},cache:'no-store',signal:AbortSignal.timeout(30000)});
 }
 function assertShot(id:string){
