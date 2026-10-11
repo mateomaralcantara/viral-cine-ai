@@ -1,5 +1,5 @@
 import {NextResponse} from 'next/server';
-import {localOriginAllowed,localAdminAuthorized} from '@/lib/v7/security/local-studio-session';
+import {localOriginAllowed} from '@/lib/v7/security/local-studio-session';
 import {E02_FILM_ID,E02_SHOTS} from '@/lib/v7/production/dos-toques-e02-shot-packets';
 import {getApprovedE02Image} from '@/lib/v7/production/e02-supabase-references';
 import {readV7FilmBundle} from '@/lib/v7/storage/film-store';
@@ -12,12 +12,12 @@ const fail=(status:number,message:string)=>NextResponse.json(
 
 /**
  * Images remain in PRIVATE Supabase Storage. Only the existing,
- * authenticated local studio on localhost:3010 can preview them.
+ * read-only local studio on localhost:3010 can preview them.
  * No public bucket, shared service key, cloud copy, or paid generation.
  */
 export async function GET(request:Request,{params}:Params){
- if(!localOriginAllowed(request)||!localAdminAuthorized(request))
-  return fail(403,'Vista privada: primero inicia la sesión del estudio local.');
+ if(!localOriginAllowed(request))
+  return fail(403,'Las fotografías solo pueden verse desde localhost.');
  const {filmId,shotId}=await params;
  if(filmId!==E02_FILM_ID||!E02_SHOTS.some(s=>s.id===shotId))
   return fail(404,'La fotografía no pertenece a E02.');
