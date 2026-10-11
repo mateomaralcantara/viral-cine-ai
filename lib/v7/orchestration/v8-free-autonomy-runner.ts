@@ -75,7 +75,9 @@ export async function executeFreeAutonomyJob(
    const knownError=payload.lastError;
    if(typeof knownError==='string'&&/not (?:have )?enough credits|insufficient balance/i.test(knownError))
     return {state:'waiting-provider',result:{reason:'Proveedor sin créditos. Sin envíos automáticos.'}};
-   if(typeof provider!=='string'||typeof taskId!=='string'||!taskId.trim())
+   if(provider!=='runway')return {state:'waiting-provider',
+    result:{reason:'El director ha seleccionado exclusivamente Runway para esta fase. No se usará otro proveedor.'}};
+   if(typeof taskId!=='string'||!taskId.trim())
     return {state:'waiting-provider',result:{reason:'Sin ID verificable de tarea. No se puede reenviar.'}};
    const task=await deps.reconcileExistingTask(provider,taskId);
    const status=task.status.toLowerCase();
