@@ -98,7 +98,7 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
   await ensureLocalStudioSession();
   const response=await fetch(cloudEndpoint,{method:'POST',
    credentials:'same-origin',
-   headers:{'Content-Type':file.type,'X-V7-Shot-ID':id,'X-V7-Filename':file.name},
+   headers:{'Content-Type':file.type,'X-V7-Shot-ID':id,'X-V7-Filename':encodeURIComponent(file.name)},
    body:file,cache:'no-store'});
   // The Next.js proxy or the server may return an empty 4xx/5xx response.
   // Never report "Unexpected end of JSON input" to the artist.
