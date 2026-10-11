@@ -1,3 +1,5 @@
+import {authorizeMediaSource,type MediaSource} from '@/lib/v7/orchestration/media-source-policy';
+
 /**
  * Director IA, fase 0: determinista y de solo lectura.
  * Decision next step for any scene WITHOUT submitting a provider request.
@@ -32,10 +34,14 @@ export function decideNextSceneStep(input:{
  sceneAssembled:boolean;
  sceneApproved:boolean;
  providerAvailable:boolean;
+ mediaSource?:MediaSource; // defaults to director supplied or already stored references
  estimatedUsdPerClip:number;
 }):DirectorNext {
  const {shots}=input;
  if(shots.length===0)return {action:'blocked-unknown',shotId:'scene',message:'No hay tomas definidas.'};
+ const source=authorizeMediaSource(input.mediaSource??'existing-film-assets');
+ if(!source.allowed)return {action:'ask-director',question:{kind:'reference',
+  message:source.reason+' La producción puede continuar con las fotos guardadas por el director.'}};
  // Any known credit failure is a GLOBAL HOLD for this provider. Never allow
  // later shots to submit simply because those shots have images.
  const blocked=shots.find(s=>s.status==='blocked-credits'||s.status==='blocked-credentials');
