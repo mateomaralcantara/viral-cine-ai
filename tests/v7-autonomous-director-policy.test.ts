@@ -78,6 +78,7 @@ test('Runway no-credit errors are recorded as blocked, not charged or silently r
  assert.match(engine,/new RunwayKnownRejection\('blocked-credits'/);
  assert.match(engine,/record\.status=e instanceof RunwayKnownRejection\?e\.kind:'failed-unknown'/);
  assert.match(engine,/isLegacyCreditRejection\(r\)/);
+ assert.match(engine,/sceneRecords\.some\(r=>r&&\['blocked-credits','blocked-credentials'\]/);
  assert.match(engine,/reservedUsd|runwayReservedUsd/);
  assert.match(panel,/blockedCredits/);
  assert.match(panel,/providerBlocked\|\|!allowSpend/);
