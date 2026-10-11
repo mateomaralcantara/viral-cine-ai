@@ -1,5 +1,6 @@
 import {createHash,randomUUID} from 'node:crypto';
 import {localAdminAuthorized} from '@/lib/v7/security/local-studio-session';
+import {classifyRunwaySubmitError,RunwayKnownRejection,isLegacyCreditRejection} from '@/lib/v7/orchestration/provider-failure-policy';
 import {execFile} from 'node:child_process';
 import {createReadStream} from 'node:fs';
 import {mkdir,readFile,writeFile,rename,open,unlink,stat,link} from 'node:fs/promises';
@@ -20,7 +21,7 @@ const headerVersion='2024-11-06';
 const base='https://api.dev.runwayml.com/v1';
 export type RunwayRecord={
  schemaVersion:1; filmId:string;shotId:string;provider:'runway';model:'gen4_turbo';
- status:'reserved'|'submitted'|'processing'|'review-required'|'failed-unknown';
+ status:'reserved'|'submitted'|'processing'|'review-required'|'failed-unknown'|'blocked-credits'|'blocked-credentials';
  taskId?:string;candidateName?:string;referenceShotId:string;referenceSha256:string;
  referenceImageName:string;promptHash:string;promptText:string;
  durationSeconds:10;estimatedUsd:0.5;
@@ -52,12 +53,18 @@ export async function readRunwayRecord(id:string):Promise<RunwayRecord|null>{
   if(r.filmId!==E02_FILM_ID||r.shotId!==id||r.provider!=='runway'||r.model!==RUNWAY_MODEL||
      r.durationSeconds!==10||r.estimatedUsd!==0.5)
     throw new Error('Registro Runway no coincide con el proyecto.');
+  // Read-only normalization: old Runway 400/no-credit records are definitive
+  // provider rejections, not unresolved paid generations. Keep their audit
+  // bytes intact on disk while surfacing the correct state in the UI.
+  if(isLegacyCreditRejection(r))return {...r,status:'blocked-credits'};
   return r;
  }catch(e){if((e as NodeJS.ErrnoException).code==='ENOENT')return null;throw e;}
 }
 export async function runwayReservedUsd(){
  const records=await Promise.all(E02_SHOTS.map(s=>readRunwayRecord(s.id)));
- return Number(records.reduce((total,r)=>total+(r?.estimatedUsd??0),0).toFixed(2));
+ return Number(records.reduce((total,r)=>
+  total+(r&&!['blocked-credits','blocked-credentials'].includes(r.status)
+   ?r.estimatedUsd:0),0).toFixed(2));
 }
 async function update(record:RunwayRecord){
  const dest=runwayRecordPath(record.shotId),tmp=dest+'.'+randomUUID()+'.tmp';
@@ -211,8 +218,19 @@ async function runwayRequest(endpoint:string,init:RequestInit){
   ...init.method==='POST'?{'Content-Type':'application/json'}:{}};
  const response=await fetch(base+endpoint,{...init,headers,cache:'no-store',signal:AbortSignal.timeout(30000)});
  const data=await response.json() as Record<string,unknown>;
- if(!response.ok)throw new Error('Runway API '+response.status+': '+
-  safeError(typeof data.error==='string'?data.error:JSON.stringify(data).slice(0,180)));
+ if(!response.ok){
+  const detail=safeError(typeof data.error==='string'?data.error:JSON.stringify(data).slice(0,180));
+  const decision=classifyRunwaySubmitError(response.status,detail);
+  if(decision.kind==='blocked-credits')
+   throw new RunwayKnownRejection('blocked-credits',
+    'Runway no tiene créditos suficientes para esta generación (HTTP '+response.status+
+    '). No se creó ninguna tarea; no repetir automáticamente. Recarga Runway o autoriza otro proveedor.');
+  if(decision.kind==='blocked-credentials')
+   throw new RunwayKnownRejection('blocked-credentials',
+    'Runway rechazó las credenciales (HTTP '+response.status+
+    '). No repetir automáticamente.');
+  throw new Error('Runway API '+response.status+': '+detail);
+ }
  return data;
 }
 export async function submitRunwayShot(id:string,confirmHash:string,approvedUsd:number){
@@ -249,8 +267,10 @@ export async function submitRunwayShot(id:string,confirmHash:string,approvedUsd:
    return {shotId:id,status:record.status,taskKnown:true,newSpendAuthorizationUsd:0.5,
     provider:'runway',noAutomaticRetries:true};
   }catch(e){
-   record.status='failed-unknown';record.error=safeError(e);await update(record);
+   record.status=e instanceof RunwayKnownRejection?e.kind:'failed-unknown';
+   record.error=safeError(e);await update(record);
    await unlink(frame.workingFile).catch(()=>undefined);
+   if(e instanceof RunwayKnownRejection)throw e;
    throw new Error('Runway no confirmó el video. No se realizará un segundo envío: '+record.error);
   }
  });
