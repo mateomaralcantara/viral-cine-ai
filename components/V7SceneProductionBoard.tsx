@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, Film, RefreshCcw, ShieldCheck } from 'lucide-react';
+import {ensureLocalStudioSession} from '@/lib/v7/security/local-studio-client';
 
 type Shot={id:string;label:string;title:string;approved:boolean;readyForApproval:boolean;hasVideo:boolean;reason:string};
 type Scene={id:string;label:string;title:string;approved:boolean;readyForApproval:boolean;readyForAssembly:boolean;assembled:boolean;reason:string;shots:Shot[]};
@@ -11,7 +12,7 @@ export default function V7SceneProductionBoard({filmId}:{filmId:string}){
   const endpoint='/api/v7/films/'+encodeURIComponent(filmId)+'/scene-production';
   const [board,setBoard]=useState<Board|null>(null);
   const [error,setError]=useState('');
-  const [token,setToken]=useState('');
+  const [localSession,setLocalSession]=useState('Conectando automáticamente…');
   const [working,setWorking]=useState('');
   const [notice,setNotice]=useState('');
   const refresh=useCallback(async()=>{
@@ -21,16 +22,18 @@ export default function V7SceneProductionBoard({filmId}:{filmId:string}){
     setBoard(data);setError('');
   },[endpoint]);
   useEffect(()=>{
+    void ensureLocalStudioSession().then(()=>setLocalSession('Sesión administrativa local activa.'))
+      .catch(e=>setLocalSession(String(e)));
     void refresh().catch(e=>setError(e instanceof Error?e.message:String(e)));
     const timer=setInterval(()=>{void refresh().catch(()=>undefined);},12000);
     return ()=>clearInterval(timer);
   },[refresh]);
   async function assemble(sceneId:string){
-    if(!token){setNotice('Introduce el token administrativo para iniciar el montaje local.');return;}
+    await ensureLocalStudioSession();
     setWorking(sceneId);setNotice('');
     try{
       const response=await fetch(endpoint,{method:'POST',
-        headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
+        headers:{'Content-Type':'application/json'},credentials:'same-origin',
         body:JSON.stringify({action:'assemble-local',sceneId})});
       const data=await response.json() as {ok?:boolean;error?:string};
       if(!response.ok||!data.ok)throw new Error(data.error||'Montaje incompleto');
@@ -39,12 +42,12 @@ export default function V7SceneProductionBoard({filmId}:{filmId:string}){
     finally{setWorking('');}
   }
   async function approve(kind:'shot'|'scene',id:string) {
-    if(!token){setNotice('Introduce primero el token del servidor en esta misma página.');return;}
+    await ensureLocalStudioSession();
     setWorking(id);setNotice('');
     try{
       const response=await fetch(endpoint,{
         method:'POST',
-        headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
+        headers:{'Content-Type':'application/json'},credentials:'same-origin',
         body:JSON.stringify({action:'approve-artistic',targetType:kind,targetId:id,confirmHuman:true,
           checks:{identityWardrobe:'pass',voiceSound:'pass',motionContinuity:'pass'},notes:'Aprobación artística del director'})
       });
@@ -82,10 +85,9 @@ export default function V7SceneProductionBoard({filmId}:{filmId:string}){
         Reintentos de proveedor: bloqueados. La aprobación artística es siempre humana.
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <input type="password" autoComplete="off" aria-label="Token administrativo para aprobar tomas y escenas"
-          value={token} onChange={e=>setToken(e.target.value)}
-          placeholder="Token administrativo local · Solo para aprobar"
-          className="min-w-[260px] flex-1 rounded-lg border border-white/20 bg-slate-950 p-3 text-sm"/>
+        <p className="flex-1 text-sm text-emerald-200">
+          {localSession} No necesitas copiar ni pegar el token.
+        </p>
         <button type="button" className="button-secondary" onClick={()=>void refresh().catch(e=>setError(String(e)))}>
           <RefreshCcw className="mr-2 inline h-4 w-4"/>Actualizar todo
         </button>
