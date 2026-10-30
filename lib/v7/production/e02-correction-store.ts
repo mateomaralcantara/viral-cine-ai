@@ -67,3 +67,9 @@ export async function usedCorrectionRevision(id:string,revisionId:string){
  try{await readFile(file);return true;}
  catch(e){if((e as NodeJS.ErrnoException).code==='ENOENT')return false;throw e;}
 }
+
+export async function hasAnyCorrectionAuthorization(id:string){
+ try{return (await readdir(correctionAttemptsDir(id))).some(n=>
+  /^v\d{17}-[0-9a-f-]{36}\.authorization\.json$/.test(n));}
+ catch(e){if((e as NodeJS.ErrnoException).code==='ENOENT')return false;throw e;}
+}
