@@ -99,7 +99,7 @@ export async function GET(request:Request,ctx:Context){
     correctionAttemptUsed:revision?await usedCorrectionRevision(shot.id,revision.revisionId):false,
     previewReady:revision?await previewExists(previewPath(shot.id,revision.revisionId)):false};
   }));
-  return NextResponse.json({ok:true,shots,allReferencesReady:refs.referencesReady,
+  return NextResponse.json({ok:true,shots,cloudConfigured:refs.configured,allReferencesReady:refs.referencesReady,
    providerEnabled:runwayEnabled(),reservedUsd:await runwayReservedUsd(),
    maxSceneUsd:await runwayEffectiveSceneBudgetUsd(),estimatedUsdPerShot:0.5},
    {headers:{'Cache-Control':'private,no-store'}});
