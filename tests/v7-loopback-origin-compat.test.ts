@@ -5,8 +5,10 @@ import {localOriginAllowed} from '../lib/v7/security/local-studio-session';
 
 test('Browser on 127.0.0.1 can POST when Next normalizes request URL to localhost',()=>{
  const saved=process.env.NODE_ENV;
+ const savedPort=process.env.V7_STUDIO_LOCAL_PORT;
  try{
   Reflect.set(process.env,'NODE_ENV','development');
+  Reflect.set(process.env,'V7_STUDIO_LOCAL_PORT','3010');
   const trusted=new Request('http://localhost:3010/api/v7/films/film-dos-toques-de-bocina-v7/runway-scene02',{
    method:'POST',
    headers:{Origin:'http://127.0.0.1:3010','Sec-Fetch-Site':'same-origin',
@@ -39,6 +41,8 @@ test('Browser on 127.0.0.1 can POST when Next normalizes request URL to localhos
  }finally{
   if(saved===undefined)Reflect.deleteProperty(process.env,'NODE_ENV');
   else Reflect.set(process.env,'NODE_ENV',saved);
+  if(savedPort===undefined)Reflect.deleteProperty(process.env,'V7_STUDIO_LOCAL_PORT');
+  else Reflect.set(process.env,'V7_STUDIO_LOCAL_PORT',savedPort);
  }
 });
 test('E02 Runway submit and scene approvals share canonical loopback-origin validation',async()=>{

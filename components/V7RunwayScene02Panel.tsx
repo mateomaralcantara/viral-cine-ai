@@ -2,6 +2,7 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {Clapperboard,CheckCircle2,RefreshCcw,ShieldCheck,Film} from 'lucide-react';
 import {ensureLocalStudioSession} from '@/lib/v7/security/local-studio-client';
+import V7Scene02CorrectionPanel from '@/components/V7Scene02CorrectionPanel';
 
 type Shot={id:string;title:string;action:string;editSeconds:number;
  promptText:string;promptHash:string;estimateUsd:number;
@@ -39,7 +40,7 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
   return data;
  },[endpoint]);
  const refreshCloud=useCallback(async()=>{
-  await ensureLocalStudioSession();
+  // Cloud status is a public-to-loopback GET. No admin session is required to inspect it.
   const response=await fetch(cloudEndpoint,{cache:'no-store',credentials:'same-origin'});
   const raw=await response.text();
   let status:CloudBoard&{error?:string};
@@ -79,7 +80,8 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
   return ()=>{cancel.current=true;clearInterval(timer);};
  },[refresh,refreshCloud,cloudEndpoint]);
  async function request(action:'preflight'|'submit'|'resume',shotId:string,shot?:Shot){
-  await ensureLocalStudioSession();
+  // Free preflight does not require an admin session; billing and resume still do.
+  if(action!=='preflight')await ensureLocalStudioSession();
   const response=await fetch(endpoint,{method:'POST',credentials:'same-origin',
    headers:{'Content-Type':'application/json'},
    body:JSON.stringify({action,shotId,...(action==='submit'?{
@@ -268,7 +270,7 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
     <strong className="text-xl">US$ {outstandingCost.toFixed(2)}</strong>
    </div>
    <div className="rounded-xl border border-white/10 p-3">
-    <p className="text-xs text-slate-400">Reservado en Runway</p>
+    <p className="text-xs text-slate-400">Presupuesto registrado (no es un cobro confirmado)</p>
     <strong className="text-xl">US$ {(board?.reservedUsd??0).toFixed(2)} / 3.50</strong>
    </div>
   </div>
@@ -290,20 +292,25 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
       debe llamarse E02-P01, E02-P02 … E02-P07. También puedes seleccionar
       las imágenes por separado, debajo de cada toma. Guardar imágenes no cuesta dinero.
     </p>
-    <p className="mt-2 text-sm font-semibold">
-      {cloudBoard?.approvedCount??0} de 7 fotografías guardadas y aprobadas en Supabase.
-      {cloudBoard?.referencesReady?' ESCENA LISTA · sin aprobaciones adicionales.':
-       ' Aún faltan referencias persistidas en Supabase.'}
+    <p className="mt-2 text-sm font-semibold" role="status">
+      {!cloudBoard?'Consultando las referencias de Supabase…':
+       !cloudBoard.configured?
+        'Supabase no está conectado en este entorno de revisión. Estado real de las fotografías: no verificable desde aquí.':
+       cloudBoard.approvedCount+' de 7 fotografías verificadas y aprobadas en Supabase.'+
+       (cloudBoard.referencesReady?' ESCENA LISTA · sin aprobaciones adicionales.':
+        ' Solo importa las referencias que realmente falten.')}
     </p>
     <input className="mt-3 block max-w-full text-xs" type="file"
       accept="image/jpeg,image/png,image/webp" multiple
       aria-label="Importar siete imágenes de Escena 02"
+      disabled={!cloudBoard?.configured||bulkUploading}
       onChange={e=>{void selectedBatch(e.target.files);e.target.value='';}}/>
     <p className="mt-2 text-xs text-slate-400">
       Subir = guardar en Supabase + aprobar + dejar lista. Sin botón adicional.
     </p>
     {cloudBoard&&!cloudBoard.configured&&<p role="alert" className="mt-2 text-xs text-amber-200">
-      Falta configurar Supabase Storage en el servidor. No se marcarán fotos como aprobadas hasta persistirlas.
+      Las fotografías pueden seguir aprobadas en el servidor principal. Este entorno no puede consultarlas.
+      No las vuelvas a subir ni copies secretos a la revisión; verifica el 7/7 desde tu servidor habitual.
     </p>}
     {bulkUploading&&<p className="mt-2 text-xs text-violet-200" role="status">
       Importando imágenes…</p>}
@@ -321,6 +328,7 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
   </button>
   {detail&&<p className="mt-3 text-sm text-emerald-200" role="status">{detail}</p>}
   {error&&<p className="mt-3 text-sm text-red-300" role="alert">{error}</p>}
+  <V7Scene02CorrectionPanel filmId={filmId}/>
   <div className="mt-5 space-y-3">
    {board?.shots.map(s=><div className="rounded-xl border border-white/10 p-4" key={s.id}>
     <div className="flex flex-wrap justify-between gap-2">
@@ -349,10 +357,13 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
     </div>
     <div className="mt-3 rounded-lg border border-violet-400/20 p-3">
       <p className="text-xs font-semibold text-slate-200">
-        {s.id} · {cloudBoard?.shots[s.id]?.readyForScene?'Aprobada y lista en Supabase':'Pendiente de Supabase'}
+        {s.id} · {!cloudBoard?'Consultando referencia…':
+         !cloudBoard.configured?'Supabase no conectado aquí — estado no verificable':
+         cloudBoard.shots[s.id]?.readyForScene?'Aprobada y lista en Supabase':'Pendiente de Supabase'}
       </p>
       <input type="file" accept="image/jpeg,image/png,image/webp"
         aria-label={'Importar imagen para '+s.id}
+        disabled={!cloudBoard?.configured||bulkUploading||!!uploadingShot}
         onChange={e=>{
          const file=e.target.files?.[0]??null;
          e.target.value='';

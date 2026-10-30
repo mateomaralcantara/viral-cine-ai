@@ -2,7 +2,7 @@ import {NextResponse} from 'next/server';
 import {localOriginAllowed} from '@/lib/v7/security/local-studio-session';
 import {readV7FilmBundle} from '@/lib/v7/storage/film-store';
 import {E02_FILM_ID} from '@/lib/v7/production/dos-toques-e02-shot-packets';
-import {readRunwayRecord,runwayReservedUsd,runwayEnabled,runwayShotSpecs,
+import {readRunwayRecord,runwayReservedUsd,runwayEffectiveSceneBudgetUsd,runwayEnabled,runwayShotSpecs,
  runwayPreflight,runwayAdminAuthorized,submitRunwayShot,resumeRunwayShot,
  saveE02Seed,e02SeedReady,saveE02ShotImage,e02ShotImageReady,
  RUNWAY_MAX_SCENE_USD,RUNWAY_SHOT_USD} from '@/lib/v7/production/runway-e02-engine';
@@ -36,7 +36,7 @@ export async function GET(request:Request,ctx:Context){
   return NextResponse.json({ok:true,provider:'runway',model:'gen4_turbo',
    durationSeconds:10,editDurationSeconds:55,estimatedUsdPerShot:RUNWAY_SHOT_USD,
    seedReady:await e02SeedReady(),
-   maxSceneUsd:RUNWAY_MAX_SCENE_USD,reservedUsd:await runwayReservedUsd(),
+   maxSceneUsd:await runwayEffectiveSceneBudgetUsd(),reservedUsd:await runwayReservedUsd(),
    configured:Boolean(process.env.RUNWAYML_API_SECRET),
    enabled:runwayEnabled(),newGenerationRequests:0,
    shots:await Promise.all(specs.map(async(s,i)=>({...s,
