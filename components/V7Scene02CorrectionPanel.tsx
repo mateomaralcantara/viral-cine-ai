@@ -6,7 +6,7 @@ type Revision={revisionId:string;promptText:string;promptHash:string;referenceSh
 type Shot={id:string;title:string;canonicalPrompt:string;correction:Revision|null;
  referenceReady:boolean;status:string;taskKnown:boolean;videoReady:boolean;
  error:string|null;correctionAttemptUsed:boolean;previewReady:boolean};
-type Board={ok:boolean;shots:Shot[];allReferencesReady:boolean;providerEnabled:boolean;
+type Board={ok:boolean;shots:Shot[];cloudConfigured:boolean;allReferencesReady:boolean;providerEnabled:boolean;
  reservedUsd:number;maxSceneUsd:number;estimatedUsdPerShot:number};
 type Result={ok?:boolean;error?:string;previewUrl?:string;revision?:Revision;
  failureCode?:string|null;failure?:string|null;status?:string;
@@ -180,8 +180,12 @@ export default function V7Scene02CorrectionPanel({filmId}:{filmId:string}){
     {!current.correction&&<p role="status" className="mt-2 text-xs text-amber-200">
      Primero pulsa «Guardar versión · gratis» para autorizar exactamente el prompt que usarás.
     </p>}
-    {!current.referenceReady&&<p role="alert" className="mt-2 text-xs text-red-200">
-     Falta fotografía aprobada. No se puede generar.
+    {!board?.cloudConfigured&&<p role="status" className="mt-2 text-xs text-amber-200">
+     Supabase no está conectado en este servidor de pruebas. Las fotografías del proyecto principal
+     no se pueden verificar desde aquí; no las vuelvas a cargar.
+    </p>}
+    {board?.cloudConfigured&&!current.referenceReady&&<p role="alert" className="mt-2 text-xs text-red-200">
+     Esta toma no tiene una fotografía aprobada verificable en Supabase. No se puede generar.
     </p>}
     {!board?.providerEnabled&&<p role="alert" className="mt-2 text-xs text-amber-200">
      Runway está deshabilitado en el servidor. No se llamará al proveedor.
