@@ -1,5 +1,5 @@
 import {createHash,randomUUID} from 'node:crypto';
-import {mkdir,readFile,readdir,writeFile} from 'node:fs/promises';
+import {mkdir,readFile,readdir,writeFile,rename} from 'node:fs/promises';
 import path from 'node:path';
 import {v7FilmRoot} from '@/lib/v7/storage/film-store';
 import {E02_FILM_ID,e02Shot} from '@/lib/v7/production/dos-toques-e02-shot-packets';
@@ -29,6 +29,13 @@ export async function readCorrectionRevision(id:string,revisionId:string):Promis
 }
 export async function latestCorrectionRevision(id:string):Promise<E02CorrectionRevision|null>{
  try{
+  const pointer=JSON.parse(await readFile(path.join(revisionDir(id),'latest.json'),'utf8')) as {revisionId:string};
+  return readCorrectionRevision(id,pointer.revisionId);
+ }catch(e){
+  if((e as NodeJS.ErrnoException).code!=='ENOENT')throw e;
+ }
+ // Compatibility with revisions written before the latest pointer existed.
+ try{
   const names=(await readdir(revisionDir(id))).filter(s=>/^v\d{17}-[0-9a-f-]{36}\.json$/.test(s)).sort();
   return names.length?readCorrectionRevision(id,names[names.length-1].slice(0,-5)):null;
  }catch(e){
@@ -49,6 +56,10 @@ export async function createCorrectionRevision(id:string,promptText:string,refer
  await mkdir(revisionDir(id),{recursive:true});
  await writeFile(path.join(revisionDir(id),revisionId+'.json'),
   JSON.stringify(revision,null,2)+'\n',{flag:'wx',mode:0o600});
+ const pointer=path.join(revisionDir(id),'latest.json');
+ const temp=pointer+'.'+randomUUID()+'.tmp';
+ await writeFile(temp,JSON.stringify({revisionId})+'\n',{flag:'wx',mode:0o600});
+ await rename(temp,pointer);
  return revision;
 }
 export async function usedCorrectionRevision(id:string,revisionId:string){
