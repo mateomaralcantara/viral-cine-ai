@@ -291,8 +291,8 @@ export async function submitRunwayShot(id:string,confirmHash:string,approvedUsd:
   throw new Error('Autoriza el prompt y el costo exacto de esta toma.');
  return lock(async()=>{
   const existing=await readRunwayRecord(id);
-  if(!revision&&!existing&&await hasAnyCorrectionAuthorization(id))
-   throw Error('Esta toma tiene un intento de corrección registrado. Reconcilia su historial; bloqueado el envío estándar.');
+  if(!existing&&await hasAnyCorrectionAuthorization(id))
+   throw Error('Existe una autorización histórica sin tarea activa. Reconcilia el intento antes de cualquier nuevo envío.');
   if(existing&&!revision)throw new Error('Runway ya tiene una operación para esta toma. Recupera la misma, sin reenviar.');
   if(revision&&await usedCorrectionRevision(id,revision.revisionId))
    throw Error('Esta versión ya tiene un intento autorizado. Nunca se enviará dos veces.');
