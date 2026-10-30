@@ -40,7 +40,7 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
   return data;
  },[endpoint]);
  const refreshCloud=useCallback(async()=>{
-  await ensureLocalStudioSession();
+  // Cloud status is a public-to-loopback GET. No admin session is required to inspect it.
   const response=await fetch(cloudEndpoint,{cache:'no-store',credentials:'same-origin'});
   const raw=await response.text();
   let status:CloudBoard&{error?:string};
@@ -80,7 +80,8 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
   return ()=>{cancel.current=true;clearInterval(timer);};
  },[refresh,refreshCloud,cloudEndpoint]);
  async function request(action:'preflight'|'submit'|'resume',shotId:string,shot?:Shot){
-  await ensureLocalStudioSession();
+  // Free preflight does not require an admin session; billing and resume still do.
+  if(action!=='preflight')await ensureLocalStudioSession();
   const response=await fetch(endpoint,{method:'POST',credentials:'same-origin',
    headers:{'Content-Type':'application/json'},
    body:JSON.stringify({action,shotId,...(action==='submit'?{
