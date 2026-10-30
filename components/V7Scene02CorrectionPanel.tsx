@@ -147,7 +147,9 @@ export default function V7Scene02CorrectionPanel({filmId}:{filmId:string}){
     <h3 className="font-bold">{selected} · {current.title}</h3>
     <span className="text-xs text-amber-200">{current.status.toUpperCase()}</span>
    </div>
-   <p className="text-xs text-slate-300">Fotografía aprobada: {current.referenceReady?'Sí':'No'} ·
+   <p className="text-xs text-slate-300">Fotografía aprobada: {
+    !board?.cloudConfigured?'No verificable (Supabase desconectado)':
+    current.referenceReady?'Sí':'No'} ·
     Versión: {current.correction?.revisionId??'Sin corrección guardada'}</p>
    {current.error&&<p className="text-xs text-amber-200">Registro anterior: {current.error}</p>}
    <label className="block text-sm font-semibold" htmlFor="e02-correction-prompt">Prompt visual de esta toma</label>
@@ -188,7 +190,7 @@ export default function V7Scene02CorrectionPanel({filmId}:{filmId:string}){
      Presupuesto bruto registrado: US$ {board?.reservedUsd.toFixed(2)??'--'} /
      US$ {board?.maxSceneUsd.toFixed(2)??'--'}.
     </p>
-    {!current.correction&&<p role="status" className="mt-2 text-xs text-amber-200">
+    {!current.correction&&board?.cloudConfigured&&<p role="status" className="mt-2 text-xs text-amber-200">
      Primero pulsa «Guardar versión · gratis» para autorizar exactamente el prompt que usarás.
     </p>}
     {!board?.cloudConfigured&&<p role="status" className="mt-2 text-xs text-amber-200">
