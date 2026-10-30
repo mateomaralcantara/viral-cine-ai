@@ -3,7 +3,7 @@ import {localAdminAuthorized} from '@/lib/v7/security/local-studio-session';
 import {classifyRunwaySubmitError,RunwayKnownRejection,isLegacyCreditRejection} from '@/lib/v7/orchestration/provider-failure-policy';
 import {execFile} from 'node:child_process';
 import {createReadStream} from 'node:fs';
-import {mkdir,readFile,writeFile,rename,open,unlink,stat,link} from 'node:fs/promises';
+import {mkdir,readFile,writeFile,rename,open,unlink,stat,link,readdir} from 'node:fs/promises';
 import {promisify} from 'node:util';
 import path from 'node:path';
 import {v7FilmRoot} from '@/lib/v7/storage/film-store';
@@ -62,11 +62,33 @@ export async function readRunwayRecord(id:string):Promise<RunwayRecord|null>{
   return r;
  }catch(e){if((e as NodeJS.ErrnoException).code==='ENOENT')return null;throw e;}
 }
+async function correctionLedger(){
+ let archivedUsd=0,extraAuthorizationUsd=0;
+ for(const shot of E02_SHOTS){
+  const dir=correctionAttemptsDir(shot.id);
+  let names:string[];
+  try{names=await readdir(dir);}
+  catch(e){if((e as NodeJS.ErrnoException).code==='ENOENT')continue;throw e;}
+  extraAuthorizationUsd+=names.filter(n=>n.endsWith('.authorization.json')).length*RUNWAY_SHOT_USD;
+  for(const name of names.filter(n=>n.endsWith('.previous-operation.json'))){
+   const archived=JSON.parse(await readFile(path.join(dir,name),'utf8')) as RunwayRecord;
+   if(archived.shotId!==shot.id||archived.provider!=='runway'||archived.estimatedUsd!==0.5)
+    throw Error('Archivo histórico de gasto inválido.');
+   archivedUsd+=archived.estimatedUsd;
+  }
+ }
+ return {archivedUsd,extraAuthorizationUsd};
+}
+export async function runwayEffectiveSceneBudgetUsd(){
+ const ledger=await correctionLedger();
+ return Number((RUNWAY_MAX_SCENE_USD+ledger.extraAuthorizationUsd).toFixed(2));
+}
 export async function runwayReservedUsd(){
  const records=await Promise.all(E02_SHOTS.map(s=>readRunwayRecord(s.id)));
- return Number(records.reduce((total,r)=>
+ const ledger=await correctionLedger();
+ return Number((records.reduce((total,r)=>
   total+(r&&!['blocked-credits','blocked-credentials'].includes(r.status)
-   ?r.estimatedUsd:0),0).toFixed(2));
+   ?r.estimatedUsd:0),0)+ledger.archivedUsd).toFixed(2));
 }
 async function update(record:RunwayRecord){
  const dest=runwayRecordPath(record.shotId),tmp=dest+'.'+randomUUID()+'.tmp';
@@ -284,7 +306,8 @@ export async function submitRunwayShot(id:string,confirmHash:string,approvedUsd:
   const sceneRecords=await Promise.all(E02_SHOTS.map(s=>readRunwayRecord(s.id)));
   if(sceneRecords.some(r=>r&&['blocked-credits','blocked-credentials'].includes(r.status)))
    throw new Error('Producción pausada: Runway carece de saldo o credenciales. No se enviará ninguna toma nueva.');
-  if(await runwayReservedUsd()+RUNWAY_SHOT_USD>RUNWAY_MAX_SCENE_USD+0.001)
+  const limit=(await runwayEffectiveSceneBudgetUsd())+(existing&&revision?RUNWAY_SHOT_USD:0);
+  if(await runwayReservedUsd()+RUNWAY_SHOT_USD>limit+0.001)
    throw new Error('Límite de Runway para Escena 02 alcanzado.');
   const ref=await nearestReference(id);
   if(revision&&ref.sha256!==revision.referenceSha256)
