@@ -11,7 +11,7 @@ import {E02_FILM_ID,E02_SHOTS,e02Shot,E02_MAX_USD,E02_COST_PER_SHOT} from '@/lib
 import sharp from 'sharp';
 import {resolveV7ShotVideo} from '@/lib/v7/production/shot-video-source';
 import {e02CloudConfigured,getApprovedE02Image,approvedE02References} from '@/lib/v7/production/e02-supabase-references';
-import {readCorrectionRevision,latestCorrectionRevision,correctionAttemptsDir,usedCorrectionRevision} from '@/lib/v7/production/e02-correction-store';
+import {readCorrectionRevision,latestCorrectionRevision,correctionAttemptsDir,usedCorrectionRevision,hasAnyCorrectionAuthorization} from '@/lib/v7/production/e02-correction-store';
 
 const command=promisify(execFile);
 export const RUNWAY_MODEL='gen4_turbo';
@@ -291,6 +291,8 @@ export async function submitRunwayShot(id:string,confirmHash:string,approvedUsd:
   throw new Error('Autoriza el prompt y el costo exacto de esta toma.');
  return lock(async()=>{
   const existing=await readRunwayRecord(id);
+  if(!revision&&!existing&&await hasAnyCorrectionAuthorization(id))
+   throw Error('Esta toma tiene un intento de corrección registrado. Reconcilia su historial; bloqueado el envío estándar.');
   if(existing&&!revision)throw new Error('Runway ya tiene una operación para esta toma. Recupera la misma, sin reenviar.');
   if(revision&&await usedCorrectionRevision(id,revision.revisionId))
    throw Error('Esta versión ya tiene un intento autorizado. Nunca se enviará dos veces.');
