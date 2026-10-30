@@ -6,7 +6,7 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {E02_FILM_ID} from '@/lib/v7/production/dos-toques-e02-shot-packets';
 import {createCorrectionRevision,readCorrectionRevision,latestCorrectionRevision,
- correctionAttemptsDir,usedCorrectionRevision} from '@/lib/v7/production/e02-correction-store';
+ correctionAttemptsDir,usedCorrectionRevision,hasAnyCorrectionAuthorization} from '@/lib/v7/production/e02-correction-store';
 
 test('correction revisions are immutable, validated, and do not call a provider',async()=>{
  const dir=await mkdtemp(path.join(tmpdir(),'viralcine-correction-'));
@@ -22,6 +22,7 @@ test('correction revisions are immutable, validated, and do not call a provider'
   assert.equal((await readCorrectionRevision(id,first.revisionId)).promptText,prompt);
   assert.equal((await latestCorrectionRevision(id))?.revisionId,first.revisionId);
   assert.equal(await usedCorrectionRevision(id,first.revisionId),false);
+  assert.equal(await hasAnyCorrectionAuthorization(id),false);
   const second=await createCorrectionRevision(id,prompt+' Maintain consistent identities.',imageHash);
   assert.notEqual(second.revisionId,first.revisionId);
   assert.equal((await latestCorrectionRevision(id))?.revisionId,second.revisionId);
@@ -30,6 +31,7 @@ test('correction revisions are immutable, validated, and do not call a provider'
   await mkdir(attemptDir,{recursive:true});
   await writeFile(path.join(attemptDir,first.revisionId+'.authorization.json'),'{}',{flag:'wx'});
   assert.equal(await usedCorrectionRevision(id,first.revisionId),true);
+  assert.equal(await hasAnyCorrectionAuthorization(id),true);
   assert.equal(await usedCorrectionRevision(id,second.revisionId),false);
   await assert.rejects(createCorrectionRevision(id,'too short',imageHash));
   await assert.rejects(createCorrectionRevision(id,prompt,'invalid-hash'));
