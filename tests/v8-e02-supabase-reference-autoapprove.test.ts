@@ -32,7 +32,10 @@ test('E02 panel auto-synchronizes existing seven JPGs; uploading one means appro
  assert.match(panel,/scene02-references/);
  assert.match(panel,/sync-existing/);
  assert.match(panel,/Subir = guardar en Supabase \+ aprobar \+ dejar lista/);
- assert.match(panel,/7 fotografías guardadas y aprobadas en Supabase/);
+ // A disconnected test environment must never claim the approved cloud photos are missing.
+ assert.match(panel,/Supabase no está conectado en este entorno de revisión/);
+ assert.match(panel,/No las vuelvas a subir/);
+ assert.match(panel,/cloudBoard\.approvedCount/);
  assert.match(panel,/cloudBoard\?\.referencesReady/);
  assert.match(panel,/Aprobada y lista en Supabase/);
  assert.match(api,/uploadAndApproveE02Reference/);
