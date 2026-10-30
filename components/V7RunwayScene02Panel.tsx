@@ -2,6 +2,7 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {Clapperboard,CheckCircle2,RefreshCcw,ShieldCheck,Film} from 'lucide-react';
 import {ensureLocalStudioSession} from '@/lib/v7/security/local-studio-client';
+import V7Scene02CorrectionPanel from '@/components/V7Scene02CorrectionPanel';
 
 type Shot={id:string;title:string;action:string;editSeconds:number;
  promptText:string;promptHash:string;estimateUsd:number;
@@ -368,6 +369,7 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
     {s.error&&<p className="mt-2 text-xs text-amber-200">{s.error}</p>}
    </div>)}
   </div>
+  <V7Scene02CorrectionPanel filmId={filmId}/>
   <a className="button-secondary mt-4 inline-flex" href={'/v7/films/'+encodeURIComponent(filmId)+'?tab=scenes'}>
    <Film className="mr-2 h-4 w-4"/> Revisar tomas y montar Escena 02
   </a>
