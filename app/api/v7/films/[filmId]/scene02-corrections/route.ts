@@ -8,7 +8,7 @@ import {localOriginAllowed,localAdminAuthorized} from '@/lib/v7/security/local-s
 import {readV7FilmBundle,v7FilmRoot} from '@/lib/v7/storage/film-store';
 import {E02_FILM_ID,E02_SHOTS,e02Shot} from '@/lib/v7/production/dos-toques-e02-shot-packets';
 import {approvedE02References,getApprovedE02Image} from '@/lib/v7/production/e02-supabase-references';
-import {readRunwayRecord,runwayEnabled,runwayReservedUsd,RUNWAY_MAX_SCENE_USD,
+import {readRunwayRecord,runwayEnabled,runwayReservedUsd,runwayEffectiveSceneBudgetUsd,RUNWAY_MAX_SCENE_USD,
  submitRunwayShot,resumeRunwayShot,diagnoseRunwayShot} from '@/lib/v7/production/runway-e02-engine';
 import {createCorrectionRevision,latestCorrectionRevision,readCorrectionRevision,
  usedCorrectionRevision} from '@/lib/v7/production/e02-correction-store';
@@ -101,7 +101,7 @@ export async function GET(request:Request,ctx:Context){
   }));
   return NextResponse.json({ok:true,shots,allReferencesReady:refs.referencesReady,
    providerEnabled:runwayEnabled(),reservedUsd:await runwayReservedUsd(),
-   maxSceneUsd:RUNWAY_MAX_SCENE_USD,estimatedUsdPerShot:0.5},
+   maxSceneUsd:await runwayEffectiveSceneBudgetUsd(),estimatedUsdPerShot:0.5},
    {headers:{'Cache-Control':'private,no-store'}});
  }catch(e){return error(503,cleaned(e));}
 }
