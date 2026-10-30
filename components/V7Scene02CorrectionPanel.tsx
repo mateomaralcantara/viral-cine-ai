@@ -88,11 +88,20 @@ export default function V7Scene02CorrectionPanel({filmId}:{filmId:string}){
  }
  async function diagnose(){
   await act('Consultando tarea original',async()=>{
+   if(!board?.providerEnabled){
+    // Offline-safe audit of already persisted records; never invoke the provider.
+    setDiagnostic('Diagnóstico LOCAL (registro guardado): '+(current?.status??'no disponible')+
+     ' · Tarea identificada: '+(current?.taskKnown?'sí':'no')+
+     (current?.error?' · '+current.error:'')+
+     '. El estado actual de Runway no se puede verificar sin conectar el proveedor.');
+    setNotice('Historial local consultado. No se utilizó ninguna API pagada ni se reenvió tarea.');
+    return;
+   }
    const r=await request('diagnose');
-   setDiagnostic('Estado Runway: '+(r.status??'desconocido')+
+   setDiagnostic('Estado verificado en Runway: '+(r.status??'desconocido')+
     ' · Código: '+(r.failureCode??'no disponible')+
     (r.failure?' · '+r.failure:''));
-   setNotice('Consulta GET de tarea existente; no se envió ninguna generación.');
+   setNotice('Consulta de tarea existente, sin nueva generación.');
   });
  }
  async function resume(){
@@ -146,7 +155,8 @@ export default function V7Scene02CorrectionPanel({filmId}:{filmId:string}){
     className="w-full rounded-lg border border-white/20 bg-slate-950/70 p-3 text-sm text-white"
     placeholder="Describe el movimiento, la identidad y el encuadre."/>
    <div className="flex flex-wrap gap-2">
-    <button type="button" disabled={!!busy||!current.referenceReady||prompt.trim().length<60}
+    <button type="button" disabled={!!busy||!current.referenceReady||!board?.cloudConfigured||prompt.trim().length<60}
+     title={!board?.cloudConfigured?'Conecta Supabase y una sesión local administrativa para preparar una versión verificable.':'Guardar una nueva versión inmutable'}
      className="button-secondary text-xs" onClick={()=>void prepare()}>
      Guardar versión · gratis
     </button>
@@ -156,9 +166,10 @@ export default function V7Scene02CorrectionPanel({filmId}:{filmId:string}){
     </button>
     <button type="button" disabled={!!busy||!current.taskKnown}
      className="button-secondary text-xs" onClick={()=>void diagnose()}>
-     Diagnosticar Runway · gratis
+     {board?.providerEnabled?'Diagnosticar Runway · gratis':'Ver diagnóstico local · gratis'}
     </button>
-    <button type="button" disabled={!!busy||!current.taskKnown}
+    <button type="button" disabled={!!busy||!current.taskKnown||!board?.providerEnabled}
+     title={!board?.providerEnabled?'Proveedor desactivado: no se puede recuperar desde Runway en este servidor.':'Consultar la tarea existente sin reenviarla'}
      className="button-secondary text-xs" onClick={()=>void resume()}>
      Recuperar misma tarea
     </button>
