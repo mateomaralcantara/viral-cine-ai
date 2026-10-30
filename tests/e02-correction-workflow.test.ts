@@ -43,3 +43,11 @@ test('correction revisions are immutable, validated, and do not call a provider'
   await rm(dir,{recursive:true,force:true});
  }
 });
+
+test('isolated review never presents unavailable Supabase approval as rejected',async()=>{
+ const source=await (await import('node:fs/promises')).readFile(
+  new URL('../components/V7Scene02CorrectionPanel.tsx',import.meta.url),'utf8');
+ assert.match(source,/No verificable \(Supabase desconectado\)/);
+ assert.match(source,/Diagnóstico LOCAL \(registro guardado\)/);
+ assert.match(source,/!board\?\.providerEnabled/);
+});
