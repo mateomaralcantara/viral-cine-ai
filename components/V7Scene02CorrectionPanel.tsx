@@ -61,7 +61,12 @@ export default function V7Scene02CorrectionPanel({filmId}:{filmId:string}){
   if(busy)return;
   setBusy(name);setFailure('');setNotice('');
   try{await work();}
-  catch(e){setFailure(e instanceof Error?e.message:String(e));}
+  catch(e){
+   setFailure(e instanceof Error?e.message:String(e));
+   // A provider might have accepted a task before a network error was returned:
+   // always reload the durable attempt receipt; never resubmit automatically.
+   void load().catch(()=>undefined);
+  }
   finally{setBusy('');}
  }
  async function prepare(){
@@ -168,6 +173,23 @@ export default function V7Scene02CorrectionPanel({filmId}:{filmId:string}){
    {diagnostic&&<p role="status" className="text-sm text-amber-100">{diagnostic}</p>}
    <div className="mt-4 rounded-lg border border-amber-400/30 p-3">
     <p className="text-sm font-bold">Nueva generación de Runway · US$0.50 por toma</p>
+    <p className="mt-1 text-xs text-slate-300">
+     Presupuesto bruto registrado: US$ {board?.reservedUsd.toFixed(2)??'--'} /
+     US$ {board?.maxSceneUsd.toFixed(2)??'--'}.
+    </p>
+    {!current.correction&&<p role="status" className="mt-2 text-xs text-amber-200">
+     Primero pulsa «Guardar versión · gratis» para autorizar exactamente el prompt que usarás.
+    </p>}
+    {!current.referenceReady&&<p role="alert" className="mt-2 text-xs text-red-200">
+     Falta fotografía aprobada. No se puede generar.
+    </p>}
+    {!board?.providerEnabled&&<p role="alert" className="mt-2 text-xs text-amber-200">
+     Runway está deshabilitado en el servidor. No se llamará al proveedor.
+     Para habilitarlo, configura V7_RUNWAY_E02_ENABLED=true en el estudio local.
+    </p>}
+    {current.status==='failed-unknown'&&!current.taskKnown&&<p role="alert" className="mt-2 text-xs text-red-200">
+     Fallo antiguo sin ID: generación bloqueada. Necesita reconciliación antes de intentar pagar.
+    </p>}
     <p className="mt-1 text-xs text-slate-300">
      Nunca se repetirá una tarea en curso ni una revisión ya enviada.
      Si el intento anterior existe, Runway debe confirmar que terminó en FAILED.
