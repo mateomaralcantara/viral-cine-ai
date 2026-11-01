@@ -20,7 +20,7 @@ Esta consolidación parte de `feat/v8-e02-correction-workflow-20261030` (`827b9e
 - `viral-cine-v7-integration`: datos/MP4/registros operacionales, **no repositorio de código ni apto para volcado público**.
 - `viral-cine-v7-correction-review`: worktree de revisión.
 - `viral-cine-v7-p04-integracion-20261031-220537`: worktree independiente con corrección selectiva comprobada.
-- Respaldo del propietario: `C:\Users\martin\ViralCine-Backups\20261031-213510`. No borrarlo antes de reconciliar cambios.
+- Respaldo del propietario: `$HOME\ViralCine-Backups\20261031-213510`. No borrarlo antes de reconciliar cambios.
 
 ## Política de promoción
 1. Nunca subir `.env*`, credenciales, media privada, `.data*`, registros Runway, recibos de autorización ni tokens.
