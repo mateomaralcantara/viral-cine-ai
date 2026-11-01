@@ -18,6 +18,8 @@ export type E02ReferenceBoard={
 };
 
 function config(){
+ if(process.env.VIRALCINE_TEST_OFFLINE==='true')
+  throw new Error('Pruebas aisladas: Supabase desactivado');
  const url=(process.env.SUPABASE_URL||
   process.env.NEXT_PUBLIC_SUPABASE_URL||'').trim().replace(/\/$/,'');
  const secret=(process.env.SUPABASE_SERVICE_ROLE_KEY||
