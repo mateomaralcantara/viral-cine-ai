@@ -9,7 +9,7 @@ export const ActorLibraryEntrySchema = z.object({
   voiceProfileIds: z.array(EntityIdSchema).max(100).default([]),
   rightsStatus: z.enum(['unknown', 'owned', 'licensed', 'consented', 'restricted']).default('unknown'),
   consentReference: z.string().max(4000).optional(),
-  metadata: z.record(z.unknown()).default({}),
+  metadata: z.record(z.string(), z.unknown()).default({}),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema
 });

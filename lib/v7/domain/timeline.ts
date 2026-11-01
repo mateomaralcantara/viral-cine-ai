@@ -24,7 +24,7 @@ export const TimelineClipSchema = z.object({
   shotId: EntityIdSchema.optional(),
   takeId: EntityIdSchema.optional(),
   gainDb: z.number().min(-96).max(24).default(0),
-  metadata: z.record(z.unknown()).default({})
+  metadata: z.record(z.string(), z.unknown()).default({})
 });
 
 export const TransitionSchema = z.object({
@@ -53,7 +53,7 @@ export const TimelineSchema = z.object({
   height: z.number().int().positive().default(1080),
   tracks: z.array(TrackSchema).max(100).default([]),
   transitions: z.array(TransitionSchema).max(10000).default([]),
-  metadata: z.record(z.unknown()).default({})
+  metadata: z.record(z.string(), z.unknown()).default({})
 });
 
 export type Timeline = z.infer<typeof TimelineSchema>;

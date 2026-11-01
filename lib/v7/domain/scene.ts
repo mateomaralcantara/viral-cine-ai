@@ -16,7 +16,7 @@ export const SceneSchemaV7 = z.object({
   emotionalGoal: z.string().max(6000).default(''),
   continuityNotes: z.array(z.string().max(2000)).max(100).default([]),
   shots: z.array(ShotSchema).max(200).default([]),
-  metadata: z.record(z.unknown()).default({})
+  metadata: z.record(z.string(), z.unknown()).default({})
 });
 
 export type SceneV7 = z.infer<typeof SceneSchemaV7>;
