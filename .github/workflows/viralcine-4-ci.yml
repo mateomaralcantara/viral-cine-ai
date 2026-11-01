@@ -10,7 +10,7 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   verify:
@@ -32,24 +32,6 @@ jobs:
           sudo apt-get install -y ffmpeg
           ffmpeg -version | head -n 1
           ffprobe -version | head -n 1
-
-      - name: Refresh dependency lock safely
-        run: |
-          npm install --package-lock-only
-          npm audit --omit=dev --audit-level=high
-
-      - name: Commit audited lockfile
-        if: github.event_name == 'push'
-        run: |
-          if git diff --quiet -- package-lock.json; then
-            echo "package-lock.json already audited"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package-lock.json
-          git commit -m "chore(security): refresh audited dependency lock"
-          git push origin HEAD:${{ github.ref_name }}
 
       - name: Install dependencies
         run: npm ci
