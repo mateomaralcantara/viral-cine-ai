@@ -103,14 +103,15 @@ try {
     if ($seleccion.Count -lt 200) { throw ('Solo se encontraron ' + $seleccion.Count + ' archivos: detenido para proteger el proyecto.') }
     Write-Host ('Codigo revisado: ' + $seleccion.Count + ' archivos') -ForegroundColor Green
 
+    # Usar git add con work-tree explicito y GIT_INDEX_FILE aislado.
+    # Git calcula hashes y aplica .gitattributes sin tocar el indice normal.
     $n = 0
     foreach ($elemento in $seleccion) {
-        # Normaliza CRLF -> LF para evitar cambios falsos de Windows.
-        $valor = $elemento.Content.Replace(([string][char]13 + [string][char]10),[string][char]10)
-        [IO.File]::WriteAllText($temporal,$valor,[Text.UTF8Encoding]::new($false))
-        $blob = Git @('hash-object','-w','--',$temporal)
-        if ($blob -notmatch '^[0-9a-f]{40}$') { throw ('SHA invalido: ' + $elemento.Rel) }
-        [void](Git @('update-index','--add','--cacheinfo',('100644,' + $blob + ',' + $elemento.Rel)))
+        $rutaLiteral = ':(literal)' + $elemento.Rel
+        $salidaAdd = @(& git.exe -C $fuente ('--git-dir=' + $gitDir) ('--work-tree=' + $fuente) -c core.autocrlf=input add -f -- $rutaLiteral 2>&1)
+        if ($LASTEXITCODE -ne 0) {
+            throw ('Git add fallo en ' + $elemento.Rel + ': ' + ($salidaAdd -join ' '))
+        }
         $n++
         if (($n % 100) -eq 0) { Write-Host ('Preparados: ' + $n + '/' + $seleccion.Count) }
     }
