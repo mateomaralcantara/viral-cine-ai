@@ -32,3 +32,10 @@ datos.txt
 # Platform/editor noise
 .DS_Store
 Thumbs.db
+
+# Consolidated ViralCine: never commit local review data, operation ledgers or media
+.data-*/
+.data*/
+*.authorization.json
+*.previous-operation.json
+RUTA-INTEGRACION.txt
