@@ -23,6 +23,21 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+      - name: Install FFmpeg for Windows media tests
+        shell: pwsh
+        run: |
+          choco install ffmpeg -y --no-progress
+          if ($LASTEXITCODE -ne 0) { throw "FFmpeg installation failed" }
+          $ff = Get-Command ffmpeg -ErrorAction SilentlyContinue
+          if (-not $ff) {
+            $ff = Get-ChildItem 'C:\\ProgramData\\chocolatey\\lib' -Recurse -File -Filter ffmpeg.exe -ErrorAction SilentlyContinue |
+              Select-Object -First 1
+            if (-not $ff) { throw 'ffmpeg.exe not found after install' }
+            $dir = Split-Path -Parent $ff.FullName
+            $dir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            $env:PATH = "$dir;$env:PATH"
+          }
+          & ffmpeg -version | Select-Object -First 1
       - run: npm ci --no-audit --no-fund
       - run: npm run typecheck
       - run: npm test
