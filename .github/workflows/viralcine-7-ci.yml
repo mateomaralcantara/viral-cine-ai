@@ -1,0 +1,114 @@
+name: ViralCine 7 Feature Film OS CI
+
+on:
+  push:
+    branches:
+      - feat/viralcine-7-feature-film-os
+      - feat/v7-cinema-core-veo-safe
+      - feat/v7-feature-film-level2
+      - feat/v7-new-film-10min
+      - feat/v7-dos-toques-de-bocina-script
+      - feat/v7-dos-toques-soundtrack-casting
+      - feat/v7-dos-toques-production-bible
+      - feat/v7-dos-toques-scene01-pilot
+      - feat/v7-dos-toques-e01-p01-preflight
+      - feat/v7-dos-toques-p01-usd2-approval
+      - feat/v7-dos-toques-p01-one-shot-render
+      - feat/v7-dos-toques-p01-family-arrival
+      - fix/v7-dos-toques-p01-sdk-resume
+      - feat/v7-dos-toques-p01-artistic-approval
+      - feat/v7-dos-toques-e01-p02-continuity
+      - feat/v7-p02-final-confirmation-safe
+      - feat/v7-scene-families-approval-engine
+      - feat/v7-e01-visual-production-console
+      - fix/v7-e01-provider-failure-diagnostics
+      - feat/v7-e01-production-unblock
+      - fix/v7-admin-token-persistent-local
+      - feat/v7-e01-runway-gen4-turbo-primary
+      - fix/v7-runway-shot-approval-ui
+      - feat/v7-e02-runway-scene-production
+      - fix/v7-e02-auto-import-images
+      - fix/v7-e02-binary-upload-recovery
+      - fix/v7-e02-auto-local-session
+      - fix/v7-loopback-origin-compat
+      - feat/v7-autonomous-director-foundation
+      - feat/v8-e02-durable-autonomy-worker
+      - feat/v8-e02-runway-only
+      - feat/v8-credit-only-agent-autopilot
+      - feat/v8-e02-supabase-photo-autosave
+      - feat/v8-e02-direct-cloud-bootstrap
+  pull_request:
+    branches:
+      - feat/v7-dos-toques-p01-artistic-approval
+      - fix/v7-dos-toques-p01-sdk-resume
+      - feat/v7-dos-toques-p01-family-arrival
+      - feat/v7-dos-toques-p01-one-shot-render
+      - feat/v7-dos-toques-p01-usd2-approval
+      - feat/v7-dos-toques-e01-p01-preflight
+      - feat/v7-dos-toques-scene01-pilot
+      - feat/v7-dos-toques-production-bible
+      - feat/v7-dos-toques-soundtrack-casting
+      - feat/v7-dos-toques-de-bocina-script
+      - feat/v7-new-film-10min
+      - feat/v7-feature-film-level2
+      - main
+      - feat/viralcine-7-feature-film-os
+      - feat/v7-cinema-core-veo-safe
+
+permissions:
+  contents: read
+
+jobs:
+  verify-v7:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ALLOW_EXTERNAL_API_CALLS: 'false'
+      ALLOW_PAID_GENERATION: 'false'
+      ALLOW_PAID_PROVIDER_FALLBACK: 'false'
+      STRICT_SCENE_QUALITY: 'false'
+      PRODUCTION_MODE: demo
+      REAL_CINEMA_PIPELINE: 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          ffmpeg -version | head -n 1
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check four-minute local exporter
+        run: |
+          node --check scripts/finalizar-15-dias-4min.mjs
+          node -e "import('sharp').then(() => console.log('LOCAL_EXPORTER_SHARP_READY=YES'))"
+
+      - name: Check independent E02 cloud migration
+        run: node --check scripts/sync-e02-refs-cloud.mjs
+
+      - name: Typecheck V6 + V7
+        run: npm run typecheck
+
+      - name: Tests V6 + V7
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
+      - name: Safety assertion
+        run: |
+          test "$ALLOW_EXTERNAL_API_CALLS" = "false"
+          test "$ALLOW_PAID_GENERATION" = "false"
+          test "$ALLOW_PAID_PROVIDER_FALLBACK" = "false"
+          echo "V7_CI_PAID_APIS_LOCKED=YES"

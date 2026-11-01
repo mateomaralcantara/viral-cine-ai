@@ -1,0 +1,20 @@
+{
+  "filmId": "film-dos-toques-de-bocina-v7",
+  "shotId": "E01-P01",
+  "userDecision": "US$2.00",
+  "authorizationMaxUsd": 2,
+  "permittedProviderCalls": 1,
+  "automaticRetries": 0,
+  "model": "veo-3.1-fast-generate-preview",
+  "resolution": "720p",
+  "durationSeconds": 8,
+  "verifiedPublishedRateUsdPerSecond": 0.1,
+  "estimatedSuccessfulCallUsd": 0.8,
+  "uncommittedAllowanceUsd": 1.2,
+  "feeSource": "https://ai.google.dev/gemini-api/docs/pricing",
+  "approvalScope": "FIRST_SHOT_ONLY",
+  "status": "AUTHORIZED_NOT_SUBMITTED",
+  "localReferenceState": "REQUIRES_16_BY_9_PNG_IMPORT",
+  "localAccountState": "REQUIRES_API_KEY_AND_SERVER_CHECK",
+  "notes": "Permission to spend at most $2.00 does not imply a request has been sent; model quote is $0.80 for 8s at 720p. One call only; never retry if result uncertain."
+}

@@ -44,6 +44,65 @@ export async function assertPlayableSceneVideo(filePath: string, expectedSeconds
   return probe;
 }
 
+
+export async function assertCinematicVideoTrack(filePath: string, expectedSeconds: number) {
+  const probe = await probeVideo(filePath);
+  // Turnos segmentados pueden ser legítimamente menores de 0.50s. Para esos
+  // micro-turnos no imponemos el piso de 0.50s del clip completo.
+  const tolerance =
+    expectedSeconds < 0.5
+      ? Math.max(0.08, expectedSeconds * 0.2)
+      : Math.max(1.5, expectedSeconds * 0.03);
+  const minimumDuration =
+    expectedSeconds < 0.5
+      ? Math.max(0.12, expectedSeconds - tolerance)
+      : Math.max(0.5, expectedSeconds - tolerance);
+  if (!probe.hasVideo || !Number.isFinite(probe.durationSeconds) || probe.durationSeconds < minimumDuration) {
+    throw new Error(
+      `Fuente visual incompleta: video=${probe.hasVideo}, duracion=${probe.durationSeconds.toFixed(2)}s, minimo=${minimumDuration.toFixed(2)}s.`
+    );
+  }
+
+  // En micro-turnos (<0.50s) no hay suficientes muestras temporales para
+  // aplicar de forma fiable freeze/black/detail analysis. La existencia,
+  // decodificación y duración del track son la validación correcta aquí.
+  if (expectedSeconds < 0.5) {
+    return probe;
+  }
+
+  const analysis = await analyzeFrames(filePath);
+  const blackRatio = analysis.blackSeconds / Math.max(0.1, probe.durationSeconds);
+  const freezeRatio = analysis.freezeSeconds / Math.max(0.1, probe.durationSeconds);
+  const blackLimit = numberEnv('BLACK_FRAME_MAX_RATIO', 0.35, 0.05, 0.95);
+  const freezeLimit = numberEnv('FREEZE_FRAME_MAX_RATIO', 0.60, 0.10, 0.98);
+
+  if (blackRatio > blackLimit) {
+    throw new Error(
+      `Fuente visual rechazada: ${Math.round(blackRatio * 100)}% del clip esta negro/oscuro ` +
+      `(limite ${Math.round(blackLimit * 100)}%). No se usara como video base real.`
+    );
+  }
+  if (freezeRatio > freezeLimit) {
+    throw new Error(
+      `Fuente visual rechazada: ${Math.round(freezeRatio * 100)}% del clip esta congelado ` +
+      `(limite ${Math.round(freezeLimit * 100)}%). No se usara como video base real.`
+    );
+  }
+
+  const detail = await analyzeVisualDetail(filePath);
+  const minStdDev = numberEnv('MIN_VISUAL_LUMA_STDDEV', 7, 1, 60);
+  const minEdgeMean = numberEnv('MIN_VISUAL_EDGE_MEAN', 0.75, 0.05, 20);
+  if (detail.lumaStdDev < minStdDev && detail.edgeMean < minEdgeMean) {
+    throw new Error(
+      `Fuente visual rechazada: contenido de muy baja informacion visual ` +
+      `(desviacion luma ${detail.lumaStdDev.toFixed(2)}, detalle ${detail.edgeMean.toFixed(2)}). ` +
+      'Parece un fondo/placeholder y no una escena cinematografica.'
+    );
+  }
+
+  return { ...probe, blackRatio, freezeRatio, ...detail };
+}
+
 export async function assertCinematicSceneVideo(
   filePath: string,
   expectedSeconds: number,
@@ -66,6 +125,17 @@ export async function assertCinematicSceneVideo(
       throw new Error(
         `Video rechazado antes de calidad: ${Math.round(freezeRatio * 100)}% del clip esta congelado ` +
         `(limite ${Math.round(freezeLimit * 100)}%). No se guardara como una escena valida.`
+      );
+    }
+
+    const detail = await analyzeVisualDetail(filePath);
+    const minStdDev = numberEnv('MIN_VISUAL_LUMA_STDDEV', 7, 1, 60);
+    const minEdgeMean = numberEnv('MIN_VISUAL_EDGE_MEAN', 0.75, 0.05, 20);
+    if (detail.lumaStdDev < minStdDev && detail.edgeMean < minEdgeMean) {
+      throw new Error(
+        `Video rechazado antes de calidad: contenido de muy baja informacion visual ` +
+        `(desviacion luma ${detail.lumaStdDev.toFixed(2)}, detalle ${detail.edgeMean.toFixed(2)}). ` +
+        'No se guardara un fondo/placeholder como escena real.'
       );
     }
   }
@@ -106,6 +176,64 @@ async function analyzeFrames(filePath: string) {
   const blackSeconds = sumMatches(output, /black_duration:([0-9.]+)/g);
   const freezeSeconds = sumMatches(output, /freeze_duration:([0-9.]+)/g);
   return { blackSeconds, freezeSeconds };
+}
+
+async function analyzeVisualDetail(filePath: string) {
+  const width = 96;
+  const height = 54;
+  const frameBytes = width * height;
+  const raw = await runFfmpegBinary([
+    '-hide_banner', '-nostdin', '-i', filePath,
+    '-vf', `fps=1,scale=${width}:${height}:flags=area,format=gray`,
+    '-frames:v', '8',
+    '-an', '-f', 'rawvideo', '-pix_fmt', 'gray', 'pipe:1'
+  ]);
+
+  const frameCount = Math.floor(raw.length / frameBytes);
+  if (frameCount < 1) {
+    throw new Error('No se pudieron muestrear fotogramas para validar la informacion visual.');
+  }
+
+  let stdTotal = 0;
+  let edgeTotal = 0;
+  let meanTotal = 0;
+
+  for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
+    const frame = raw.subarray(frameIndex * frameBytes, (frameIndex + 1) * frameBytes);
+    let sum = 0;
+    for (const value of frame) sum += value;
+    const mean = sum / frame.length;
+    meanTotal += mean;
+
+    let variance = 0;
+    let edge = 0;
+    let edgeSamples = 0;
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const index = y * width + x;
+        const value = frame[index];
+        const delta = value - mean;
+        variance += delta * delta;
+        if (x > 0) {
+          edge += Math.abs(value - frame[index - 1]);
+          edgeSamples += 1;
+        }
+        if (y > 0) {
+          edge += Math.abs(value - frame[index - width]);
+          edgeSamples += 1;
+        }
+      }
+    }
+    stdTotal += Math.sqrt(variance / frame.length);
+    edgeTotal += edge / Math.max(1, edgeSamples);
+  }
+
+  return {
+    sampledFrames: frameCount,
+    meanLuma: meanTotal / frameCount,
+    lumaStdDev: stdTotal / frameCount,
+    edgeMean: edgeTotal / frameCount
+  };
 }
 
 async function analyzeAudio(filePath: string) {
@@ -149,6 +277,31 @@ async function runProbe(args: string[]) {
       settled = true;
       if (code === 0) resolve(stdout);
       else reject(new Error(`ffprobe termino con codigo ${code}. ${stderr.slice(-1200)}`));
+    });
+  });
+}
+
+async function runFfmpegBinary(args: string[]) {
+  return new Promise<Buffer>((resolve, reject) => {
+    const child = spawn(ffmpegExecutable(), args, { windowsHide: true });
+    const chunks: Buffer[] = [];
+    let stderr = '';
+    let settled = false;
+    child.stdout.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+    child.stderr.on('data', (chunk) => {
+      stderr += String(chunk);
+      if (stderr.length > 8_000) stderr = stderr.slice(-8_000);
+    });
+    child.once('error', (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    });
+    child.once('close', (code) => {
+      if (settled) return;
+      settled = true;
+      if (code === 0) resolve(Buffer.concat(chunks));
+      else reject(new Error(`ffmpeg termino con codigo ${code}. ${stderr.slice(-1200)}`));
     });
   });
 }

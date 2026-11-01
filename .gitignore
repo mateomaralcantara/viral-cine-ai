@@ -1,24 +1,41 @@
-node_modules
-.next
-.env.local
-.data
-*.log
-*.zip
-coverage
-backups/
-reports/
-.diagnostics/
-datos.txt
-.data-smoke/
-*.tsbuildinfo
+# Dependencies and build output
 node_modules/
 .next/
-.data/
-.vercel/
-coverage/
 dist/
 out/
-logs/
+coverage/
+*.tsbuildinfo
+
+# Local environments and secrets
 .env
 .env.*
 !.env.example
+
+# ViralCine runtime data (projects, checkpoints, masters, ledgers)
+.data/
+.data-smoke/
+.data-smoke-v4/
+
+# Diagnostics and temporary output
+logs/
+reports/
+backups/
+.diagnostics/
+*.log
+*.zip
+*.tmp
+*.bak
+*.old
+*.backup-*
+datos.txt
+
+# Platform/editor noise
+.DS_Store
+Thumbs.db
+
+# Consolidated ViralCine: never commit local review data, operation ledgers or media
+.data-*/
+.data*/
+*.authorization.json
+*.previous-operation.json
+RUTA-INTEGRACION.txt

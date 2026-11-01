@@ -1,15 +1,26 @@
 import type { FilmPlan } from '@/lib/domain/schemas';
 
-export const MIN_FILM_MINUTES = 5;
+export const MIN_FILM_MINUTES = 1;
 export const MAX_FILM_MINUTES = 120;
-export const MIN_SCENES = 12;
+export const MIN_SCENES = 4;
 export const MAX_SCENES = 120;
 export const MIN_SCENE_SECONDS = 5;
 export const MAX_SCENE_SECONDS = 90;
 
 export function sceneCountForDuration(durationMinutes: number) {
   const targetSeconds = durationMinutes * 60;
-  return Math.max(MIN_SCENES, Math.min(MAX_SCENES, Math.round(targetSeconds / 60)));
+
+  if (durationMinutes <= 3) {
+    return Math.max(
+      MIN_SCENES,
+      Math.min(8, Math.round(targetSeconds / 25))
+    );
+  }
+
+  return Math.max(
+    12,
+    Math.min(MAX_SCENES, Math.round(targetSeconds / 60))
+  );
 }
 
 export function evenlyDistributedDurations(sceneCount: number, targetSeconds: number) {

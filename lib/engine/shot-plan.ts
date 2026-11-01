@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import type { Character, FilmPlan, FilmScene, FilmShot } from '@/lib/domain/schemas';
+import type { Character, FilmPlan, FilmScene, FilmShot, SceneDialogueTurn } from '@/lib/domain/schemas';
 
 const SHOT_SECONDS = 8;
-const PREFLIGHT_VERSION = 1;
+const PREFLIGHT_VERSION = 2;
 const MAX_FEATURED_CHARACTERS = 2;
 
 const shotDirections = [
@@ -40,26 +40,53 @@ export function ensurePlanShots(plan: FilmPlan): FilmPlan {
 export function ensureSceneShots(scene: FilmScene, plan?: FilmPlan) {
   const currentDuration = scene.shots.reduce((sum, shot) => sum + shot.durationSeconds, 0);
   if (scene.shots.length > 0 && currentDuration === scene.durationSeconds) {
-    scene.shots.forEach((shot, index) => prepareShot(plan, scene, shot, index));
+    scene.shots.forEach((shot, index) => {
+      hydrateLegacyShotDialogue(scene, shot, index);
+      prepareShot(plan, scene, shot, index);
+    });
     return scene.shots;
   }
 
-  const shotCount = Math.max(1, Math.ceil(scene.durationSeconds / SHOT_SECONDS));
+  const dialogueTurns = coalesceTurns(scene.dialogueTurns || []);
+  const minimumCount = Math.ceil(scene.durationSeconds / SHOT_SECONDS);
+  const maximumCount = Math.floor(scene.durationSeconds / 4);
+  if (dialogueTurns.length > maximumCount) {
+    throw new Error(
+      `La escena ${scene.order} tiene ${dialogueTurns.length} cambios de hablante y solo permite ${maximumCount} segmentos seguros. Reduce parlamentos o aumenta la duración.`
+    );
+  }
+
+  const shotCount = Math.max(1, minimumCount, dialogueTurns.length);
   const durations = distribute(scene.durationSeconds, shotCount);
-  const spokenChunks = splitWords([scene.narration, scene.dialogue].filter(Boolean).join(' '), shotCount);
+  const narrationChunks = splitWords(scene.narration, Math.max(1, shotCount - dialogueTurns.length));
+  let narrationIndex = 0;
+
   scene.shots = durations.map((durationSeconds, index): FilmShot => {
     const order = index + 1;
+    const turn = dialogueTurns[index];
+    const narration = turn ? '' : (narrationChunks[narrationIndex++] || '');
+    const spokenText = turn?.text || narration;
+    const speakerId = turn?.speakerId || (spokenText ? 'narrator' : undefined);
     const shot: FilmShot = {
       id: randomUUID(),
       order,
-      title: `${scene.title} · Plano ${order}`,
+      title: `${scene.title} · Segmento ${order}`,
       durationSeconds,
       visualPrompt: scene.visualPrompt,
       camera: shotDirections[index % shotDirections.length].camera,
-      spokenText: spokenChunks[index] || '',
+      spokenText,
+      speakerId,
+      dialogueLines: spokenText && speakerId ? [{
+        id: randomUUID(),
+        speakerId,
+        text: spokenText,
+        emotion: turn?.emotion,
+        startSeconds: 0
+      }] : [],
       mode: 'video',
-      characterIds: [],
-      status: 'pending'
+      characterIds: turn ? [turn.speakerId] : [],
+      status: 'pending',
+      pipelineVersion: '4.0-audio-first'
     };
     prepareShot(plan, scene, shot, index);
     return shot;
@@ -71,7 +98,7 @@ export function ensureSceneShots(scene: FilmScene, plan?: FilmPlan) {
 export function preflightPlan(plan: FilmPlan) {
   ensurePlanShots(plan);
   const issues = plan.scenes.flatMap((scene) => scene.shots.flatMap((shot) =>
-    (shot.preflightIssues || []).map((issue) => `Escena ${scene.order}, plano ${shot.order}: ${issue}`)
+    (shot.preflightIssues || []).map((issue) => `Escena ${scene.order}, segmento ${shot.order}: ${issue}`)
   ));
   return {
     passed: issues.length === 0,
@@ -81,11 +108,23 @@ export function preflightPlan(plan: FilmPlan) {
 }
 
 function prepareShot(plan: FilmPlan | undefined, scene: FilmScene, shot: FilmShot, index: number) {
+  if (shot.motionSpec?.version === '5.0-real-motion-v1') {
+    const issues = validateRealMotionShot(plan, shot);
+    shot.preflightVersion = PREFLIGHT_VERSION;
+    shot.preflightIssues = issues;
+    shot.preflightScore = issues.length === 0 ? 10 : Math.max(0, 10 - issues.length);
+    shot.promptLocked = issues.length === 0;
+    return;
+  }
+
   const direction = shotDirections[index % shotDirections.length];
   const featured = selectShotCharacters(plan, scene, shot, index);
   const narrativeBeat = shot.spokenText.trim() || scene.summary.trim();
   const cleanVisual = cleanSceneVisualPrompt(plan, scene, featured);
   const continuity = characterContinuity(plan, featured);
+  const speaker = shot.speakerId && shot.speakerId !== 'narrator'
+    ? plan?.characters.find((character) => character.id === shot.speakerId)
+    : undefined;
 
   shot.characterIds = featured;
   shot.camera = direction.camera;
@@ -93,14 +132,15 @@ function prepareShot(plan: FilmPlan | undefined, scene: FilmScene, shot: FilmSho
   shot.visualPrompt = [
     cleanVisual,
     direction.description,
-    `Momento unico de esta toma: ${narrativeBeat}.`,
+    `Momento unico de este segmento: ${narrativeBeat}.`,
+    speaker ? `${speaker.name} es el hablante visible principal; su rostro debe permanecer claramente legible para sincronización labial.` : '',
     continuity,
-    'Una sola accion visible y una sola composicion durante toda la toma.',
+    'Una sola accion visible y una sola composicion durante todo el segmento.',
     'Movimiento autentico, fisica estable, rostros y vestuario constantes.',
     'Sin montaje interno, sin alternar encuadres, sin cambios de escala, sin transformaciones, sin texto, sin subtitulos y sin logotipos.'
   ].filter(Boolean).join(' ');
 
-  const issues = validateShot(shot);
+  const issues = validateShot(plan, shot);
   shot.preflightVersion = PREFLIGHT_VERSION;
   shot.preflightIssues = issues;
   shot.preflightScore = issues.length === 0 ? 10 : Math.max(0, 10 - issues.length);
@@ -110,6 +150,10 @@ function prepareShot(plan: FilmPlan | undefined, scene: FilmScene, shot: FilmSho
 function selectShotCharacters(plan: FilmPlan | undefined, scene: FilmScene, shot: FilmShot, index: number) {
   const allowedIds = scene.characterIds.filter((id) => plan?.characters.some((character) => character.id === id) ?? true);
   if (!allowedIds.length) return [];
+  if (shot.speakerId && shot.speakerId !== 'narrator' && allowedIds.includes(shot.speakerId)) {
+    const secondary = allowedIds.find((id) => id !== shot.speakerId);
+    return secondary ? [shot.speakerId, secondary] : [shot.speakerId];
+  }
   if (!plan) return (shot.characterIds.length ? shot.characterIds : allowedIds).slice(0, MAX_FEATURED_CHARACTERS);
 
   const available = allowedIds
@@ -167,14 +211,52 @@ function chooseShotMode(scene: FilmScene, shot: FilmShot, featuredIds: string[],
     : 'video';
 }
 
-function validateShot(shot: FilmShot) {
+function validateRealMotionShot(plan: FilmPlan | undefined, shot: FilmShot) {
+  const issues: string[] = [];
+
+  if (shot.motionSpec?.allowStillFallbackFinal !== false) {
+    issues.push('Real Motion FINAL no puede permitir still fallback.');
+  }
+  if (!shot.motionSpec?.preferredProviders?.length) {
+    issues.push('Real Motion no tiene proveedor preferido.');
+  }
+  if (!shot.characterIds.length) {
+    issues.push('Real Motion no tiene personaje principal asociado.');
+  }
+  if (shot.characterIds.length > MAX_FEATURED_CHARACTERS) {
+    issues.push('Hay mas de dos personajes principales.');
+  }
+  if (shot.spokenText.trim() && !shot.speakerId) {
+    issues.push('Existe texto hablado pero falta speakerId.');
+  }
+  if (
+    shot.speakerId &&
+    shot.speakerId !== 'narrator' &&
+    plan &&
+    !plan.characters.some((character) => character.id === shot.speakerId)
+  ) {
+    issues.push('speakerId no corresponde a un personaje de la biblia.');
+  }
+  if (!/sin cortes?/i.test(shot.camera)) {
+    issues.push('La camara Real Motion no declara continuidad sin cortes.');
+  }
+
+  return issues;
+}
+
+function validateShot(plan: FilmPlan | undefined, shot: FilmShot) {
   const issues: string[] = [];
   if (shot.characterIds.length > MAX_FEATURED_CHARACTERS) issues.push('Hay mas de dos personajes principales.');
   if (shot.mode === 'avatar-video' && shot.characterIds.length !== 1) issues.push('Un avatar requiere exactamente un personaje.');
+  if (shot.dialogueLines.length > 1) issues.push('Un segmento de lip-sync solo puede contener un hablante principal.');
+  if (shot.spokenText.trim() && !shot.speakerId) issues.push('Existe texto hablado pero falta speakerId.');
+  if (shot.speakerId && shot.speakerId !== 'narrator' && plan && !plan.characters.some((character) => character.id === shot.speakerId)) {
+    issues.push('speakerId no corresponde a un personaje de la biblia.');
+  }
   const positiveInstructions = shot.visualPrompt
     .replace(/sin (?:montaje interno|alternar encuadres|cambios? de escala|cortes?)/gi, '');
   if (/(alternar|intercalar|varios angulos|montaje rapido|cambio de plano)/i.test(positiveInstructions)) {
-    issues.push('El prompt contiene montaje o varios encuadres dentro de una sola toma.');
+    issues.push('El prompt contiene montaje o varios encuadres dentro de un solo segmento.');
   }
   const maximumWords = Math.max(10, Math.floor(shot.durationSeconds * 2.8));
   if (wordCount(shot.spokenText) > maximumWords) {
@@ -182,6 +264,34 @@ function validateShot(shot: FilmShot) {
   }
   if (!/sin cortes/i.test(shot.camera)) issues.push('La camara no declara continuidad sin cortes.');
   return issues;
+}
+
+function hydrateLegacyShotDialogue(scene: FilmScene, shot: FilmShot, index: number) {
+  if (!shot.spokenText.trim() || shot.dialogueLines.length) return;
+  const explicit = scene.dialogueTurns?.[index];
+  const speakerId = shot.speakerId || explicit?.speakerId || (shot.characterIds.length === 1 ? shot.characterIds[0] : 'narrator');
+  shot.speakerId = speakerId;
+  shot.dialogueLines = [{
+    id: randomUUID(),
+    speakerId,
+    text: shot.spokenText,
+    emotion: explicit?.emotion,
+    startSeconds: 0
+  }];
+  shot.pipelineVersion = shot.pipelineVersion || '4.0-audio-first';
+}
+
+function coalesceTurns(turns: SceneDialogueTurn[]) {
+  const result: SceneDialogueTurn[] = [];
+  for (const turn of turns.filter((item) => item.text.trim())) {
+    const previous = result[result.length - 1];
+    if (previous && previous.speakerId === turn.speakerId && previous.emotion === turn.emotion) {
+      previous.text = `${previous.text} ${turn.text}`.trim();
+    } else {
+      result.push({ ...turn, text: turn.text.trim() });
+    }
+  }
+  return result;
 }
 
 function resetSceneProduction(scene: FilmScene) {
@@ -202,7 +312,7 @@ function distribute(totalSeconds: number, count: number) {
   const remainder = totalSeconds - base * count;
   const values = Array.from({ length: count }, (_, index) => base + (index < remainder ? 1 : 0));
   if (values.some((value) => value < 4 || value > 8)) {
-    throw new Error(`No fue posible dividir ${totalSeconds}s en planos cinematograficos de 4-8s.`);
+    throw new Error(`No fue posible dividir ${totalSeconds}s en segmentos cinematograficos de 4-8s.`);
   }
   return values;
 }

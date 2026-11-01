@@ -4,22 +4,91 @@ import { GoogleGenAI } from '@google/genai';
 import type { ProjectInput } from '@/lib/domain/schemas';
 import { assertPaidGenerationAllowed } from '@/lib/engine/production-safety';
 
-export async function generateVeoVideo(imagePath: string, prompt: string, input: ProjectInput, outputPath: string, durationSeconds = 8) {
+export class VeoNoVideoError extends Error {
+  readonly noChargeLikely = true;
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'VeoNoVideoError';
+  }
+}
+
+export function isVeoNoChargeFailure(error: unknown) {
+  return error instanceof VeoNoVideoError;
+}
+
+export function isVeoQuotaFailure(error: unknown) {
+  const candidate = error as {
+    status?: number;
+    code?: string | number;
+    message?: string;
+    error?: {
+      code?: string | number;
+      status?: string;
+      message?: string;
+    };
+  };
+
+  const status = Number(candidate?.status ?? candidate?.code ?? candidate?.error?.code);
+  if (status === 429) return true;
+
+  const detail = [
+    candidate?.message,
+    candidate?.error?.status,
+    candidate?.error?.message
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toUpperCase();
+
+  return (
+    detail.includes('RESOURCE_EXHAUSTED') ||
+    detail.includes('CURRENT QUOTA') ||
+    detail.includes('RATE LIMIT')
+  );
+}
+
+export async function generateVeoVideo(
+  imagePath: string,
+  prompt: string,
+  input: ProjectInput,
+  outputPath: string,
+  durationSeconds = 8,
+  modelOverride?: string
+) {
   assertPaidGenerationAllowed('generar video con Veo', 'GEMINI_API_KEY');
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const geminiApiKey = process.env.GEMINI_API_KEY;
+  const previousGoogleApiKey = process.env.GOOGLE_API_KEY;
+  // @google/genai can prioritize GOOGLE_API_KEY when both variables exist.
+  // ViralCine's Veo path is explicitly guarded by GEMINI_API_KEY, so construct
+  // this client with only that credential visible and restore the process env
+  // immediately afterwards.
+  if (previousGoogleApiKey !== undefined) delete process.env.GOOGLE_API_KEY;
+  let ai: GoogleGenAI;
+  try {
+    ai = new GoogleGenAI({ apiKey: geminiApiKey });
+  } finally {
+    if (previousGoogleApiKey !== undefined) process.env.GOOGLE_API_KEY = previousGoogleApiKey;
+  }
   const bytes = await readFile(imagePath);
   let operation = await ai.models.generateVideos({
-    model: process.env.GEMINI_VIDEO_MODEL || 'veo-3.1-fast-generate-preview',
-    prompt,
-    image: {
-      imageBytes: bytes.toString('base64'),
-      mimeType: extname(imagePath).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg'
+    model:
+      modelOverride ||
+      process.env.GEMINI_VIDEO_MODEL ||
+      'veo-3.1-fast-generate-preview',
+    source: {
+      prompt,
+      image: {
+        imageBytes: bytes.toString('base64'),
+        mimeType: extname(imagePath).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg'
+      }
     },
     config: {
       aspectRatio: input.aspectRatio,
       numberOfVideos: 1,
       durationSeconds: durationSeconds <= 4 ? 4 : durationSeconds <= 6 ? 6 : 8,
-      resolution: process.env.GEMINI_VIDEO_RESOLUTION || '720p'
+      resolution: process.env.GEMINI_VIDEO_RESOLUTION || '720p',
+      personGeneration: 'allow_adult'
     }
   });
 
@@ -31,7 +100,28 @@ export async function generateVeoVideo(imagePath: string, prompt: string, input:
   }
 
   const video = operation.response?.generatedVideos?.[0]?.video;
-  if (!video) throw new Error('Veo terminó sin devolver video.');
+  if (!video) {
+    const providerError = compactProviderDetail(operation.error);
+    const metadata = compactProviderDetail(operation.metadata);
+    const operationName = operation.name || 'sin-id';
+    throw new VeoNoVideoError(
+      'Veo terminó sin devolver video. operation=' + operationName +
+      (providerError ? ' | providerError=' + providerError : '') +
+      (metadata ? ' | metadata=' + metadata : '') +
+      ' | Google indica que las generaciones bloqueadas/sin video no se cobran.'
+    );
+  }
   await ai.files.download({ file: video, downloadPath: outputPath });
   return outputPath;
+}
+
+
+function compactProviderDetail(value: unknown) {
+  if (!value) return '';
+  try {
+    const text = JSON.stringify(value);
+    return text.length > 700 ? text.slice(0, 700) + '…' : text;
+  } catch {
+    return String(value).slice(0, 700);
+  }
 }
