@@ -16,7 +16,7 @@ if (!(Get-Command git.exe -ErrorAction SilentlyContinue)) { throw 'Git no esta i
 $antiguas = @{}
 foreach ($var in @('GIT_DIR','GIT_WORK_TREE','GIT_COMMON_DIR','GIT_INDEX_FILE')) {
     $antiguas[$var] = [Environment]::GetEnvironmentVariable($var,'Process')
-    [Environment]::SetEnvironmentVariable($var,$null,'Process')
+    Remove-Item -LiteralPath ('Env:' + $var) -Force -ErrorAction SilentlyContinue
 }
 
 $indice = $null
@@ -128,7 +128,11 @@ try {
 }
 finally {
     foreach ($var in $antiguas.Keys) {
-        [Environment]::SetEnvironmentVariable($var,$antiguas[$var],'Process')
+        if ($null -eq $antiguas[$var]) {
+            Remove-Item -LiteralPath ('Env:' + $var) -Force -ErrorAction SilentlyContinue
+        } else {
+            [Environment]::SetEnvironmentVariable($var,$antiguas[$var],'Process')
+        }
     }
     if ($indice -and (Test-Path -LiteralPath $indice)) {
         Remove-Item -LiteralPath $indice -Force -ErrorAction SilentlyContinue
