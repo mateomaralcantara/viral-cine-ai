@@ -75,8 +75,27 @@ try {
         if ($permitidas -notcontains $archivo.Extension.ToLowerInvariant() -and $rel -notin @('.gitignore','.gitattributes')) { continue }
         if ($archivo.Length -gt 2MB) { throw ('Archivo de codigo demasiado grande: ' + $rel) }
         $contenido = [IO.File]::ReadAllText($archivo.FullName)
-        if ([regex]::IsMatch($contenido,$patronSecretos)) {
-            throw ('Posible secreto en ' + $rel + '. No se publico nada.')
+        # Se permite exclusivamente una credencial ficticia ya auditada en un test.
+        # Se compara la huella SHA-256 para no exceptuar otras claves, ni siquiera en el mismo archivo.
+        $incidencias = [regex]::Matches($contenido,$patronSecretos)
+        foreach ($incidencia in $incidencias) {
+            $excepcionSegura = $false
+            if ($rel -ceq 'tests/pilot-shot-one-v5.test.ts' -and
+                $incidencia.Value.StartsWith('sk-test-')) {
+                $sha256 = [Security.Cryptography.SHA256]::Create()
+                try {
+                    $digest = $sha256.ComputeHash(
+                        [Text.Encoding]::UTF8.GetBytes($incidencia.Value)
+                    )
+                } finally {
+                    $sha256.Dispose()
+                }
+                $huella = [BitConverter]::ToString($digest).Replace('-','').ToLowerInvariant()
+                $excepcionSegura = ($huella -ceq '1ac87db941360af0a143a990ff33dfbf4fc826502b0ffb8394203501880ad5a8')
+            }
+            if (!$excepcionSegura) {
+                throw ('Posible secreto en ' + $rel + '. No se publico nada.')
+            }
         }
         $seleccion.Add([pscustomobject]@{ Rel = $rel; Content = $contenido })
     }
