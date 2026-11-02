@@ -13,6 +13,7 @@ type StudioBoard = {
   sceneLabel: string; title: string; legacy: boolean; model: string; providerEnabled: boolean;
   tariffConfigured: boolean; ratePerSecondUsd: number | null; capUsd: number;
   exposureUsd: number; remainingUsd: number; shots: StudioShot[];
+  pendingShots: string[]; sceneTotalUsd: number; sceneAuthorization: string | null;
 };
 
 const SCENES = ['E03', 'E04', 'E05', 'E06', 'E07', 'E08', 'E09', 'E10'];
@@ -25,6 +26,8 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
   const [auth, setAuth] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState('');
   const [message, setMessage] = useState('');
+  const [sceneAuth, setSceneAuth] = useState('');
+  const [summary, setSummary] = useState('');
 
   const refresh = useCallback(async () => {
     const response = await fetch(endpoint + '?scene=' + scene, { cache: 'no-store' });
@@ -34,9 +37,19 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
   }, [endpoint, scene]);
 
   useEffect(() => {
-    setDrafts({}); setAuth({}); setMessage('');
+    setDrafts({}); setAuth({}); setMessage(''); setSceneAuth(''); setSummary('');
     void refresh().catch((e) => setMessage(String(e instanceof Error ? e.message : e)));
   }, [refresh]);
+
+  const waiting = board?.shots.some((s) => s.status === 'submitted' || s.status === 'processing') ?? false;
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = setInterval(() => {
+      void fetch(endpoint, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'resume-scene', scene }) }).then(() => refresh()).catch(() => undefined);
+    }, 30000);
+    return () => clearInterval(timer);
+  }, [waiting, endpoint, scene, refresh]);
 
   async function post(body: Record<string, unknown>, label: string) {
     setBusy(label); setMessage('');
@@ -91,6 +104,31 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
         Falta V7_SCENE_MAX_USD (tope fijo por escena).</p>}
       {board?.legacy && <p className="mt-2 text-sm text-amber-200">Esta escena usa su panel propio.</p>}
       {message && <p className="mt-3 text-sm text-red-300" role="alert">{message}</p>}
+      {summary && <p className="mt-3 text-sm text-emerald-300" role="status">{summary}</p>}
+
+      {board && !board.legacy && <div className="mt-5 rounded-2xl border border-violet-400/40 bg-violet-500/[.06] p-4">
+        <h3 className="text-lg font-black">Escena completa de un solo tirón</h3>
+        {board.sceneAuthorization ? <>
+          <p className="mt-1 text-sm text-slate-300">
+            Envía las {board.pendingShots.length} tomas pendientes con su prompt actual (las que no tengan versión se guardan tal cual).
+            Total: <b>US${board.sceneTotalUsd.toFixed(2)}</b>. Se detiene ante el primer error; nunca reintenta solo.
+          </p>
+          <p className="mt-2 text-xs text-amber-200">Escribe exactamente: <b>{board.sceneAuthorization}</b></p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <input className="min-w-[280px] flex-1 rounded-lg border border-white/20 bg-slate-950 p-2 text-sm text-white"
+              value={sceneAuth} placeholder={board.sceneAuthorization} onChange={(e) => setSceneAuth(e.target.value)}/>
+            <button type="button" className="button-primary"
+              disabled={!!busy || !board.providerEnabled || !board.tariffConfigured || board.capUsd <= 0 || sceneAuth.trim() !== board.sceneAuthorization}
+              onClick={() => void post({ action: 'submit-scene', scene, authorization: sceneAuth }, 'scene').then((d) => {
+                const r = (d as { result?: { submitted?: number; results?: Array<{ shotId: string; status: string; error?: string }> } } | null)?.result;
+                if (r) setSummary('Enviadas ' + r.submitted + ' tomas. ' + (r.results?.filter((x) => x.status !== 'submitted').map((x) => x.shotId + ': ' + (x.error || x.status)).join(' · ') || 'Se recuperarán solas cada 30 s.'));
+              })}>
+              {busy === 'scene' ? 'Enviando escena…' : 'Generar escena completa con Veo'}</button>
+          </div>
+        </> : <p className="mt-1 text-sm text-slate-300">No quedan tomas pendientes. {waiting ? 'Recuperando videos cada 30 s…' : ''}</p>}
+        <button type="button" className="button-secondary mt-3" disabled={!!busy}
+          onClick={() => void post({ action: 'resume-scene', scene }, 'resume-scene')}>Recuperar todas · gratis</button>
+      </div>}
 
       <div className="mt-5 space-y-4">
         {board?.shots.map((shot) => {

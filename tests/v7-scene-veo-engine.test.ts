@@ -7,7 +7,7 @@ import { createDosToquesBundle } from '../lib/v7/presets/dos-toques-de-bocina';
 import { saveV7FilmBundle } from '../lib/v7/storage/film-store';
 import {
   authorizationPhrase, candidatePath, estimateShotUsd, latestPromptRevision, recordPath,
-  savePromptRevision, sceneExposureUsd, scenePlan, sceneStudioBoard, submitSceneShot
+  savePromptRevision, sceneExposureUsd, scenePlan, sceneStudioBoard, submitSceneShot, submitWholeScene, sceneAuthorizationPhrase
 } from '../lib/v7/production/scene-veo-engine';
 import { resolveV7ShotVideo } from '../lib/v7/production/shot-video-source';
 
@@ -107,5 +107,34 @@ test('Un video de Veo recuperado aparece en el tablero de aprobación con el for
     const resolved = await resolveV7ShotVideo(filmId, label);
     assert.equal(resolved?.provider, 'veo');
     assert.equal(resolved?.filename, 'E03-P01-veo-candidato.mp4');
+  });
+});
+
+test('E03 parte de prompts curados: solo lo que sale en el encuadre y Gabriel descrito igual', async () => {
+  await withStudio(async (filmId) => {
+    const plan = await scenePlan(filmId, 'E03');
+    const gabriel = plan.shots.filter((s) => s.defaultPrompt.includes('short dark curly hair'));
+    assert.ok(gabriel.length >= 4);
+    assert.ok(plan.shots.every((s) => !/Victoria|traje crema/.test(s.defaultPrompt)), 'Victoria no aparece en E03');
+    assert.ok(plan.shots.every((s) => s.defaultPrompt.length >= 60 && s.defaultPrompt.length <= 3500));
+  });
+});
+
+test('Escena completa: exige la frase con el total exacto y respeta el tope fijo sin reservar nada', async () => {
+  await withStudio(async (filmId) => {
+    env.NODE_ENV = 'development';
+    process.env.V7_VEO_SCENES_ENABLED = 'true';
+    process.env.GEMINI_API_KEY = 'AIza-test-key-not-real';
+    process.env.V7_VEO_USD_PER_SECOND = '0.05';
+    process.env.V7_SCENE_MAX_USD = '2';
+    const board = await sceneStudioBoard(filmId, 'E03');
+    assert.equal(board.pendingShots.length, 9);
+    assert.equal(board.sceneTotalUsd, 3.6);
+    assert.equal(board.sceneAuthorization, sceneAuthorizationPhrase('E03', 3.6));
+    await assert.rejects(submitWholeScene(filmId, 'E03', 'AUTORIZO E03'), /Escribe exactamente/);
+    await assert.rejects(submitWholeScene(filmId, 'E03', board.sceneAuthorization!), /supera el tope/);
+    for (const s of board.shots) await assert.rejects(readFile(recordPath(filmId, s.shotId)), { code: 'ENOENT' });
+    assert.equal(await sceneExposureUsd(filmId, 'E03'), 0);
+    await assert.rejects(submitWholeScene(filmId, 'E02', 'x'), /propio motor/);
   });
 });

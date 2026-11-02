@@ -20,6 +20,7 @@ import { GoogleGenAI } from '@google/genai';
 import { readV7FilmBundle, v7FilmRoot } from '@/lib/v7/storage/film-store';
 import { indexedScenes } from '@/lib/v7/production/scene-approval-board';
 import { veoSeconds } from '@/lib/v7/production/cinema-core-policy';
+import { DOS_TOQUES_SCENE_PROMPTS } from '@/lib/v7/presets/dos-toques-scene-prompts';
 
 const command = promisify(execFile);
 const SCENE_LABEL = /^E\d{2}$/;
@@ -86,6 +87,9 @@ export function veoScenesEnabled() {
 export function estimateShotUsd(editSeconds: number, rate: number) {
   return round(veoSeconds(Math.min(8, editSeconds)) * rate);
 }
+export function sceneAuthorizationPhrase(sceneLabel: string, usd: number) {
+  return 'AUTORIZO ' + sceneLabel + ' COMPLETA US$' + usd.toFixed(2);
+}
 export function authorizationPhrase(shotId: string, usd: number) {
   return 'AUTORIZO ' + shotId + ' US$' + usd.toFixed(2);
 }
@@ -136,7 +140,7 @@ export async function scenePlan(filmId: string, sceneLabel: string) {
     editSeconds: shot.durationSeconds,
     providerSeconds: veoSeconds(Math.min(8, shot.durationSeconds)),
     spokenText: shot.spokenText,
-    defaultPrompt: defaultPrompt(shot.visualPrompt || shot.title, shot.camera)
+    defaultPrompt: DOS_TOQUES_SCENE_PROMPTS[label] ?? defaultPrompt(shot.visualPrompt || shot.title, shot.camera)
   }));
   return { filmId, sceneLabel, sceneId: entry.scene.id, title: entry.scene.title, shots, legacy: LEGACY_SCENES.has(sceneLabel) };
 }
@@ -302,8 +306,13 @@ export async function sceneStudioBoard(filmId: string, sceneLabel: string) {
       videoReady: record?.status === 'review-required'
     };
   }));
+  const pending = shots.filter((s) => s.status === 'not-started' && s.estimatedUsd !== null);
+  const sceneTotalUsd = round(pending.reduce((sum, s) => sum + (s.estimatedUsd ?? 0), 0));
   return {
     ...plan,
+    pendingShots: pending.map((s) => s.shotId),
+    sceneTotalUsd,
+    sceneAuthorization: pending.length ? sceneAuthorizationPhrase(plan.sceneLabel, sceneTotalUsd) : null,
     model: veoSceneModel(),
     providerEnabled: veoScenesEnabled(),
     tariffConfigured: rate !== null,
@@ -317,20 +326,84 @@ export async function sceneStudioBoard(filmId: string, sceneLabel: string) {
 
 // ---------- envío (único paso con costo) ----------
 
-export async function submitSceneShot(filmId: string, shotId: string, input: { revisionId: string; authorization: string }) {
-  const { plan, shot } = await planShot(filmId, shotId);
-  if (plan.legacy) throw new Error(plan.sceneLabel + ' tiene su propio motor y libro de gasto. Usa su panel.');
+function paidPreconditions(legacy: boolean, sceneLabel: string) {
+  if (legacy) throw new Error(sceneLabel + ' tiene su propio motor y libro de gasto. Usa su panel.');
   if (!veoScenesEnabled()) throw new Error('Veo para escenas está apagado (V7_VEO_SCENES_ENABLED) o falta GEMINI_API_KEY.');
   const rate = veoSceneRate();
   if (rate === null) throw new Error('Tarifa de Veo sin verificar: configura V7_VEO_USD_PER_SECOND según la página de precios de Google.');
   const cap = sceneCapUsd();
   if (cap <= 0) throw new Error('Configura V7_SCENE_MAX_USD: tope fijo de gasto por escena.');
+  return { rate, cap };
+}
+
+export async function submitSceneShot(filmId: string, shotId: string, input: { revisionId: string; authorization: string }) {
+  const { plan, shot } = await planShot(filmId, shotId);
+  const { rate, cap } = paidPreconditions(plan.legacy, plan.sceneLabel);
   if (!REVISION_ID.test(input.revisionId)) throw new Error('Guarda primero una versión del prompt.');
   const estimatedUsd = estimateShotUsd(shot.editSeconds, rate);
   if (input.authorization.trim() !== authorizationPhrase(shotId, estimatedUsd)) {
     throw new Error('Escribe exactamente: ' + authorizationPhrase(shotId, estimatedUsd));
   }
+  return withSceneLock(filmId, plan.sceneLabel, () => submitLocked(filmId, plan, shot, input.revisionId, estimatedUsd, cap));
+}
+
+/**
+ * Escena completa de un solo tirón: una autorización por el total exacto de las
+ * tomas pendientes. Guarda como versión el prompt actual de las tomas que no
+ * tienen una, envía en orden y se detiene ante el primer error (sin reintentos).
+ */
+export async function submitWholeScene(filmId: string, sceneLabel: string, authorization: string) {
+  const plan = await scenePlan(filmId, sceneLabel);
+  const { rate, cap } = paidPreconditions(plan.legacy, plan.sceneLabel);
   return withSceneLock(filmId, plan.sceneLabel, async () => {
+    const pending = [];
+    for (const shot of plan.shots) if (!(await readShotRecord(filmId, shot.shotId))) pending.push(shot);
+    if (!pending.length) throw new Error('No quedan tomas pendientes en ' + sceneLabel + '.');
+    const total = round(pending.reduce((sum, s) => sum + estimateShotUsd(s.editSeconds, rate), 0));
+    if (authorization.trim() !== sceneAuthorizationPhrase(sceneLabel, total)) {
+      throw new Error('Escribe exactamente: ' + sceneAuthorizationPhrase(sceneLabel, total));
+    }
+    const exposure = await sceneExposureUsd(filmId, sceneLabel);
+    if (exposure + total > cap + 0.000001) {
+      throw new Error('La escena completa (US$' + total.toFixed(2) + ') supera el tope: ya comprometido US$' + exposure.toFixed(2) + ' de US$' + cap.toFixed(2) + '. Súbelo solo si lo decides tú (V7_SCENE_MAX_USD).');
+    }
+    const results: Array<{ shotId: string; status: string; error?: string }> = [];
+    for (const shot of pending) {
+      const revision = (await latestPromptRevision(filmId, shot.shotId)) ?? await savePromptRevision(filmId, shot.shotId, shot.defaultPrompt);
+      try {
+        const r = await submitLocked(filmId, plan, shot, revision.revisionId, estimateShotUsd(shot.editSeconds, rate), cap);
+        results.push({ shotId: shot.shotId, status: r.status });
+      } catch (error) {
+        results.push({ shotId: shot.shotId, status: 'stopped', error: safeError(error) });
+        break; // Ante cualquier duda, no seguir gastando.
+      }
+    }
+    return { sceneLabel, authorizedUsd: total, submitted: results.filter((r) => r.status === 'submitted').length, results, noAutomaticRetries: true };
+  });
+}
+
+/** Recupera (solo consulta) todas las tomas enviadas de la escena. */
+export async function resumeWholeScene(filmId: string, sceneLabel: string) {
+  const plan = await scenePlan(filmId, sceneLabel);
+  const results: Array<{ shotId: string; status: string; error?: string }> = [];
+  for (const shot of plan.shots) {
+    const record = await readShotRecord(filmId, shot.shotId);
+    if (!record || record.provider !== 'veo' || !record.operationName || record.status === 'review-required') continue;
+    try {
+      const r = await resumeSceneShot(filmId, shot.shotId);
+      results.push({ shotId: shot.shotId, status: r.status });
+    } catch (error) {
+      results.push({ shotId: shot.shotId, status: 'error', error: safeError(error) });
+    }
+  }
+  return { sceneLabel, results, newGenerationRequests: 0 };
+}
+
+async function submitLocked(filmId: string, plan: Awaited<ReturnType<typeof scenePlan>>, shot: ScenePlanShot,
+  revisionId: string, estimatedUsd: number, cap: number) {
+  const shotId = shot.shotId;
+  {
+    const input = { revisionId };
     const revision = await latestPromptRevision(filmId, shotId);
     if (!revision || revision.revisionId !== input.revisionId) throw new Error('El prompt cambió: revisa y autoriza la versión más reciente.');
     const existing = await readShotRecord(filmId, shotId);
@@ -383,7 +456,7 @@ export async function submitSceneShot(filmId: string, shotId: string, input: { r
       await writeRecord(filmId, record);
       throw new Error('Veo no confirmó la solicitud. No se reenviará: ' + record.error);
     }
-  });
+  }
 }
 
 // ---------- recuperar (gratis: solo consulta la misma operación) ----------

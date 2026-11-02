@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { localAdminAuthorized, localOriginAllowed } from '@/lib/v7/security/local-studio-session';
 import {
-  resumeSceneShot, savePromptRevision, sceneStudioBoard, submitSceneShot
+  resumeSceneShot, resumeWholeScene, savePromptRevision, sceneStudioBoard, submitSceneShot, submitWholeScene
 } from '@/lib/v7/production/scene-veo-engine';
 
 export const runtime = 'nodejs';
@@ -40,6 +40,14 @@ export async function POST(request: Request, context: Context) {
       if (typeof body.promptText !== 'string') return fail(400, 'Falta el prompt.');
       const revision = await savePromptRevision(filmId, shotId, body.promptText);
       return NextResponse.json({ ok: true, revisionId: revision.revisionId, providerCalls: 0 }, { headers: noStore });
+    }
+    const scene = typeof body.scene === 'string' ? body.scene : '';
+    if (body.action === 'submit-scene') {
+      if (typeof body.authorization !== 'string') return fail(400, 'Falta la autorización de la escena.');
+      return NextResponse.json({ ok: true, result: await submitWholeScene(filmId, scene, body.authorization) }, { headers: noStore });
+    }
+    if (body.action === 'resume-scene') {
+      return NextResponse.json({ ok: true, result: await resumeWholeScene(filmId, scene) }, { headers: noStore });
     }
     if (body.action === 'resume') {
       return NextResponse.json({ ok: true, result: await resumeSceneShot(filmId, shotId), newGenerationRequests: 0 }, { headers: noStore });
