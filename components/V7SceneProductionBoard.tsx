@@ -1,4 +1,7 @@
 'use client';
+import V7RunwayScene02Panel from '@/components/V7RunwayScene02Panel';
+
+import V7E02CloudImageGallery from '@/components/V7E02CloudImageGallery';
 import { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, Film, RefreshCcw, ShieldCheck } from 'lucide-react';
 import {ensureLocalStudioSession} from '@/lib/v7/security/local-studio-client';
@@ -99,7 +102,7 @@ export default function V7SceneProductionBoard({filmId}:{filmId:string}){
       </p>}
       <div className="mt-5 space-y-3">
         {board?.scenes.map(scene=>(
-          <details key={scene.id} className="rounded-2xl border border-white/10 p-4" open={scene.label==='E01'}>
+          <details key={scene.id} className="rounded-2xl border border-white/10 p-4" open={scene.label==='E01'||(scene.label==='E02'&&filmId==='film-dos-toques-de-bocina-v7')}>
             <summary className="cursor-pointer font-bold">
               {scene.label} · {scene.title}
               <span className={'ml-2 text-xs '+(scene.approved?'text-emerald-300':'text-slate-400')}>
@@ -107,6 +110,14 @@ export default function V7SceneProductionBoard({filmId}:{filmId:string}){
               </span>
             </summary>
             <p className="mt-3 text-xs text-slate-400">{scene.reason}</p>
+{scene.label === 'E02' &&
+  filmId === 'film-dos-toques-de-bocina-v7' && (
+    <V7RunwayScene02Panel filmId={filmId} />
+  )}
+{scene.label === 'E02' &&
+  filmId === 'film-dos-toques-de-bocina-v7' && (
+    <V7E02CloudImageGallery sceneShots={scene.shots} />
+  )}
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <button type="button" className="button-secondary"
                 disabled={!scene.readyForAssembly||!!working}

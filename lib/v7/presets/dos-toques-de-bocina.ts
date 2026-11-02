@@ -38,7 +38,7 @@ const specs: SceneSpec[] = [
       { image: 'Tres platos en mesa familiar; dos pequeños quedan vacíos', camera: 'Plano detalle estático' },
       { image: 'Camila cierra maleta a contraluz, intenta contener lágrimas', camera: 'Plano medio de espalda', line: 'No puedo seguir viviendo con la incertidumbre. Los niños se vienen conmigo.', voice: 'camila' },
       { image: 'Victoria espera erguida junto a puerta con maleta', camera: 'Plano medio lateral', line: 'Necesitan estabilidad, Gabriel. No promesas.', voice: 'victoria' },
-      { image: 'Gabriel entra con casco negro en mano y observa maleta', camera: 'Plano americano con ligero acercamiento', line: 'Si tú no quieres estar conmigo, yo no puedo obligarte. Pero soy su papá.', voice: 'gabriel' },
+      { image: 'Gabriel ya está dentro con casco en mano y observa la maleta', camera: 'Plano americano con ligero acercamiento', line: 'Si tú no quieres estar conmigo, yo no puedo obligarte. Pero soy su papá.', voice: 'gabriel' },
       { image: 'Camila contempla el marco familiar y aparta los ojos', camera: 'Primer plano de reacción', line: 'Yo sé que los amas.', voice: 'camila' },
       { image: 'La puerta se cierra despacio; Gabriel permanece solo en pasillo', camera: 'Plano general fijo', line: 'Entonces diles que no he dejado de esperarlos.', voice: 'gabriel' },
       { image: 'Gabriel acomoda dos platos infantiles intactos; sombra en mesa', camera: 'Detalle de manos en lenta aproximación' }

@@ -40,7 +40,7 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
   return ()=>{cancel.current=true;clearInterval(timer);};
  },[refresh]);
  async function request(action:'preflight'|'submit'|'resume',shotId:string,shot?:Shot){
-  await ensureLocalStudioSession();
+  if(action!=='preflight')await ensureLocalStudioSession();
   const response=await fetch(endpoint,{method:'POST',credentials:'same-origin',
    headers:{'Content-Type':'application/json'},
    body:JSON.stringify({action,shotId,...(action==='submit'?{
@@ -159,7 +159,12 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
     if(cancel.current)break;
     let state=(await refresh()).shots.find(s=>s.id===shot.id)!;
     if(state.status==='review-required'){setDetail(shot.id+' lista.');continue;}
-    if(state.status==='failed-unknown')throw Error(shot.id+' tiene una operación fallida. Sin reintento automático.');
+    if(state.status==='failed-unknown'){
+      if(shot.id!=='E02-P01')
+        throw Error(shot.id+': error pendiente de investigar.');
+      setDetail('E02-P01 conservada para investigacion. No se reenviara. Continuando con las otras tomas.');
+      continue;
+    }
     if(state.status==='not-started'){
      setDetail('Solicitando la operación de '+shot.id+' (aún no confirmada por Runway)…');
      await request('submit',shot.id,state);
@@ -183,7 +188,15 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
     if(!finished)throw Error('La sesión quedó pendiente en '+shot.id+
       '. Puedes recuperar la misma tarea desde su botón, sin volver a pagar.');
    }
-   if(!cancel.current)setDetail('Los siete MP4 de E02 disponibles. Aprueba las tomas en Escenas y monta el corte de 55 segundos.');
+   if(!cancel.current){
+     const finalBoard=await refresh();
+     const completed=finalBoard.shots.filter(s=>s.videoReady).length;
+     setDetail(
+      completed===7
+       ? 'Los siete MP4 estan disponibles para revision.'
+       : 'Produccion parcial: '+completed+'/7 MP4. E02-P01 sigue bloqueada y no se ha reenviado.'
+     );
+   }
   }catch(e){
    setDetail('');
    setError(e instanceof Error?e.message:String(e));
@@ -278,9 +291,28 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
      <p className="mt-2 whitespace-pre-wrap">{s.promptText}</p>
     </details>
     <div className="mt-3 flex flex-wrap gap-2">
-     <button className="button-secondary text-xs" type="button" onClick={()=>void preflight(s.id)}>
-      Preparar sin costo
-     </button>
+     <button
+ className="button-secondary text-xs"
+ style={s.id==='E02-P04'?{
+  backgroundColor:'#047857',
+  color:'#ffffff',
+  border:'2px solid #6ee7b7',
+  opacity:1,
+  cursor:'pointer',
+  fontWeight:700
+ }:undefined}
+ type="button"
+ onClick={()=>void preflight(s.id)}>
+ {s.id==='E02-P04'?'Preparar P04 gratis':'Preparar sin costo'}
+</button>
+{s.id==='E02-P04'&&detail.startsWith('E02-P04:')&&
+ <p role="status" className="w-full text-xs text-emerald-200">
+  {detail}
+ </p>}
+{s.id==='E02-P04'&&error.includes('E02-P04')&&
+ <p role="alert" className="w-full text-xs text-amber-200">
+  {error}
+ </p>}
      {s.taskKnown&&<button className="button-secondary text-xs" type="button"
        disabled={busy} onClick={()=>void resume(s.id)}>
        <RefreshCcw className="mr-1 inline h-4 w-4"/> Recuperar misma tarea

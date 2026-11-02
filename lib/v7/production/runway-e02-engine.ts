@@ -226,6 +226,46 @@ export async function submitRunwayShot(id:string,confirmHash:string,approvedUsd:
   if(existing)throw new Error('Runway ya tiene una operación para esta toma. Recupera la misma, sin reenviar.');
   if(await runwayReservedUsd()+RUNWAY_SHOT_USD>RUNWAY_MAX_SCENE_USD+0.001)
    throw new Error('Límite de Runway para Escena 02 alcanzado.');
+  // E02_BALANCE_GATE_V3
+  // No utilizar variables de otras funciones o bloques.
+
+  const recordsForBalance = await Promise.all(
+    E02_SHOTS.map(shot => readRunwayRecord(shot.id))
+  );
+
+  const pendingCount = recordsForBalance.filter(
+    record => record === null
+  ).length;
+
+  // Gen-4 Turbo: 5 creditos por segundo.
+  // Cada toma autorizada dura 10 segundos.
+  const requiredCredits = pendingCount * 50;
+
+  if (pendingCount < 1) {
+    throw new Error(
+      'No quedan tomas nuevas autorizadas.'
+    );
+  }
+
+  const organization = await runwayRequest(
+    '/organization',
+    { method: 'GET' }
+  );
+
+  const balance = organization.creditBalance;
+
+  if (
+    typeof balance !== 'number' ||
+    !Number.isFinite(balance) ||
+    balance < requiredCredits
+  ) {
+    throw new Error(
+      'Runway API no tiene saldo suficiente o verificable. ' +
+      'Se necesitan ' + requiredCredits +
+      ' creditos. Ninguna toma nueva fue enviada.'
+    );
+  }
+
   const ref=await nearestReference(id);
   const frame=await frameData(ref.file,id,ref.still);
   const now=new Date().toISOString();
