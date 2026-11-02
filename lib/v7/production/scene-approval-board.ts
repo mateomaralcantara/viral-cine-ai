@@ -23,7 +23,7 @@ export type BoardScene = { id:string; label:string; title:string; approved:boole
 type SceneLocation = { scene: FilmV7['acts'][number]['sequences'][number]['scenes'][number];
   label:string; shots: Array<{ shot: FilmV7['acts'][number]['sequences'][number]['scenes'][number]['shots'][number]; label:string }> };
 
-function indexedScenes(film: FilmV7): SceneLocation[] {
+export function indexedScenes(film: FilmV7): SceneLocation[] {
   const all = film.acts.flatMap(act => act.sequences.flatMap(sequence => sequence.scenes));
   // Production order is film chronological order, not local sequence order.
   return all.slice().sort((a,b) => a.timeIndex - b.timeIndex).map((scene,i) => {
