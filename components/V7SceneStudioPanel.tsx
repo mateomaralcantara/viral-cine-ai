@@ -145,7 +145,7 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
                 <span className={'text-xs font-bold uppercase ' + statusColor(shot.status)}>{shot.status}</span>
               </div>
               <p className="mt-1 text-xs text-slate-400">
-                {shot.camera} · corte {shot.editSeconds}s · Veo {shot.providerSeconds}s · {shot.mode === 'image-to-video' ? 'parte de la foto de la toma' : 'solo texto (sin foto)'}
+                {shot.camera} · corte {Number(shot.editSeconds.toFixed(1))}s · Veo {shot.providerSeconds}s · {shot.mode === 'image-to-video' ? 'parte de la foto de la toma' : 'solo texto (sin foto)'}
                 {shot.estimatedUsd !== null && ' · ~US$' + shot.estimatedUsd.toFixed(2)}
               </p>
               {shot.spokenText && <p className="mt-1 text-xs text-slate-300">Voz posterior: «{shot.spokenText}»</p>}
