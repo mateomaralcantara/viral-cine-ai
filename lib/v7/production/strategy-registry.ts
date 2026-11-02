@@ -9,7 +9,7 @@ export const ProductionStrategySchema = z.object({
   maxFeaturedCharacters: z.number().int().min(0).max(20).default(3),
   continuityPriority: z.enum(['low', 'normal', 'high', 'critical']).default('high'),
   qualityCategories: z.array(z.string()).min(1),
-  metadata: z.record(z.unknown()).default({})
+  metadata: z.record(z.string(), z.unknown()).default({})
 });
 
 export type ProductionStrategy = z.infer<typeof ProductionStrategySchema>;

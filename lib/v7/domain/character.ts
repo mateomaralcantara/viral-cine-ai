@@ -12,7 +12,7 @@ export const CharacterV7Schema = z.object({
   identityLock: z.string().max(6000).default(''),
   immutableTraits: z.array(z.string().max(1000)).max(100).default([]),
   voiceProfileId: EntityIdSchema.optional(),
-  metadata: z.record(z.unknown()).default({})
+  metadata: z.record(z.string(), z.unknown()).default({})
 });
 
 export type CharacterV7 = z.infer<typeof CharacterV7Schema>;

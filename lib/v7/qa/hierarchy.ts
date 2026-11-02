@@ -12,7 +12,7 @@ export const QAResultSchema = z.object({
   filmId: EntityIdSchema,
   level: QALevelSchema,
   targetId: EntityIdSchema,
-  categoryScores: z.record(z.number().min(0).max(10)),
+  categoryScores: z.record(z.string(), z.number().min(0).max(10)),
   overallScore: z.number().min(0).max(10),
   criticalFailures: z.array(z.string()).default([]),
   issues: z.array(z.string()).default([]),

@@ -21,7 +21,7 @@ export const FilmV7Schema = z.object({
   legacyProjectId: EntityIdSchema.optional(),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
-  metadata: z.record(z.unknown()).default({})
+  metadata: z.record(z.string(), z.unknown()).default({})
 }).superRefine((film, ctx) => {
   const scenes = film.acts.flatMap((act) => act.sequences.flatMap((sequence) => sequence.scenes));
   if (scenes.length > 200) {

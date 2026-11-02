@@ -14,11 +14,11 @@ export const ShotSchema = z.object({
   spokenText: z.string().max(12000).default(''),
   speakerId: EntityIdSchema.optional(),
   characterIds: z.array(EntityIdSchema).max(20).default([]),
-  characterStateIds: z.record(EntityIdSchema).default({}),
+  characterStateIds: z.record(z.string(), EntityIdSchema).default({}),
   strategy: z.string().trim().min(1).max(160).default('generic-cinematic'),
   selectedTakeId: EntityIdSchema.optional(),
   takes: z.array(TakeSchema).max(100).default([]),
-  metadata: z.record(z.unknown()).default({})
+  metadata: z.record(z.string(), z.unknown()).default({})
 }).superRefine((shot, ctx) => {
   if (!shot.selectedTakeId) return;
   const selected = shot.takes.find((take) => take.id === shot.selectedTakeId);

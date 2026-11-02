@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const EntityIdSchema = z.string().trim().min(1).max(180);
 export const TimestampSchema = z.string().trim().min(1).max(80);
 export const MoneySchema = z.number().nonnegative().finite();
-export const JsonRecordSchema = z.record(z.unknown());
+export const JsonRecordSchema = z.record(z.string(), z.unknown());
 
 export const LifecycleStatusSchema = z.enum([
   'draft',
