@@ -168,3 +168,17 @@ test('E04 usa prompts curados: vestuario de motoconchista, sin marcas y Daniel s
     assert.ok(plan.shots.filter((s) => s.defaultPrompt.includes('SUV')).every((s) => s.defaultPrompt.includes('no visible logos')));
   });
 });
+
+test('E05 usa prompts curados: Samuel fijo, sin diálogo visible y pantalla del teléfono en blanco', async () => {
+  await withStudio(async (filmId) => {
+    const plan = await scenePlan(filmId, 'E05');
+    assert.equal(plan.shots.length, 8);
+    assert.ok(plan.shots.filter((s) => s.defaultPrompt.includes('salt-and-pepper beard')).length >= 4);
+    assert.ok(plan.shots.every((s) => !/white button-up|yellow rain jacket|Daniel|child's|grieving|soaked|motionless/.test(s.defaultPrompt)));
+    assert.ok(plan.shots.find((s) => s.shotId === 'E05-P07')!.defaultPrompt.includes('blank white screen'));
+    for (const id of ['E05-P03', 'E05-P04', 'E05-P07', 'E05-P08']) {
+      assert.ok(plan.shots.find((s) => s.shotId === id)!.defaultPrompt.includes('mouth closed') ||
+        plan.shots.find((s) => s.shotId === id)!.defaultPrompt.includes('mouth stays closed'), id);
+    }
+  });
+});
