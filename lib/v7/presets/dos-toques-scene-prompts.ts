@@ -3,6 +3,8 @@
  *  - Describir SOLO lo que aparece en el encuadre; nunca vestuario de personajes ausentes.
  *  - Describir a cada personaje siempre con la misma frase para mantener identidad sin foto.
  *  - Sin listas largas de prohibiciones ni instrucciones al sistema.
+ *  - Evitar palabras que un filtro pueda leer como sensibles ("child's", "soaked",
+ *    "grieving", "motionless"): E03-P08/P09 fallaron con ellas y salieron sin ellas.
  */
 const GABRIEL = 'Gabriel, a Dominican man in his early forties with short dark curly hair, light stubble and tired warm brown eyes, wearing a plain white button-up shirt';
 const CAMILA = 'Camila, a Dominican woman in her late thirties with long wavy dark brown hair, wearing a neutral beige blouse';
@@ -17,6 +19,6 @@ export const DOS_TOQUES_SCENE_PROMPTS: Readonly<Record<string, string>> = {
   'E03-P05': `Close-up of a man's hands in a plain white shirt slowly signing a document with a cheap ballpoint pen on a wooden table. The hand pauses, hesitates, then finishes the signature. The document text is blurred and unreadable. Quiet, heavy atmosphere. ${STYLE}`,
   'E03-P06': `Tracking shot from behind: ${GABRIEL} walks slowly out of the courthouse doors with sunken shoulders into heavy tropical rain. The camera follows a few steps behind at shoulder height. Wet steps and a grey street ahead. ${STYLE}`,
   'E03-P07': `Cinematic detail shot of a small light-blue child's helmet, wet with rain, hanging from the handlebar of a parked blue motorcycle on a Dominican street. Raindrops roll off the helmet. Shallow depth of field, reflections on the wet asphalt. No people. ${STYLE}`,
-  'E03-P08': `Medium side shot through the rain: ${GABRIEL}, soaked, sits down on the curb next to a blue motorcycle and hugs a small light-blue child's helmet against his chest, eyes closed, quietly grieving. His mouth stays closed. ${STYLE}`,
-  'E03-P09': `Long wide shot of a rainy Dominican street at dusk. Rain falls on the asphalt and creates reflections. In the distance, ${GABRIEL} sits motionless on the curb beside a blue motorcycle. The camera is completely still. ${STYLE}`
+  'E03-P08': `Medium side shot in light rain: ${GABRIEL}, sits down on the curb next to a blue motorcycle and holds a small light-blue helmet close to his chest, eyes closed, quiet and reflective. His mouth stays closed. Slow motion. ${STYLE}`,
+  'E03-P09': `Long wide shot of a quiet Dominican street at dusk in light rain, with reflections on the wet asphalt. In the distance, ${GABRIEL} sits still on the curb beside a blue motorcycle. The camera is completely static. ${STYLE}`
 };
