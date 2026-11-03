@@ -120,12 +120,12 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
             <button type="button" className="button-primary"
               disabled={!!busy || !board.providerEnabled || !board.tariffConfigured || board.capUsd <= 0 || sceneAuth.trim() !== board.sceneAuthorization}
               onClick={() => void post({ action: 'submit-scene', scene, authorization: sceneAuth }, 'scene').then((d) => {
-                const r = (d as { result?: { submitted?: number; results?: Array<{ shotId: string; status: string; error?: string }> } } | null)?.result;
-                if (r) setSummary('Enviadas ' + r.submitted + ' tomas. ' + (r.results?.filter((x) => x.status !== 'submitted').map((x) => x.shotId + ': ' + (x.error || x.status)).join(' · ') || 'Se recuperarán solas cada 30 s.'));
+                const r = (d as { result?: { submitted?: number; queued?: number; results?: Array<{ shotId: string; status: string; error?: string }> } } | null)?.result;
+                if (r) setSummary('Enviadas ' + r.submitted + ' tomas' + (r.queued ? '; ' + r.queued + ' en cola, se envían solas al terminar las anteriores' : '') + '. ' + (r.results?.filter((x) => x.status !== 'submitted').map((x) => x.shotId + ': ' + (x.error || x.status)).join(' · ') || 'Se recuperarán solas cada 30 s.'));
               })}>
               {busy === 'scene' ? 'Enviando escena…' : 'Generar escena completa con Veo'}</button>
           </div>
-        </> : <p className="mt-1 text-sm text-slate-300">No quedan tomas pendientes. {waiting ? 'Recuperando videos cada 30 s…' : ''}</p>}
+        </> : <p className="mt-1 text-sm text-slate-300">No quedan tomas pendientes. {waiting ? 'Recuperando videos y enviando la cola cada 30 s…' : ''}</p>}
         <button type="button" className="button-secondary mt-3" disabled={!!busy}
           onClick={() => void post({ action: 'resume-scene', scene }, 'resume-scene')}>Recuperar todas · gratis</button>
       </div>}

@@ -7,7 +7,7 @@ import { createDosToquesBundle } from '../lib/v7/presets/dos-toques-de-bocina';
 import { saveV7FilmBundle } from '../lib/v7/storage/film-store';
 import {
   authorizationPhrase, candidatePath, estimateShotUsd, latestPromptRevision, recordPath,
-  savePromptRevision, sceneExposureUsd, scenePlan, sceneStudioBoard, submitSceneShot, submitWholeScene, sceneAuthorizationPhrase, isOmniModel
+  savePromptRevision, sceneExposureUsd, scenePlan, sceneStudioBoard, submitSceneShot, submitWholeScene, sceneAuthorizationPhrase, isOmniModel, sceneMaxInFlight
 } from '../lib/v7/production/scene-veo-engine';
 import { resolveV7ShotVideo } from '../lib/v7/production/shot-video-source';
 
@@ -143,4 +143,15 @@ test('Los modelos gemini-omni usan Interactions y los veo-* usan generateVideos'
   assert.equal(isOmniModel('gemini-omni-flash-preview'), true);
   assert.equal(isOmniModel('gemini-omni-1.1-flash'), true);
   assert.equal(isOmniModel('veo-3.1-fast-generate-preview'), false);
+});
+
+test('El envío por tandas limita los trabajos simultáneos (por defecto 4)', () => {
+  const saved = process.env.V7_SCENE_MAX_IN_FLIGHT;
+  delete process.env.V7_SCENE_MAX_IN_FLIGHT;
+  assert.equal(sceneMaxInFlight(), 4);
+  process.env.V7_SCENE_MAX_IN_FLIGHT = '2';
+  assert.equal(sceneMaxInFlight(), 2);
+  process.env.V7_SCENE_MAX_IN_FLIGHT = '50';
+  assert.equal(sceneMaxInFlight(), 4);
+  if (saved === undefined) delete process.env.V7_SCENE_MAX_IN_FLIGHT; else process.env.V7_SCENE_MAX_IN_FLIGHT = saved;
 });

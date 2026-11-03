@@ -297,6 +297,8 @@ export async function sceneStudioBoard(filmId: string, sceneLabel: string) {
   const rate = veoSceneRate();
   const cap = sceneCapUsd();
   const exposure = await sceneExposureUsd(filmId, sceneLabel);
+  const receipt = await readSceneAuthorization(filmId, sceneLabel);
+  const queued = new Set(receipt?.shots.map((s) => s.shotId) ?? []);
   const shots = await Promise.all(plan.shots.map(async (shot) => {
     const record = await readShotRecord(filmId, shot.shotId);
     const revision = await latestPromptRevision(filmId, shot.shotId);
@@ -304,7 +306,7 @@ export async function sceneStudioBoard(filmId: string, sceneLabel: string) {
     const estimatedUsd = rate === null ? null : estimateShotUsd(shot.editSeconds, rate);
     return {
       ...shot,
-      status: record?.provider === 'veo' ? record.status : record ? 'other-provider' : 'not-started',
+      status: record?.provider === 'veo' ? record.status : record ? 'other-provider' : queued.has(shot.shotId) ? 'queued' : 'not-started',
       operationKnown: Boolean(record?.operationName),
       error: record?.error ?? null,
       promptText: revision?.promptText ?? shot.defaultPrompt,
@@ -358,17 +360,38 @@ export async function submitSceneShot(filmId: string, shotId: string, input: { r
   return withSceneLock(filmId, plan.sceneLabel, () => submitLocked(filmId, plan, shot, input.revisionId, estimatedUsd, cap));
 }
 
+/** Máximo de trabajos de video simultáneos por escena (Google rechaza el exceso con «failed»). */
+export function sceneMaxInFlight() {
+  const value = Number(process.env.V7_SCENE_MAX_IN_FLIGHT || 4);
+  return Number.isInteger(value) && value >= 1 && value <= 9 ? value : 4;
+}
+const IN_FLIGHT = new Set<SceneVeoStatus>(['reserved', 'submitted', 'processing']);
+
+type SceneAuthorization = {
+  schemaVersion: 1; sceneLabel: string; totalUsd: number; createdAt: string;
+  shots: Array<{ shotId: string; revisionId: string; estimatedUsd: number }>;
+};
+function sceneAuthorizationPath(filmId: string, sceneLabel: string) {
+  return path.join(v7FilmRoot(filmId), 'scenes', sceneLabel.toLowerCase(), 'veo-scene-authorization.json');
+}
+async function readSceneAuthorization(filmId: string, sceneLabel: string): Promise<SceneAuthorization | null> {
+  try { return JSON.parse(await readFile(sceneAuthorizationPath(filmId, sceneLabel), 'utf8')) as SceneAuthorization; }
+  catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null; throw e; }
+}
+
 /**
  * Escena completa de un solo tirón: una autorización por el total exacto de las
- * tomas pendientes. Guarda como versión el prompt actual de las tomas que no
- * tienen una, envía en orden y se detiene ante el primer error (sin reintentos).
+ * tomas pendientes. Queda guardada como recibo y las tomas se envían por tandas
+ * (V7_SCENE_MAX_IN_FLIGHT a la vez); «Recuperar» envía la siguiente tanda al
+ * terminar la anterior. Se detiene ante el primer error, sin reintentos.
  */
 export async function submitWholeScene(filmId: string, sceneLabel: string, authorization: string) {
   const plan = await scenePlan(filmId, sceneLabel);
   const { rate, cap } = paidPreconditions(plan.legacy, plan.sceneLabel);
   return withSceneLock(filmId, plan.sceneLabel, async () => {
     const pending = [];
-    for (const shot of plan.shots) if (!(await readShotRecord(filmId, shot.shotId))) pending.push(shot);
+    const previous = new Set((await readSceneAuthorization(filmId, sceneLabel))?.shots.map((s) => s.shotId) ?? []);
+    for (const shot of plan.shots) if (!(await readShotRecord(filmId, shot.shotId)) && !previous.has(shot.shotId)) pending.push(shot);
     if (!pending.length) throw new Error('No quedan tomas pendientes en ' + sceneLabel + '.');
     const total = round(pending.reduce((sum, s) => sum + estimateShotUsd(s.editSeconds, rate), 0));
     if (authorization.trim() !== sceneAuthorizationPhrase(sceneLabel, total)) {
@@ -378,22 +401,46 @@ export async function submitWholeScene(filmId: string, sceneLabel: string, autho
     if (exposure + total > cap + 0.000001) {
       throw new Error('La escena completa (US$' + total.toFixed(2) + ') supera el tope: ya comprometido US$' + exposure.toFixed(2) + ' de US$' + cap.toFixed(2) + '. Súbelo solo si lo decides tú (V7_SCENE_MAX_USD).');
     }
-    const results: Array<{ shotId: string; status: string; error?: string }> = [];
+    const receipt: SceneAuthorization = { schemaVersion: 1, sceneLabel, totalUsd: total, createdAt: new Date().toISOString(), shots: [] };
     for (const shot of pending) {
       const revision = (await latestPromptRevision(filmId, shot.shotId)) ?? await savePromptRevision(filmId, shot.shotId, shot.defaultPrompt);
-      try {
-        const r = await submitLocked(filmId, plan, shot, revision.revisionId, estimateShotUsd(shot.editSeconds, rate), cap);
-        results.push({ shotId: shot.shotId, status: r.status });
-      } catch (error) {
-        results.push({ shotId: shot.shotId, status: 'stopped', error: safeError(error) });
-        break; // Ante cualquier duda, no seguir gastando.
-      }
+      receipt.shots.push({ shotId: shot.shotId, revisionId: revision.revisionId, estimatedUsd: estimateShotUsd(shot.editSeconds, rate) });
     }
-    return { sceneLabel, authorizedUsd: total, submitted: results.filter((r) => r.status === 'submitted').length, results, noAutomaticRetries: true };
+    await mkdir(path.dirname(sceneAuthorizationPath(filmId, sceneLabel)), { recursive: true });
+    await writeFile(sceneAuthorizationPath(filmId, sceneLabel), JSON.stringify(receipt, null, 2) + '\n', { mode: 0o600 });
+    const results = await dispatchAuthorized(filmId, plan, cap);
+    return { sceneLabel, authorizedUsd: total, submitted: results.filter((r) => r.status === 'submitted').length,
+      queued: receipt.shots.length - results.filter((r) => r.status === 'submitted').length, results, noAutomaticRetries: true };
   });
 }
 
-/** Recupera (solo consulta) todas las tomas enviadas de la escena. */
+/** Envía tomas ya autorizadas mientras haya hueco. Requiere el candado de la escena. */
+async function dispatchAuthorized(filmId: string, plan: Awaited<ReturnType<typeof scenePlan>>, cap: number) {
+  const receipt = await readSceneAuthorization(filmId, plan.sceneLabel);
+  const results: Array<{ shotId: string; status: string; error?: string }> = [];
+  if (!receipt) return results;
+  let inFlight = 0;
+  for (const shot of plan.shots) {
+    const record = await readShotRecord(filmId, shot.shotId);
+    if (record && IN_FLIGHT.has(record.status)) inFlight++;
+  }
+  for (const item of receipt.shots) {
+    if (inFlight >= sceneMaxInFlight()) break;
+    if (await readShotRecord(filmId, item.shotId)) continue;
+    const shot = plan.shots.find((s) => s.shotId === item.shotId)!;
+    try {
+      const r = await submitLocked(filmId, plan, shot, item.revisionId, item.estimatedUsd, cap);
+      results.push({ shotId: shot.shotId, status: r.status });
+      inFlight++;
+    } catch (error) {
+      results.push({ shotId: shot.shotId, status: 'stopped', error: safeError(error) });
+      break; // Ante cualquier duda, no seguir gastando.
+    }
+  }
+  return results;
+}
+
+/** Recupera (solo consulta) las tomas enviadas y, si hay hueco, envía la siguiente tanda ya autorizada. */
 export async function resumeWholeScene(filmId: string, sceneLabel: string) {
   const plan = await scenePlan(filmId, sceneLabel);
   const results: Array<{ shotId: string; status: string; error?: string }> = [];
@@ -407,7 +454,11 @@ export async function resumeWholeScene(filmId: string, sceneLabel: string) {
       results.push({ shotId: shot.shotId, status: 'error', error: safeError(error) });
     }
   }
-  return { sceneLabel, results, newGenerationRequests: 0 };
+  let dispatched: Array<{ shotId: string; status: string; error?: string }> = [];
+  if (!plan.legacy && veoScenesEnabled() && veoSceneRate() !== null && sceneCapUsd() > 0) {
+    dispatched = await withSceneLock(filmId, plan.sceneLabel, () => dispatchAuthorized(filmId, plan, sceneCapUsd()));
+  }
+  return { sceneLabel, results, dispatched };
 }
 
 async function submitLocked(filmId: string, plan: Awaited<ReturnType<typeof scenePlan>>, shot: ScenePlanShot,
