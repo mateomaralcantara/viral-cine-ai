@@ -162,7 +162,8 @@ test('E04 usa prompts curados: vestuario de motoconchista, sin marcas y Daniel s
     assert.equal(plan.shots.length, 8);
     const gabriel = plan.shots.filter((s) => s.defaultPrompt.includes('short dark curly hair, light stubble'));
     assert.ok(gabriel.length >= 3 && gabriel.every((s) => s.defaultPrompt.includes('yellow rain jacket')));
-    assert.deepEqual(plan.shots.filter((s) => s.defaultPrompt.includes('Daniel')).map((s) => s.shotId), ['E04-P05']);
+    assert.ok(plan.shots.every((s) => !/Daniel|eleven-year-old|boy/.test(s.defaultPrompt)), 'niños: sin cara en primer plano ni edad');
+    assert.ok(plan.shots.find((s) => s.shotId === 'E04-P05')!.defaultPrompt.includes('small open hand'));
     assert.ok(plan.shots.every((s) => !/Victoria|white button-up|soaked|grieving|motionless|child's/.test(s.defaultPrompt)));
     assert.ok(plan.shots.filter((s) => s.defaultPrompt.includes('SUV')).every((s) => s.defaultPrompt.includes('no visible logos')));
   });
