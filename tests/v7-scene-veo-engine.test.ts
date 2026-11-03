@@ -7,7 +7,7 @@ import { createDosToquesBundle } from '../lib/v7/presets/dos-toques-de-bocina';
 import { saveV7FilmBundle } from '../lib/v7/storage/film-store';
 import {
   authorizationPhrase, candidatePath, estimateShotUsd, latestPromptRevision, recordPath,
-  savePromptRevision, sceneExposureUsd, scenePlan, sceneStudioBoard, submitSceneShot, submitWholeScene, sceneAuthorizationPhrase
+  savePromptRevision, sceneExposureUsd, scenePlan, sceneStudioBoard, submitSceneShot, submitWholeScene, sceneAuthorizationPhrase, isOmniModel
 } from '../lib/v7/production/scene-veo-engine';
 import { resolveV7ShotVideo } from '../lib/v7/production/shot-video-source';
 
@@ -137,4 +137,10 @@ test('Escena completa: exige la frase con el total exacto y respeta el tope fijo
     assert.equal(await sceneExposureUsd(filmId, 'E03'), 0);
     await assert.rejects(submitWholeScene(filmId, 'E02', 'x'), /propio motor/);
   });
+});
+
+test('Los modelos gemini-omni usan Interactions y los veo-* usan generateVideos', () => {
+  assert.equal(isOmniModel('gemini-omni-flash-preview'), true);
+  assert.equal(isOmniModel('gemini-omni-1.1-flash'), true);
+  assert.equal(isOmniModel('veo-3.1-fast-generate-preview'), false);
 });

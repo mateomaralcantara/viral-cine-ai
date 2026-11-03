@@ -71,6 +71,17 @@ const round = (value: number) => Math.round(value * 10000) / 10000;
 export function veoSceneModel() {
   return (process.env.V7_VEO_SCENE_MODEL || 'veo-3.1-fast-generate-preview').trim();
 }
+/** Los modelos «gemini-omni-*» usan la API Interactions en segundo plano; el resto, Veo (generateVideos). */
+export function isOmniModel(model = veoSceneModel()) {
+  return model.startsWith('gemini-omni');
+}
+/** Un 4xx al crear significa que Google rechazó la solicitud y no creó ningún trabajo. */
+function rejectedBeforeCreation(error: unknown) {
+  const status = Number((error as { status?: unknown })?.status);
+  return Number.isInteger(status) && status >= 400 && status < 500 && status !== 408 && status !== 429;
+}
+const INTERACTION_PREFIX = 'interaction:';
+
 export function veoSceneRate(): number | null {
   const value = Number(process.env.V7_VEO_USD_PER_SECOND || 0);
   return Number.isFinite(value) && value > 0 && value <= 10 ? value : null;
@@ -434,6 +445,23 @@ async function submitLocked(filmId: string, plan: Awaited<ReturnType<typeof scen
     // Reserva atómica ANTES de llamar al proveedor; nunca se borra tras un error.
     await writeFile(recordPath(filmId, shotId), JSON.stringify(record, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
     try {
+      if (isOmniModel(record.model)) {
+        const interaction = await googleClient().interactions.create({
+          model: record.model,
+          input: [
+            ...(reference ? [{ type: 'image' as const, data: reference.bytes.toString('base64'), mime_type: 'image/jpeg' as const }] : []),
+            { type: 'text' as const, text: revision.promptText + (reference ? ' Use the supplied image as the opening frame.' : '') }
+          ],
+          response_format: { type: 'video', aspect_ratio: '16:9', delivery: 'uri', duration: shot.providerSeconds + 's' },
+          background: true,
+          store: true
+        } as Parameters<ReturnType<typeof googleClient>['interactions']['create']>[0]) as { id?: string };
+        if (!interaction.id) throw new Error('Google no devolvió el ID de la interacción; resultado incierto.');
+        record.operationName = INTERACTION_PREFIX + interaction.id;
+        record.status = 'submitted';
+        await writeRecord(filmId, record);
+        return { shotId, status: record.status, estimatedUsd, noAutomaticRetries: true };
+      }
       const operation = await googleClient().models.generateVideos({
         model: record.model,
         source: {
@@ -451,10 +479,11 @@ async function submitLocked(filmId: string, plan: Awaited<ReturnType<typeof scen
       await writeRecord(filmId, record);
       return { shotId, status: record.status, estimatedUsd, noAutomaticRetries: true };
     } catch (error) {
-      record.status = 'failed-unknown';
+      // Un rechazo 4xx no creó trabajo: se permite otro intento con una versión corregida.
+      record.status = rejectedBeforeCreation(error) ? 'failed-no-video' : 'failed-unknown';
       record.error = safeError(error);
       await writeRecord(filmId, record);
-      throw new Error('Veo no confirmó la solicitud. No se reenviará: ' + record.error);
+      throw new Error((record.status === 'failed-no-video' ? 'Google rechazó la solicitud (no se creó video): ' : 'Google no confirmó la solicitud. No se reenviará: ') + record.error);
     }
   }
 }
@@ -470,6 +499,7 @@ export async function resumeSceneShot(filmId: string, shotId: string) {
     if (!record.operationName) throw new Error('Solicitud sin ID de Google: resultado incierto. No reenviar; reconciliar.');
     if (!process.env.GEMINI_API_KEY) throw new Error('Falta GEMINI_API_KEY para consultar la operación.');
     const ai = googleClient();
+    if (record.operationName.startsWith(INTERACTION_PREFIX)) return resumeInteraction(ai, filmId, record);
     const operation = await ai.operations.getVideosOperation({
       operation: { name: record.operationName } as Parameters<typeof ai.operations.getVideosOperation>[0]['operation']
     });
@@ -493,7 +523,7 @@ export async function resumeSceneShot(filmId: string, shotId: string) {
       const { stdout } = await command('ffprobe', ['-v', 'error', '-show_entries', 'format=duration:stream=codec_type', '-of', 'json', temp], { timeout: 30000 });
       const info = JSON.parse(stdout) as { format?: { duration?: string }; streams?: Array<{ codec_type?: string }> };
       const seconds = Number(info.format?.duration ?? 0);
-      if (seconds < record.durationSeconds - 1 || !info.streams?.some((s) => s.codec_type === 'video')) {
+      if (seconds < 2 || !info.streams?.some((s) => s.codec_type === 'video')) {
         throw new Error('El video de Veo no supera la verificación técnica.');
       }
       await rename(temp, target);
@@ -506,4 +536,73 @@ export async function resumeSceneShot(filmId: string, shotId: string) {
     await writeRecord(filmId, record);
     return { shotId, status: record.status, videoReady: true };
   });
+}
+
+async function verifyAndPublish(filmId: string, record: SceneVeoRecord, temp: string) {
+  const target = candidatePath(filmId, record.shotId);
+  try {
+    const { stdout } = await command('ffprobe', ['-v', 'error', '-show_entries', 'format=duration:stream=codec_type', '-of', 'json', temp], { timeout: 30000 });
+    const info = JSON.parse(stdout) as { format?: { duration?: string }; streams?: Array<{ codec_type?: string }> };
+    if (Number(info.format?.duration ?? 0) < 2 || !info.streams?.some((s) => s.codec_type === 'video')) {
+      throw new Error('El video recibido no supera la verificación técnica.');
+    }
+    await rename(temp, target);
+  } finally {
+    await unlink(temp).catch(() => undefined);
+  }
+  record.status = 'review-required';
+  record.candidateName = path.basename(target);
+  delete record.error;
+  await writeRecord(filmId, record);
+  return { shotId: record.shotId, status: record.status, videoReady: true };
+}
+
+/** Consulta (gratis) una interacción de Gemini Omni ya creada; nunca crea otra. */
+async function resumeInteraction(ai: ReturnType<typeof googleClient>, filmId: string, record: SceneVeoRecord) {
+  const id = record.operationName!.slice(INTERACTION_PREFIX.length);
+  const interaction = await ai.interactions.get(id) as {
+    status?: string; output_video?: { data?: string; uri?: string; mime_type?: string };
+    error?: unknown;
+  };
+  const status = String(interaction.status || '');
+  if (['failed', 'cancelled', 'incomplete', 'budget_exceeded'].includes(status)) {
+    record.status = 'failed-no-video';
+    record.error = safeError('Gemini Omni terminó con estado ' + status + (interaction.error ? ': ' + JSON.stringify(interaction.error) : ''));
+    await writeRecord(filmId, record);
+    return { shotId: record.shotId, status: record.status, videoReady: false, error: record.error };
+  }
+  if (status !== 'completed') {
+    record.status = 'processing';
+    await writeRecord(filmId, record);
+    return { shotId: record.shotId, status: record.status, videoReady: false };
+  }
+  const video = interaction.output_video;
+  if (!video || (!video.data && !video.uri)) {
+    record.status = 'failed-unknown';
+    record.error = 'La interacción terminó sin video. Reconciliar antes de otro intento.';
+    await writeRecord(filmId, record);
+    return { shotId: record.shotId, status: record.status, videoReady: false, error: record.error };
+  }
+  const temp = path.join(shotDir(filmId, record.shotId), '.omni-' + randomUUID() + '.mp4');
+  if (video.data) {
+    await writeFile(temp, Buffer.from(video.data, 'base64'), { flag: 'wx', mode: 0o600 });
+    return verifyAndPublish(filmId, record, temp);
+  }
+  const fileId = video.uri!.match(/files\/([a-z0-9-]+)/i)?.[1];
+  if (!fileId) throw new Error('Gemini Omni devolvió una URI de video inválida.');
+  const file = await ai.files.get({ name: 'files/' + fileId });
+  const state = String(file.state || '').toUpperCase();
+  if (state === 'FAILED') {
+    record.status = 'failed-unknown';
+    record.error = safeError('El archivo de video falló en Google: ' + (file.error?.message || 'FAILED'));
+    await writeRecord(filmId, record);
+    return { shotId: record.shotId, status: record.status, videoReady: false, error: record.error };
+  }
+  if (state !== 'ACTIVE') {
+    record.status = 'processing';
+    await writeRecord(filmId, record);
+    return { shotId: record.shotId, status: record.status, videoReady: false };
+  }
+  await ai.files.download({ file: video as Parameters<typeof ai.files.download>[0]['file'], downloadPath: temp });
+  return verifyAndPublish(filmId, record, temp);
 }
