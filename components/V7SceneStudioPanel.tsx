@@ -7,7 +7,7 @@ type StudioShot = {
   spokenText: string; status: string; operationKnown: boolean; error: string | null;
   promptText: string; revisionId: string | null; revisionUsed: boolean;
   mode: 'text-to-video' | 'image-to-video'; estimatedUsd: number | null;
-  authorization: string | null; videoReady: boolean;
+  authorization: string | null; redoAuthorization: string | null; videoReady: boolean;
 };
 type StudioBoard = {
   sceneLabel: string; sceneLabels?: string[]; title: string; legacy: boolean; model: string; providerEnabled: boolean;
@@ -163,6 +163,26 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
                 <span className="text-xs text-slate-400">{shot.revisionId ? 'Versión ' + shot.revisionId.slice(0, 18) : 'Sin versión guardada'}</span>
               </div>
               {shot.error && <p className="mt-2 text-xs text-red-300">{shot.error}</p>}
+              {shot.status === 'review-required' && shot.redoAuthorization && (
+                <details className="mt-3 rounded-xl border border-white/10 p-3">
+                  <summary className="cursor-pointer text-sm font-bold">Rehacer esta toma (el video actual se archiva, no se borra)</summary>
+                  <ol className="mt-2 list-decimal pl-5 text-xs text-slate-300">
+                    <li>Cambia el texto de arriba y pulsa «Guardar versión».</li>
+                    <li>Escribe exactamente: <b className="text-amber-200">{shot.redoAuthorization}</b></li>
+                  </ol>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <input className="min-w-[260px] flex-1 rounded-lg border border-white/20 bg-slate-950 p-2 text-sm text-white"
+                      value={auth[shot.shotId] || ''} placeholder={shot.redoAuthorization}
+                      onChange={(e) => setAuth((a) => ({ ...a, [shot.shotId]: e.target.value }))}/>
+                    <button type="button" className="button-primary"
+                      disabled={!!busy || !board.providerEnabled || !board.tariffConfigured || dirty || shot.revisionUsed ||
+                        (auth[shot.shotId] || '').trim() !== shot.redoAuthorization}
+                      onClick={() => void post({ action: 'submit', redo: true, shotId: shot.shotId, revisionId: shot.revisionId, authorization: auth[shot.shotId] }, shot.shotId)}>
+                      {busy === shot.shotId ? 'Enviando…' : 'Rehacer con texto nuevo'}</button>
+                  </div>
+                  {(dirty || shot.revisionUsed) && <p className="mt-1 text-xs text-slate-400">Primero guarda una versión nueva del texto.</p>}
+                </details>
+              )}
               {(shot.status === 'not-started' || shot.status === 'failed-no-video') && shot.authorization && (
                 <div className="mt-3 rounded-xl border border-amber-400/30 p-3">
                   <p className="text-xs text-amber-200">Para generar escribe exactamente: <b>{shot.authorization}</b></p>

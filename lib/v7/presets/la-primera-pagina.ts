@@ -57,7 +57,7 @@ const specs: SceneSpec[] = [
         prompt: `Close-up of a woman's hands opening a wooden drawer and finding an old worn notebook with a faded cloth cover. She slowly opens it to pages filled with handwritten lines in blue ink, unreadable. Warm lamp light. ${STYLE}`,
         line: 'Hasta que encontré mi viejo cuaderno. Las historias que escribía antes de rendirme.', voice: 'elena' },
       { title: 'Marisol le muestra el teléfono en el café', camera: 'Plano a dos',
-        prompt: `Medium two-shot in a small bright café: ${MARISOL} smiles warmly and slides her smartphone across the table toward ${ELENA_HOME}. The phone screen is a plain, softly glowing blank screen with no text. Elena looks at it with cautious hope. Both of their mouths stay closed. ${STYLE}`,
+        prompt: `Plano medio a dos en una pequeña cafetería luminosa: ${MARISOL_ES} sonríe con cariño y desliza su teléfono móvil por la mesa hacia ${ELENA_CASA}. La pantalla del teléfono es una pantalla en blanco que brilla suavemente, sin texto. Elena la mira con una esperanza cautelosa. Las dos mantienen la boca cerrada. ${ESTILO}`,
         line: 'Escríbelo, Elena. Con GeneLibro lo terminas, y con Libroseller el mundo lo lee.', voice: 'marisol' }
     ]
   },

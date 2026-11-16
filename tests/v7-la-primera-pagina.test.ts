@@ -70,3 +70,31 @@ test('La primera página: E02 y E03 en español, con voces de fondo en español 
     }
   });
 });
+
+test('Rehacer una toma con video: frase propia, nunca si está aprobada, y sin tope no se toca el video', async () => {
+  const { mkdir, writeFile, stat } = await import('node:fs/promises');
+  const { candidatePath, recordPath, savePromptRevision, submitSceneShot, redoAuthorizationPhrase } = await import('../lib/v7/production/scene-veo-engine');
+  await withData(async () => {
+    await saveV7FilmBundle(createPrimeraPaginaBundle());
+    env.NODE_ENV = 'development'; env.V7_VEO_SCENES_ENABLED = 'true'; env.GEMINI_API_KEY = 'AIza-test-key-not-real';
+    env.V7_VEO_USD_PER_SECOND = '0.15'; env.V7_SCENE_MAX_USD = '1.20';
+    const id = 'E01-P05';
+    const old = await savePromptRevision(PRIMERA_PAGINA_ID, id, 'Medium two-shot in a small bright café with two friends talking over coffee, cinematic.');
+    await mkdir(path.dirname(candidatePath(PRIMERA_PAGINA_ID, id)), { recursive: true });
+    await writeFile(candidatePath(PRIMERA_PAGINA_ID, id), Buffer.alloc(20000, 1));
+    await writeFile(recordPath(PRIMERA_PAGINA_ID, id), JSON.stringify({ schemaVersion: 1, provider: 'veo', filmId: PRIMERA_PAGINA_ID, shotId: id,
+      sceneLabel: 'E01', revisionId: old.revisionId, estimatedUsd: 1.2, status: 'review-required', candidateName: id + '-veo-candidato.mp4' }));
+    const rev = await savePromptRevision(PRIMERA_PAGINA_ID, id, 'Plano medio a dos en una pequeña cafetería luminosa, dos amigas, todo en español dominicano.');
+    // Sin la frase de rehacer, no pasa.
+    await assert.rejects(submitSceneShot(PRIMERA_PAGINA_ID, id, { revisionId: rev.revisionId, authorization: 'AUTORIZO E01-P05 US$1.20', redo: true }), /AUTORIZO REHACER E01-P05 US\$1\.20/);
+    // Sin modo rehacer, una toma con video nunca se reenvía.
+    await assert.rejects(submitSceneShot(PRIMERA_PAGINA_ID, id, { revisionId: rev.revisionId, authorization: 'AUTORIZO E01-P05 US$1.20' }), /nunca se reenvía/);
+    // Tope alcanzado: no se archiva ni se toca el video actual.
+    await assert.rejects(submitSceneShot(PRIMERA_PAGINA_ID, id, { revisionId: rev.revisionId, authorization: redoAuthorizationPhrase(id, 1.2), redo: true }), /Tope de la escena/);
+    assert.ok((await stat(candidatePath(PRIMERA_PAGINA_ID, id))).size === 20000);
+    // Aprobada: no se rehace.
+    env.V7_SCENE_MAX_USD = '13.20';
+    await writeFile(path.join(path.dirname(candidatePath(PRIMERA_PAGINA_ID, id)), 'artistic-approval.json'), '{}');
+    await assert.rejects(submitSceneShot(PRIMERA_PAGINA_ID, id, { revisionId: rev.revisionId, authorization: redoAuthorizationPhrase(id, 1.2), redo: true }), /aprobada/);
+  });
+});

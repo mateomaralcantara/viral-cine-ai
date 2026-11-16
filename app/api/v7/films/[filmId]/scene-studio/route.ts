@@ -57,7 +57,7 @@ export async function POST(request: Request, context: Context) {
     }
     if (body.action === 'submit') {
       if (typeof body.revisionId !== 'string' || typeof body.authorization !== 'string') return fail(400, 'Falta la versión o la autorización.');
-      const result = await submitSceneShot(filmId, shotId, { revisionId: body.revisionId, authorization: body.authorization });
+      const result = await submitSceneShot(filmId, shotId, { revisionId: body.revisionId, authorization: body.authorization, redo: body.redo === true });
       return NextResponse.json({ ok: true, result }, { headers: noStore });
     }
     return fail(400, 'Acción no permitida.');

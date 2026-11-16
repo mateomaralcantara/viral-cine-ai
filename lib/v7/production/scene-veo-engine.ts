@@ -118,6 +118,10 @@ export function estimateShotUsd(editSeconds: number, rate: number) {
 export function sceneAuthorizationPhrase(sceneLabel: string, usd: number) {
   return 'AUTORIZO ' + sceneLabel + ' COMPLETA US$' + usd.toFixed(2);
 }
+/** Frase distinta para rehacer una toma que ya tiene video: nunca se confunde con un primer envío. */
+export function redoAuthorizationPhrase(shotId: string, usd: number) {
+  return 'AUTORIZO REHACER ' + shotId + ' US$' + usd.toFixed(2);
+}
 export function authorizationPhrase(shotId: string, usd: number) {
   return 'AUTORIZO ' + shotId + ' US$' + usd.toFixed(2);
 }
@@ -333,6 +337,7 @@ export async function sceneStudioBoard(filmId: string, sceneLabel: string) {
       referenceSha256: reference?.sha256 ?? null,
       estimatedUsd,
       authorization: estimatedUsd === null ? null : authorizationPhrase(shot.shotId, estimatedUsd),
+      redoAuthorization: estimatedUsd === null ? null : redoAuthorizationPhrase(shot.shotId, estimatedUsd),
       videoReady: record?.status === 'review-required'
     };
   }));
@@ -372,15 +377,14 @@ function paidPreconditions(legacy: boolean, sceneLabel: string, filmId: string) 
   return { rate, cap };
 }
 
-export async function submitSceneShot(filmId: string, shotId: string, input: { revisionId: string; authorization: string }) {
+export async function submitSceneShot(filmId: string, shotId: string, input: { revisionId: string; authorization: string; redo?: boolean }) {
   const { plan, shot } = await planShot(filmId, shotId);
   const { rate, cap } = paidPreconditions(plan.legacy, plan.sceneLabel, filmId);
   if (!REVISION_ID.test(input.revisionId)) throw new Error('Guarda primero una versión del prompt.');
   const estimatedUsd = estimateShotUsd(shot.editSeconds, rate);
-  if (input.authorization.trim() !== authorizationPhrase(shotId, estimatedUsd)) {
-    throw new Error('Escribe exactamente: ' + authorizationPhrase(shotId, estimatedUsd));
-  }
-  return withSceneLock(filmId, plan.sceneLabel, () => submitLocked(filmId, plan, shot, input.revisionId, estimatedUsd, cap));
+  const phrase = input.redo ? redoAuthorizationPhrase(shotId, estimatedUsd) : authorizationPhrase(shotId, estimatedUsd);
+  if (input.authorization.trim() !== phrase) throw new Error('Escribe exactamente: ' + phrase);
+  return withSceneLock(filmId, plan.sceneLabel, () => submitLocked(filmId, plan, shot, input.revisionId, estimatedUsd, cap, input.redo === true));
 }
 
 /** Máximo de trabajos de video simultáneos por escena (Google rechaza el exceso con «failed»). */
@@ -485,7 +489,7 @@ export async function resumeWholeScene(filmId: string, sceneLabel: string) {
 }
 
 async function submitLocked(filmId: string, plan: Awaited<ReturnType<typeof scenePlan>>, shot: ScenePlanShot,
-  revisionId: string, estimatedUsd: number, cap: number) {
+  revisionId: string, estimatedUsd: number, cap: number, redo = false) {
   const shotId = shot.shotId;
   {
     const input = { revisionId };
@@ -493,8 +497,12 @@ async function submitLocked(filmId: string, plan: Awaited<ReturnType<typeof scen
     if (!revision || revision.revisionId !== input.revisionId) throw new Error('El prompt cambió: revisa y autoriza la versión más reciente.');
     const existing = await readShotRecord(filmId, shotId);
     if (existing) {
-      if (existing.status !== 'failed-no-video') {
+      const redoable = existing.status === 'failed-no-video' || (redo && existing.status === 'review-required');
+      if (!redoable) {
         throw new Error('La toma ya tiene una operación (' + existing.status + '). Recupera la misma tarea; nunca se reenvía.');
+      }
+      if (redo && await fileExists(path.join(shotDir(filmId, shotId), 'artistic-approval.json'))) {
+        throw new Error('La toma ya está aprobada artísticamente. No se rehace una toma aprobada.');
       }
       if (existing.revisionId === revision.revisionId) throw new Error('Esta versión ya se usó. Guarda una versión corregida antes de otro intento.');
     }
@@ -505,6 +513,10 @@ async function submitLocked(filmId: string, plan: Awaited<ReturnType<typeof scen
     if (existing) {
       await mkdir(attemptsDir(filmId, shotId), { recursive: true });
       await rename(recordPath(filmId, shotId), path.join(attemptsDir(filmId, shotId), existing.revisionId + '.json'));
+      // El video anterior se archiva junto a su registro: nunca se borra.
+      if (await fileExists(candidatePath(filmId, shotId))) {
+        await rename(candidatePath(filmId, shotId), path.join(attemptsDir(filmId, shotId), existing.revisionId + '.mp4'));
+      }
     }
     const reference = await optionalReference(filmId, shotId);
     const now = new Date().toISOString();
@@ -679,4 +691,8 @@ async function resumeInteraction(ai: ReturnType<typeof googleClient>, filmId: st
   }
   await ai.files.download({ file: video as Parameters<typeof ai.files.download>[0]['file'], downloadPath: temp });
   return verifyAndPublish(filmId, record, temp);
+}
+
+async function fileExists(file: string) {
+  try { return (await stat(file)).isFile(); } catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') return false; throw e; }
 }
