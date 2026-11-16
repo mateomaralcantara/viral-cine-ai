@@ -28,6 +28,12 @@ const ELENA_HOME = ELENA_FACE + ', wearing a soft beige cardigan';
 const ELENA_SUCCESS = ELENA_FACE + ', wearing an elegant burgundy blouse';
 const MARISOL = 'Marisol, a cheerful Dominican woman in her mid-forties with short natural curly hair, wearing a bright yellow blouse';
 const STYLE = 'Realistic, restrained, cinematic drama, natural soft light, 16:9.';
+/** E02–E03: todo en español, con audio ambiente y voces de fondo en español dominicano. */
+const ELENA_ES = 'Elena, una mujer dominicana de cuarenta y pocos años, con el pelo castaño oscuro rizado hasta los hombros, ojos marrones cálidos y pequeños aretes de aro dorados';
+const ELENA_CASA = ELENA_ES + ', con un cárdigan beige suave';
+const ELENA_EXITO = ELENA_ES + ', con una elegante blusa color burdeos';
+const MARISOL_ES = 'Marisol, una mujer dominicana alegre de unos cuarenta y cinco años, con el pelo corto rizado natural y una blusa amarilla brillante';
+const ESTILO = 'Drama cinematográfico realista y contenido, luz natural suave, formato 16:9. Sonido ambiente natural; si se oye alguna voz de fondo, es en español dominicano. Sin subtítulos ni texto en pantalla.';
 
 type Beat = { title: string; camera: string; prompt: string; line: string; voice: 'elena' | 'marisol' };
 type SceneSpec = { title: string; summary: string; location: string; wardrobe: string; cast: Array<'elena' | 'marisol'>; beats: Beat[] };
@@ -61,19 +67,19 @@ const specs: SceneSpec[] = [
     cast: ['elena'],
     beats: [
       { title: 'Elena abre el portátil de noche', camera: 'Primer plano',
-        prompt: `Night, close-up of ${ELENA_HOME} sitting in front of a laptop in a dim living room. The cool glow of the screen lights her face; the screen itself is not visible. She takes a breath and begins to type with a small, determined expression. ${STYLE}`,
+        prompt: `De noche, primer plano de ${ELENA_CASA}, sentada frente a un portátil en una sala con poca luz. El brillo frío de la pantalla ilumina su rostro; la pantalla no se ve. Respira hondo y empieza a escribir con una pequeña expresión de determinación. Su boca permanece cerrada. ${ESTILO}`,
         line: 'Esa misma noche abrí GeneLibro. Por primera vez en meses, no tuve miedo.', voice: 'elena' },
       { title: 'Manos escribiendo junto al cuaderno', camera: 'Plano detalle',
-        prompt: `Close-up of a woman's hands typing on a laptop keyboard next to an open handwritten notebook and a cup of coffee. Shallow depth of field, warm lamp light mixing with the cool screen glow. No readable text. ${STYLE}`,
+        prompt: `Plano detalle de las manos de una mujer escribiendo en el teclado de un portátil, junto a un cuaderno abierto escrito a mano y una taza de café. Poca profundidad de campo, luz cálida de lámpara mezclada con el brillo frío de la pantalla. Ningún texto legible. ${ESTILO}`,
         line: 'Le conté mi vida, y me ayudó a ordenar cada capítulo.', voice: 'elena' },
       { title: 'Pasan los días hasta el amanecer', camera: 'Plano fijo',
-        prompt: `Static shot of a small living-room window as the light slowly changes from night to a golden sunrise, while ${ELENA_HOME} keeps working at a laptop by the window and empty coffee cups gather on the table. ${STYLE}`,
+        prompt: `Plano fijo de la ventana de una pequeña sala: la luz cambia lentamente de la noche a un amanecer dorado, mientras ${ELENA_CASA} sigue trabajando en un portátil junto a la ventana y las tazas de café vacías se acumulan sobre la mesa. ${ESTILO}`,
         line: 'Treinta días. Treinta amaneceres escribiendo.', voice: 'elena' },
       { title: 'Sostiene su primer libro impreso', camera: 'Primer plano medio',
-        prompt: `Medium close-up of ${ELENA_HOME} holding a freshly printed paperback book with a plain minimalist cover and no readable title. She runs her fingers over the cover, eyes glistening, and smiles. Soft morning light. ${STYLE}`,
+        prompt: `Primer plano medio de ${ELENA_CASA} sosteniendo un libro de tapa blanda recién impreso, con una portada minimalista y sin título legible. Pasa los dedos por la portada, con los ojos brillantes, y sonríe con la boca cerrada. Luz suave de mañana. ${ESTILO}`,
         line: 'Y un día lo tuve en mis manos: mi primer libro.', voice: 'elena' },
       { title: 'Un clic para publicar', camera: 'Plano macro',
-        prompt: `Extreme close-up of a woman's finger hovering over a laptop trackpad, then clicking once. The screen glow reflects softly on her hand; the screen content is not visible. A quiet, relieved stillness. ${STYLE}`,
+        prompt: `Plano macro del dedo de una mujer sobre el panel táctil de un portátil, que hace un solo clic. El brillo de la pantalla se refleja suavemente en su mano; el contenido de la pantalla no se ve. Una quietud tranquila y aliviada. ${ESTILO}`,
         line: 'Lo subí a Libroseller. Un clic… y respiré.', voice: 'elena' }
     ]
   },
@@ -83,19 +89,19 @@ const specs: SceneSpec[] = [
     cast: ['elena', 'marisol'],
     beats: [
       { title: 'El teléfono no para de vibrar', camera: 'Plano detalle',
-        prompt: `Close-up of a smartphone lying face up on a wooden kitchen table in bright morning light, vibrating repeatedly as soft notification lights pulse; the screen content is blurred and unreadable. A cup of coffee beside it. ${STYLE}`,
+        prompt: `Primer plano de un teléfono móvil boca arriba sobre una mesa de cocina de madera, con luz brillante de mañana, vibrando una y otra vez mientras parpadean suaves luces de notificación; el contenido de la pantalla está desenfocado e ilegible. Una taza de café al lado. ${ESTILO}`,
         line: 'A la mañana siguiente, el teléfono no paraba.', voice: 'elena' },
       { title: 'Su libro en la mesa de novedades', camera: 'Travelling hacia la mesa',
-        prompt: `Slow dolly shot in a warm independent bookstore toward a front display table with a neat tall stack of the same paperback with a plain minimalist cover and a small round gold sticker; no readable text or logos. Customers browse softly out of focus. ${STYLE}`,
+        prompt: `Travelling lento en una librería independiente cálida hacia una mesa de novedades con una pila alta y ordenada del mismo libro de tapa blanda, de portada minimalista con una pequeña pegatina dorada redonda; sin texto legible ni logotipos. Clientes desenfocados hojean libros al fondo. ${ESTILO}`,
         line: 'En tres semanas, mi libro estaba entre los más vendidos.', voice: 'elena' },
       { title: 'Firma de libros', camera: 'Plano medio',
-        prompt: `Medium shot at a cozy bookstore signing table: ${ELENA_SUCCESS} signs a copy of her paperback and hands it to a smiling adult reader, while a short line of adult readers waits in soft focus. Warm light. She smiles with her mouth closed. ${STYLE}`,
+        prompt: `Plano medio en una mesa de firmas de una librería acogedora: ${ELENA_EXITO} firma un ejemplar de su libro y se lo entrega a una lectora adulta sonriente, mientras una fila corta de lectores adultos espera desenfocada. Luz cálida. Ella sonríe con la boca cerrada. ${ESTILO}`,
         line: 'Gente que no conocía me decía que mi historia también era la suya.', voice: 'elena' },
       { title: 'Abrazo con Marisol', camera: 'Plano medio, cámara en mano suave',
-        prompt: `Medium shot in the same warm bookstore: ${MARISOL} steps out of the crowd and the two friends embrace tightly, ${ELENA_SUCCESS} closing her eyes with gratitude. Warm golden light, gentle handheld camera. ${STYLE}`,
+        prompt: `Plano medio en la misma librería cálida: ${MARISOL_ES} sale de entre el público y las dos amigas se abrazan con fuerza; ${ELENA_EXITO} cierra los ojos con gratitud. Luz dorada, cámara en mano suave. ${ESTILO}`,
         line: 'Y Marisol estaba allí, en primera fila, como siempre.', voice: 'elena' },
       { title: 'La parada de autobús, ahora con sol', camera: 'Plano general, alejamiento lento',
-        prompt: `Wide final shot of the same Santo Domingo city bus stop in bright sunshine after the rain, puddles reflecting a blue sky. ${ELENA_SUCCESS} stands holding her paperback book against her chest, looks up at the sky and smiles. Slow camera pull-back. ${STYLE}`,
+        prompt: `Plano general final de la misma parada de autobús de Santo Domingo bajo un sol brillante después de la lluvia, con charcos que reflejan el cielo azul. ${ELENA_EXITO} está de pie, abrazando su libro contra el pecho, mira al cielo y sonríe. Alejamiento lento de la cámara. ${ESTILO}`,
         line: 'Me quitaron un trabajo. Me devolvieron mi voz. Esta es solo la primera página.', voice: 'elena' }
     ]
   }

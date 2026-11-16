@@ -58,3 +58,15 @@ test('Dos toques congelado: ninguna generación pagada aunque todo esté configu
     assert.deepEqual((await sceneLabels(dos.film.id)).studioLabels[0], 'E03');
   });
 });
+
+test('La primera página: E02 y E03 en español, con voces de fondo en español dominicano', async () => {
+  await withData(async () => {
+    await saveV7FilmBundle(createPrimeraPaginaBundle());
+    for (const label of ['E02', 'E03']) {
+      for (const shot of (await scenePlan(PRIMERA_PAGINA_ID, label)).shots) {
+        assert.ok(shot.defaultPrompt.includes('español dominicano'), shot.shotId);
+        assert.ok(!/Realistic, restrained|wearing a/.test(shot.defaultPrompt), shot.shotId + ': sin inglés');
+      }
+    }
+  });
+});
