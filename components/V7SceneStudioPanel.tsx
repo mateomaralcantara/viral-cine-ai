@@ -10,17 +10,16 @@ type StudioShot = {
   authorization: string | null; videoReady: boolean;
 };
 type StudioBoard = {
-  sceneLabel: string; title: string; legacy: boolean; model: string; providerEnabled: boolean;
+  sceneLabel: string; sceneLabels?: string[]; title: string; legacy: boolean; model: string; providerEnabled: boolean;
   tariffConfigured: boolean; ratePerSecondUsd: number | null; capUsd: number;
   exposureUsd: number; remainingUsd: number; shots: StudioShot[];
   pendingShots: string[]; sceneTotalUsd: number; sceneAuthorization: string | null;
 };
 
-const SCENES = ['E03', 'E04', 'E05', 'E06', 'E07', 'E08', 'E09', 'E10'];
 
 export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
   const endpoint = '/api/v7/films/' + encodeURIComponent(filmId) + '/scene-studio';
-  const [scene, setScene] = useState('E03');
+  const [scene, setScene] = useState('');
   const [board, setBoard] = useState<StudioBoard | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [auth, setAuth] = useState<Record<string, string>>({});
@@ -30,10 +29,11 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
   const [summary, setSummary] = useState('');
 
   const refresh = useCallback(async () => {
-    const response = await fetch(endpoint + '?scene=' + scene, { cache: 'no-store' });
+    const response = await fetch(endpoint + (scene ? '?scene=' + scene : ''), { cache: 'no-store' });
     const data = await response.json() as { ok: boolean; board?: StudioBoard; error?: string };
     if (!data.ok || !data.board) throw new Error(data.error || 'Estudio no disponible');
     setBoard(data.board);
+    if (!scene) setScene(data.board.sceneLabel);
   }, [endpoint, scene]);
 
   useEffect(() => {
@@ -81,7 +81,7 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
       </p>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        {SCENES.map((s) => (
+        {(board?.sceneLabels ?? []).map((s) => (
           <button key={s} type="button" onClick={() => setScene(s)}
             className={s === scene ? 'button-primary' : 'button-secondary'}>{s}</button>
         ))}

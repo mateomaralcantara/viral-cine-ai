@@ -218,9 +218,7 @@ export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
         {hasDosToquesProject && (
           <TabButton active={tab === 'scene02'} onClick={() => setTab('scene02')} icon={<Clapperboard className="h-4 w-4" />}>ESCENA 02 · 7 TOMAS</TabButton>
         )}
-        {hasDosToquesProject && (
-          <TabButton active={tab === 'studio'} onClick={() => setTab('studio')} icon={<Clapperboard className="h-4 w-4" />}>ESTUDIO DE ESCENA · VEO</TabButton>
-        )}
+        <TabButton active={tab === 'studio'} onClick={() => setTab('studio')} icon={<Clapperboard className="h-4 w-4" />}>ESTUDIO DE ESCENA · VEO</TabButton>
         {hasDosToquesProject && (
           <TabButton active={tab === 'casting'} onClick={() => setTab('casting')} icon={<ShieldCheck className="h-4 w-4" />}>Casting visual</TabButton>
         )}
@@ -297,7 +295,7 @@ export default function V7FilmWorkspace({ filmId }: { filmId: string }) {
 
       {tab === 'scene01' && hasDosToquesProject && <V7DosToquesScene01Panel filmId={filmId} />}
       {tab === 'scene02' && hasDosToquesProject && <V7RunwayScene02Panel filmId={filmId} />}
-      {tab === 'studio' && hasDosToquesProject && <V7SceneStudioPanel filmId={filmId} />}
+      {tab === 'studio' && <V7SceneStudioPanel filmId={filmId} />}
 
       {tab === 'master' && <V7ClosedCutPlayer filmId={filmId} />}
 

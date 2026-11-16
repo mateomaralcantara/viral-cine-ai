@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { localAdminAuthorized, localOriginAllowed } from '@/lib/v7/security/local-studio-session';
 import {
-  resumeSceneShot, resumeWholeScene, savePromptRevision, sceneStudioBoard, submitSceneShot, submitWholeScene
+  resumeSceneShot, resumeWholeScene, sceneLabels, savePromptRevision, sceneStudioBoard, submitSceneShot, submitWholeScene
 } from '@/lib/v7/production/scene-veo-engine';
 
 export const runtime = 'nodejs';
@@ -19,8 +19,11 @@ export async function GET(request: Request, context: Context) {
   if (!localOriginAllowed(request)) return fail(403, 'Solo estudio local.');
   try {
     const { filmId } = await context.params;
-    const scene = new URL(request.url).searchParams.get('scene') || 'E03';
-    return NextResponse.json({ ok: true, board: await sceneStudioBoard(filmId, scene), providerCalls: 0 }, { headers: noStore });
+    const labels = await sceneLabels(filmId);
+    const scene = new URL(request.url).searchParams.get('scene') || labels.studioLabels[0];
+    if (!scene) return fail(404, 'La película no tiene escenas para el estudio.');
+    const board = await sceneStudioBoard(filmId, scene);
+    return NextResponse.json({ ok: true, board: { ...board, sceneLabels: labels.studioLabels }, providerCalls: 0 }, { headers: noStore });
   } catch (error) {
     return fail(404, error);
   }

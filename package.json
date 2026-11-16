@@ -100,7 +100,8 @@
     "studio:v6-legacy": "concurrently -n WEB,WORKER -c cyan,magenta \"next dev --webpack\" \"node --import tsx scripts/worker.ts\"",
     "studio:prod:v6-legacy": "concurrently -n WEB,WORKER -c cyan,magenta \"next start\" \"node --import tsx scripts/worker.ts\"",
     "migrate:v7": "node --import tsx scripts/migrate-v6-to-v7.ts",
-    "verify:v7": "npm run typecheck && npm test && npm run build"
+    "verify:v7": "npm run typecheck && npm test && npm run build",
+    "crear:primera-pagina": "node --import tsx scripts/crear-la-primera-pagina.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",

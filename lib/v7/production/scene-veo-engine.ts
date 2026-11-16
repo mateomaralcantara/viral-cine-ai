@@ -26,8 +26,25 @@ const command = promisify(execFile);
 const SCENE_LABEL = /^E\d{2}$/;
 const SHOT_LABEL = /^E\d{2}-P\d{2}$/;
 const REVISION_ID = /^v\d{17}-[0-9a-f-]{36}$/;
-/** Escenas con motor propio: no se producen desde aquí para no mezclar libros de gasto. */
+/** Escenas con motor propio (solo en «Dos toques»): no se producen aquí para no mezclar libros de gasto. */
+const DOS_TOQUES_FILM_ID = 'film-dos-toques-de-bocina-v7';
 const LEGACY_SCENES = new Set(['E01', 'E02']);
+function isLegacyScene(filmId: string, sceneLabel: string) {
+  return filmId === DOS_TOQUES_FILM_ID && LEGACY_SCENES.has(sceneLabel);
+}
+/** Prompt inicial: curado por película (datos) o, si no, derivado del guion. */
+function curatedPrompt(filmId: string, label: string, shot: { visualPrompt: string; title: string; camera: string; metadata: Record<string, unknown> }) {
+  if (filmId === DOS_TOQUES_FILM_ID && DOS_TOQUES_SCENE_PROMPTS[label]) return DOS_TOQUES_SCENE_PROMPTS[label];
+  if (shot.metadata?.curatedPrompt === true && shot.visualPrompt.trim().length >= 60) return shot.visualPrompt.trim().slice(0, 3500);
+  return defaultPrompt(shot.visualPrompt || shot.title, shot.camera);
+}
+
+/** Etiquetas de escena del guion (E01, E02…) y la primera que se produce en el estudio. */
+export async function sceneLabels(filmId: string) {
+  const film = (await readV7FilmBundle(filmId)).film;
+  const labels = indexedScenes(film).map((s) => s.label);
+  return { labels, studioLabels: labels.filter((l) => !isLegacyScene(filmId, l)) };
+}
 
 export type SceneVeoStatus =
   | 'reserved' | 'submitted' | 'processing' | 'review-required'
@@ -151,9 +168,9 @@ export async function scenePlan(filmId: string, sceneLabel: string) {
     editSeconds: shot.durationSeconds,
     providerSeconds: veoSeconds(Math.min(8, shot.durationSeconds)),
     spokenText: shot.spokenText,
-    defaultPrompt: DOS_TOQUES_SCENE_PROMPTS[label] ?? defaultPrompt(shot.visualPrompt || shot.title, shot.camera)
+    defaultPrompt: curatedPrompt(filmId, label, shot)
   }));
-  return { filmId, sceneLabel, sceneId: entry.scene.id, title: entry.scene.title, shots, legacy: LEGACY_SCENES.has(sceneLabel) };
+  return { filmId, sceneLabel, sceneId: entry.scene.id, title: entry.scene.title, shots, legacy: isLegacyScene(filmId, sceneLabel) };
 }
 
 function defaultPrompt(visual: string, camera: string) {
@@ -327,7 +344,8 @@ export async function sceneStudioBoard(filmId: string, sceneLabel: string) {
     sceneTotalUsd,
     sceneAuthorization: pending.length ? sceneAuthorizationPhrase(plan.sceneLabel, sceneTotalUsd) : null,
     model: veoSceneModel(),
-    providerEnabled: veoScenesEnabled(),
+    providerEnabled: veoScenesEnabled() && !isFrozenFilm(filmId),
+    frozen: isFrozenFilm(filmId),
     tariffConfigured: rate !== null,
     ratePerSecondUsd: rate,
     capUsd: cap,
@@ -339,7 +357,12 @@ export async function sceneStudioBoard(filmId: string, sceneLabel: string) {
 
 // ---------- envío (único paso con costo) ----------
 
-function paidPreconditions(legacy: boolean, sceneLabel: string) {
+/** Películas congeladas (V7_FROZEN_FILMS, separadas por coma): sin ninguna generación pagada. */
+export function isFrozenFilm(filmId: string) {
+  return (process.env.V7_FROZEN_FILMS || '').split(',').map((x) => x.trim()).filter(Boolean).includes(filmId);
+}
+function paidPreconditions(legacy: boolean, sceneLabel: string, filmId: string) {
+  if (isFrozenFilm(filmId)) throw new Error('Película congelada (V7_FROZEN_FILMS): no se genera nada nuevo.');
   if (legacy) throw new Error(sceneLabel + ' tiene su propio motor y libro de gasto. Usa su panel.');
   if (!veoScenesEnabled()) throw new Error('Veo para escenas está apagado (V7_VEO_SCENES_ENABLED) o falta GEMINI_API_KEY.');
   const rate = veoSceneRate();
@@ -351,7 +374,7 @@ function paidPreconditions(legacy: boolean, sceneLabel: string) {
 
 export async function submitSceneShot(filmId: string, shotId: string, input: { revisionId: string; authorization: string }) {
   const { plan, shot } = await planShot(filmId, shotId);
-  const { rate, cap } = paidPreconditions(plan.legacy, plan.sceneLabel);
+  const { rate, cap } = paidPreconditions(plan.legacy, plan.sceneLabel, filmId);
   if (!REVISION_ID.test(input.revisionId)) throw new Error('Guarda primero una versión del prompt.');
   const estimatedUsd = estimateShotUsd(shot.editSeconds, rate);
   if (input.authorization.trim() !== authorizationPhrase(shotId, estimatedUsd)) {
@@ -387,7 +410,7 @@ async function readSceneAuthorization(filmId: string, sceneLabel: string): Promi
  */
 export async function submitWholeScene(filmId: string, sceneLabel: string, authorization: string) {
   const plan = await scenePlan(filmId, sceneLabel);
-  const { rate, cap } = paidPreconditions(plan.legacy, plan.sceneLabel);
+  const { rate, cap } = paidPreconditions(plan.legacy, plan.sceneLabel, filmId);
   return withSceneLock(filmId, plan.sceneLabel, async () => {
     const pending = [];
     const previous = new Set((await readSceneAuthorization(filmId, sceneLabel))?.shots.map((s) => s.shotId) ?? []);
@@ -455,7 +478,7 @@ export async function resumeWholeScene(filmId: string, sceneLabel: string) {
     }
   }
   let dispatched: Array<{ shotId: string; status: string; error?: string }> = [];
-  if (!plan.legacy && veoScenesEnabled() && veoSceneRate() !== null && sceneCapUsd() > 0) {
+  if (!plan.legacy && !isFrozenFilm(filmId) && veoScenesEnabled() && veoSceneRate() !== null && sceneCapUsd() > 0) {
     dispatched = await withSceneLock(filmId, plan.sceneLabel, () => dispatchAuthorized(filmId, plan, sceneCapUsd()));
   }
   return { sceneLabel, results, dispatched };
