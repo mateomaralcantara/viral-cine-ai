@@ -21,7 +21,7 @@ async function serve(request:Request,context:Context,head:boolean){
     const bundle=await readV7FilmBundle(filmId);
     const board=await readSceneApprovalBoard(bundle.film);
     const scene=sceneId?board.scenes.find(s=>s.id===sceneId):null;
-    const shot=id?board.scenes.flatMap(s=>s.shots).find(s=>s.id===id):null;
+    const shot=id?board.scenes.flatMap(s=>s.shots).find(s=>s.id===id||s.label===id):null;
     if(sceneId&&(!scene||!scene.assembled))return new Response(null,{status:404});
     if(id&&(!shot||!shot.hasVideo))return new Response(null,{status:404});
     const asset=shot?await resolveV7ShotVideo(filmId,shot.label):null;
