@@ -1,4 +1,4 @@
-# Pre-película: une en orden todos los videos ya generados (E01…E10), aprobados o no.
+﻿# Pre-película: une en orden todos los videos ya generados (E01…E10), aprobados o no.
 # Solo local con FFmpeg: sin proveedores, sin costo, sin modificar los originales.
 #
 # Uso (PowerShell, dentro del proyecto):

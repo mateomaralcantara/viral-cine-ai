@@ -1,4 +1,4 @@
-# Verificación de ViralCine: solo lectura. No genera video, no cobra, no modifica archivos.
+﻿# Verificación de ViralCine: solo lectura. No genera video, no cobra, no modifica archivos.
 #
 # Uso (PowerShell, dentro de viral-cine-v7-cinema-core):
 #   powershell -ExecutionPolicy Bypass -File .\scripts\VERIFICAR-VIRALCINE.ps1
