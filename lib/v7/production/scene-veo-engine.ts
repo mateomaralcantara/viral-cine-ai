@@ -12,6 +12,7 @@
  *    aprobación y el montaje local existentes funcionan sin cambios.
  */
 import { createHash, randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { mkdir, open, readdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -57,6 +58,8 @@ export type SceneVeoRecord = {
   shotId: string;
   sceneLabel: string;
   model: string;
+  /** Plataforma de Google usada al crear la toma (los registros antiguos son AI Studio). */
+  platform?: VideoPlatform;
   mode: 'text-to-video' | 'image-to-video';
   durationSeconds: number;
   estimatedUsd: number;
@@ -89,6 +92,30 @@ export function veoSceneModel() {
   return (process.env.V7_VEO_SCENE_MODEL || 'veo-3.1-fast-generate-preview').trim();
 }
 /** Los modelos «gemini-omni-*» usan la API Interactions en segundo plano; el resto, Veo (generateVideos). */
+/** AI Studio (Gemini API, con clave) o Vertex AI (Google Cloud, con cuenta de servicio). */
+export type VideoPlatform = 'gemini' | 'vertex';
+export function videoPlatform(): VideoPlatform {
+  return process.env.V7_VIDEO_PLATFORM?.trim().toLowerCase() === 'vertex' ? 'vertex' : 'gemini';
+}
+function vertexConfig() {
+  return {
+    project: (process.env.GOOGLE_CLOUD_PROJECT || '').trim(),
+    location: (process.env.GOOGLE_CLOUD_LOCATION || 'us-central1').trim(),
+    keyFile: (process.env.V7_VERTEX_KEY_FILE || process.env.GOOGLE_APPLICATION_CREDENTIALS || '').trim()
+  };
+}
+/** Comprueba la configuración sin red: qué falta para usar la plataforma. */
+export function platformProblem(platform: VideoPlatform = videoPlatform()): string | null {
+  if (platform === 'gemini') {
+    return process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().length >= 12 ? null : 'Falta GEMINI_API_KEY (AI Studio).';
+  }
+  const v = vertexConfig();
+  if (!v.project) return 'Falta GOOGLE_CLOUD_PROJECT (ID del proyecto de Google Cloud).';
+  if (!v.keyFile) return 'Falta V7_VERTEX_KEY_FILE (ruta al JSON de la cuenta de servicio).';
+  if (!existsSync(v.keyFile)) return 'No existe el archivo de la cuenta de servicio: ' + v.keyFile;
+  return null;
+}
+
 export function isOmniModel(model = veoSceneModel()) {
   return model.startsWith('gemini-omni');
 }
@@ -110,7 +137,7 @@ export function sceneCapUsd(): number {
 export function veoScenesEnabled() {
   return process.env.NODE_ENV === 'development' &&
     process.env.V7_VEO_SCENES_ENABLED === 'true' &&
-    Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().length >= 12);
+    platformProblem() === null;
 }
 export function estimateShotUsd(editSeconds: number, rate: number) {
   return round(veoSeconds(Math.min(8, editSeconds)) * rate);
@@ -288,7 +315,16 @@ function safeError(error: unknown) {
     .slice(0, 400);
 }
 
-function googleClient() {
+function googleClient(platform: VideoPlatform = 'gemini') {
+  if (platform === 'vertex') {
+    const v = vertexConfig();
+    const problem = platformProblem('vertex');
+    if (problem) throw new Error(problem);
+    return new GoogleGenAI({
+      vertexai: true, project: v.project, location: v.location,
+      googleAuthOptions: { keyFilename: v.keyFile, scopes: ['https://www.googleapis.com/auth/cloud-platform'] }
+    });
+  }
   const other = process.env.GOOGLE_API_KEY;
   try {
     delete process.env.GOOGLE_API_KEY;
@@ -350,6 +386,8 @@ export async function sceneStudioBoard(filmId: string, sceneLabel: string) {
     sceneAuthorization: pending.length ? sceneAuthorizationPhrase(plan.sceneLabel, sceneTotalUsd) : null,
     model: veoSceneModel(),
     providerEnabled: veoScenesEnabled() && !isFrozenFilm(filmId),
+    platform: videoPlatform(),
+    platformProblem: platformProblem(),
     frozen: isFrozenFilm(filmId),
     tariffConfigured: rate !== null,
     ratePerSecondUsd: rate,
@@ -369,7 +407,12 @@ export function isFrozenFilm(filmId: string) {
 function paidPreconditions(legacy: boolean, sceneLabel: string, filmId: string) {
   if (isFrozenFilm(filmId)) throw new Error('Película congelada (V7_FROZEN_FILMS): no se genera nada nuevo.');
   if (legacy) throw new Error(sceneLabel + ' tiene su propio motor y libro de gasto. Usa su panel.');
-  if (!veoScenesEnabled()) throw new Error('Veo para escenas está apagado (V7_VEO_SCENES_ENABLED) o falta GEMINI_API_KEY.');
+  const problem = platformProblem();
+  if (problem) throw new Error(problem);
+  if (!veoScenesEnabled()) throw new Error('Veo para escenas está apagado (V7_VEO_SCENES_ENABLED=false).');
+  if (videoPlatform() === 'vertex' && isOmniModel()) {
+    throw new Error('Gemini Omni solo está en AI Studio. En Vertex AI usa un modelo Veo (V7_VEO_SCENE_MODEL).');
+  }
   const rate = veoSceneRate();
   if (rate === null) throw new Error('Tarifa de Veo sin verificar: configura V7_VEO_USD_PER_SECOND según la página de precios de Google.');
   const cap = sceneCapUsd();
@@ -522,7 +565,7 @@ async function submitLocked(filmId: string, plan: Awaited<ReturnType<typeof scen
     const now = new Date().toISOString();
     const record: SceneVeoRecord = {
       schemaVersion: 1, provider: 'veo', filmId, shotId, sceneLabel: plan.sceneLabel,
-      model: veoSceneModel(), mode: reference ? 'image-to-video' : 'text-to-video',
+      model: veoSceneModel(), platform: videoPlatform(), mode: reference ? 'image-to-video' : 'text-to-video',
       durationSeconds: shot.providerSeconds, estimatedUsd,
       revisionId: revision.revisionId, promptHash: revision.promptHash,
       referenceSha256: reference?.sha256 ?? null, status: 'reserved', createdAt: now, updatedAt: now
@@ -548,7 +591,7 @@ async function submitLocked(filmId: string, plan: Awaited<ReturnType<typeof scen
         await writeRecord(filmId, record);
         return { shotId, status: record.status, estimatedUsd, noAutomaticRetries: true };
       }
-      const operation = await googleClient().models.generateVideos({
+      const operation = await googleClient(record.platform).models.generateVideos({
         model: record.model,
         source: {
           prompt: revision.promptText,
@@ -583,9 +626,8 @@ export async function resumeSceneShot(filmId: string, shotId: string) {
     if (!record || record.provider !== 'veo') throw new Error('No hay una operación de Veo que recuperar en ' + shotId + '.');
     if (record.status === 'review-required') return { shotId, status: record.status, videoReady: true };
     if (!record.operationName) throw new Error('Solicitud sin ID de Google: resultado incierto. No reenviar; reconciliar.');
-    if (!process.env.GEMINI_API_KEY) throw new Error('Falta GEMINI_API_KEY para consultar la operación.');
-    const ai = googleClient();
-    if (record.operationName.startsWith(INTERACTION_PREFIX)) return resumeInteraction(ai, filmId, record);
+    if (record.operationName.startsWith(INTERACTION_PREFIX)) return resumeInteraction(googleClient('gemini'), filmId, record);
+    const ai = googleClient(record.platform ?? 'gemini');
     const operation = await ai.operations.getVideosOperation({
       operation: { name: record.operationName } as Parameters<typeof ai.operations.getVideosOperation>[0]['operation']
     });
@@ -605,7 +647,14 @@ export async function resumeSceneShot(filmId: string, shotId: string) {
     const target = candidatePath(filmId, shotId);
     const temp = path.join(shotDir(filmId, shotId), '.veo-' + randomUUID() + '.mp4');
     try {
-      await ai.files.download({ file: video, downloadPath: temp });
+      if (video.videoBytes) {
+        // Vertex AI sin bucket devuelve el video dentro de la respuesta.
+        await writeFile(temp, Buffer.from(video.videoBytes, 'base64'), { flag: 'wx', mode: 0o600 });
+      } else if (video.uri?.startsWith('gs://')) {
+        throw new Error('El video quedó en Cloud Storage (' + video.uri.split('/')[2] + '); este estudio no usa buckets. Revisa la configuración de Vertex.');
+      } else {
+        await ai.files.download({ file: video, downloadPath: temp });
+      }
       const { stdout } = await command('ffprobe', ['-v', 'error', '-show_entries', 'format=duration:stream=codec_type', '-of', 'json', temp], { timeout: 30000 });
       const info = JSON.parse(stdout) as { format?: { duration?: string }; streams?: Array<{ codec_type?: string }> };
       const seconds = Number(info.format?.duration ?? 0);

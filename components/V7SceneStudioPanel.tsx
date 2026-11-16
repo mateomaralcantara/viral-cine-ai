@@ -10,7 +10,7 @@ type StudioShot = {
   authorization: string | null; redoAuthorization: string | null; videoReady: boolean;
 };
 type StudioBoard = {
-  sceneLabel: string; sceneLabels?: string[]; title: string; legacy: boolean; model: string; providerEnabled: boolean;
+  sceneLabel: string; sceneLabels?: string[]; platform?: 'gemini' | 'vertex'; platformProblem?: string | null; frozen?: boolean; title: string; legacy: boolean; model: string; providerEnabled: boolean;
   tariffConfigured: boolean; ratePerSecondUsd: number | null; capUsd: number;
   exposureUsd: number; remainingUsd: number; shots: StudioShot[];
   pendingShots: string[]; sceneTotalUsd: number; sceneAuthorization: string | null;
@@ -89,13 +89,15 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
 
       {board && <div className="mt-4 grid gap-3 sm:grid-cols-4 text-sm">
         <div className="rounded-xl border border-white/10 p-3"><div className="text-slate-400">Escena</div><b>{board.sceneLabel} · {board.title}</b></div>
-        <div className="rounded-xl border border-white/10 p-3"><div className="text-slate-400">Modelo</div><b>{board.model}</b></div>
+        <div className="rounded-xl border border-white/10 p-3"><div className="text-slate-400">Modelo · {board.platform === 'vertex' ? 'Vertex AI' : 'AI Studio'}</div><b>{board.model}</b></div>
         <div className="rounded-xl border border-white/10 p-3"><div className="text-slate-400">Gasto / tope</div>
           <b>US${board.exposureUsd.toFixed(2)} / US${board.capUsd.toFixed(2)}</b></div>
         <div className="rounded-xl border border-white/10 p-3"><div className="text-slate-400">Tarifa</div>
           <b>{board.ratePerSecondUsd === null ? 'sin verificar' : 'US$' + board.ratePerSecondUsd + '/s'}</b></div>
       </div>}
 
+      {board?.platformProblem && <p className="mt-3 text-sm text-red-300">{board.platformProblem}</p>}
+      {board?.frozen && <p className="mt-3 text-sm text-amber-200">Película congelada (V7_FROZEN_FILMS): no se genera nada nuevo.</p>}
       {board && !board.providerEnabled && <p className="mt-3 text-sm text-amber-200">
         Veo está apagado (V7_VEO_SCENES_ENABLED=false). Puedes preparar y guardar prompts sin costo.</p>}
       {board && !board.tariffConfigured && <p className="mt-2 text-sm text-amber-200">

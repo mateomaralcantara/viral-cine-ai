@@ -53,7 +53,7 @@ test('Las versiones de prompt son inmutables y la última manda', async () => {
 test('Sin interruptor, tarifa verificada y tope fijo no se envía nada ni se reserva gasto', async () => {
   await withStudio(async (filmId, root) => {
     const rev = await savePromptRevision(filmId, 'E03-P01', PROMPT);
-    await assert.rejects(submitSceneShot(filmId, 'E03-P01', { revisionId: rev.revisionId, authorization: 'x' }), /apagado/);
+    await assert.rejects(submitSceneShot(filmId, 'E03-P01', { revisionId: rev.revisionId, authorization: 'x' }), /apagado|GEMINI_API_KEY/);
     env.NODE_ENV = 'development';
     process.env.V7_VEO_SCENES_ENABLED = 'true';
     process.env.GEMINI_API_KEY = 'AIza-test-key-not-real';
@@ -179,6 +179,48 @@ test('E05 usa prompts curados: Samuel fijo, sin diálogo visible y pantalla del 
     for (const id of ['E05-P03', 'E05-P04', 'E05-P07', 'E05-P08']) {
       assert.ok(plan.shots.find((s) => s.shotId === id)!.defaultPrompt.includes('mouth closed') ||
         plan.shots.find((s) => s.shotId === id)!.defaultPrompt.includes('mouth stays closed'), id);
+    }
+  });
+});
+
+test('Vertex AI: se elige con V7_VIDEO_PLATFORM, exige proyecto y cuenta de servicio, y no acepta Omni', async () => {
+  const { videoPlatform, platformProblem } = await import('../lib/v7/production/scene-veo-engine');
+  const { writeFile } = await import('node:fs/promises');
+  const keys = ['V7_VIDEO_PLATFORM', 'GOOGLE_CLOUD_PROJECT', 'V7_VERTEX_KEY_FILE', 'GOOGLE_APPLICATION_CREDENTIALS', 'V7_VEO_SCENE_MODEL'];
+  const saved = Object.fromEntries(keys.map((k) => [k, env[k]]));
+  try {
+    for (const k of keys) delete env[k];
+    assert.equal(videoPlatform(), 'gemini');
+    env.V7_VIDEO_PLATFORM = 'vertex';
+    assert.equal(videoPlatform(), 'vertex');
+    assert.match(platformProblem('vertex')!, /GOOGLE_CLOUD_PROJECT/);
+    env.GOOGLE_CLOUD_PROJECT = 'mi-proyecto';
+    assert.match(platformProblem('vertex')!, /V7_VERTEX_KEY_FILE/);
+    env.V7_VERTEX_KEY_FILE = path.join(tmpdir(), 'no-existe-' + Date.now() + '.json');
+    assert.match(platformProblem('vertex')!, /No existe/);
+    const file = path.join(tmpdir(), 'sa-' + Date.now() + '.json');
+    await writeFile(file, '{"type":"service_account"}');
+    env.V7_VERTEX_KEY_FILE = file;
+    assert.equal(platformProblem('vertex'), null);
+  } finally {
+    for (const k of keys) { if (saved[k] === undefined) delete env[k]; else env[k] = saved[k]; }
+  }
+});
+
+test('Vertex AI con un modelo Omni se rechaza antes de reservar o llamar a Google', async () => {
+  await withStudio(async (filmId) => {
+    const { writeFile } = await import('node:fs/promises');
+    const file = path.join(tmpdir(), 'sa-' + Date.now() + '.json');
+    await writeFile(file, '{"type":"service_account"}');
+    env.NODE_ENV = 'development'; process.env.V7_VEO_SCENES_ENABLED = 'true';
+    process.env.V7_VEO_USD_PER_SECOND = '0.10'; process.env.V7_SCENE_MAX_USD = '10';
+    env.V7_VIDEO_PLATFORM = 'vertex'; env.GOOGLE_CLOUD_PROJECT = 'p'; env.V7_VERTEX_KEY_FILE = file; env.V7_VEO_SCENE_MODEL = 'gemini-omni-flash-preview';
+    try {
+      const board = await sceneStudioBoard(filmId, 'E03');
+      await assert.rejects(submitWholeScene(filmId, 'E03', board.sceneAuthorization!), /Omni solo está en AI Studio/);
+      await assert.rejects(readFile(recordPath(filmId, 'E03-P01')), { code: 'ENOENT' });
+    } finally {
+      for (const k of ['V7_VIDEO_PLATFORM', 'GOOGLE_CLOUD_PROJECT', 'V7_VERTEX_KEY_FILE', 'V7_VEO_SCENE_MODEL']) delete env[k];
     }
   });
 });

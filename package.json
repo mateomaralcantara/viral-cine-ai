@@ -101,13 +101,15 @@
     "studio:prod:v6-legacy": "concurrently -n WEB,WORKER -c cyan,magenta \"next start\" \"node --import tsx scripts/worker.ts\"",
     "migrate:v7": "node --import tsx scripts/migrate-v6-to-v7.ts",
     "verify:v7": "npm run typecheck && npm test && npm run build",
-    "crear:primera-pagina": "node --import tsx scripts/crear-la-primera-pagina.ts"
+    "crear:primera-pagina": "node --import tsx scripts/crear-la-primera-pagina.ts",
+    "verificar:vertex": "node --import tsx scripts/verificar-vertex.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",
     "@google/genai": "^2.15.0",
+    "google-auth-library": "^10.9.0",
     "lucide-react": "^0.468.0",
-    "next": "16.4.3",
+    "next": "16.4.6",
     "openai": "^6.15.0",
     "react": "19.1.1",
     "react-dom": "19.1.1",
