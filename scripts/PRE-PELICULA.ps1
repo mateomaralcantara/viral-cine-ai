@@ -22,6 +22,9 @@ if (-not $Data) {
     Where-Object { $_ -match '^VIRALCINE_DATA_DIR=' } | Select-Object -First 1
   $Data = if ($line) { ($line -replace '^VIRALCINE_DATA_DIR=', '').Trim().Trim('"', "'") } else { Join-Path $PSScriptRoot '..\.data' }
 }
+if (-not [IO.Path]::IsPathRooted($Data)) { $Data = Join-Path (Split-Path $PSScriptRoot -Parent) $Data }
+$Data = [IO.Path]::GetFullPath($Data)
+Write-Host "Datos: $Data"
 $film = Join-Path $Data "v7\films\$filmId"
 if (-not (Test-Path $film)) { throw "No encuentro la película en $film" }
 foreach ($tool in 'ffmpeg', 'ffprobe') {

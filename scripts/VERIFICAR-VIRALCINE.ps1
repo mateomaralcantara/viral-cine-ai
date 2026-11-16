@@ -40,6 +40,9 @@ foreach ($n in 'V7_VEO_SCENES_ENABLED', 'V7_RUNWAY_E02_ENABLED') {
 # ---------- 2. Tomas por escena ----------
 Title '2. Estado de las tomas'
 $data = if ($vals['VIRALCINE_DATA_DIR']) { $vals['VIRALCINE_DATA_DIR'] } else { Join-Path $root '.data' }
+if (-not [IO.Path]::IsPathRooted($data)) { $data = Join-Path $root $data }
+$data = [IO.Path]::GetFullPath($data)
+Write-Host "  Datos: $data"
 $film = Join-Path $data "v7\films\$filmId"
 if (-not (Test-Path $film)) { Bad "No encuentro la carpeta de datos: $film"; exit 1 }
 $hasProbe = [bool](Get-Command ffprobe -ErrorAction SilentlyContinue)
