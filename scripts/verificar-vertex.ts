@@ -45,9 +45,13 @@ try {
   if (!token) throw new Error('sin token');
   ok('Autenticación con Google Cloud correcta');
   if (project && model && !model.startsWith('gemini-omni')) {
-    const url = `https://${location}-aiplatform.googleapis.com/v1/projects/${project}/locations/${location}/publishers/google/models/${model}`;
-    const res = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
-    if (res.ok) ok('El modelo ' + model + ' está disponible en ' + location);
+    // Catálogo de modelos de Google (Model Garden): consulta gratuita, no genera nada.
+    const url = `https://${location}-aiplatform.googleapis.com/v1beta1/publishers/google/models/${model}`;
+    const res = await fetch(url, { headers: { Authorization: 'Bearer ' + token, 'x-goog-user-project': project } });
+    if (res.ok) {
+      const info = await res.json() as { launchStage?: string; versionState?: string };
+      ok('El modelo ' + model + ' está disponible en ' + location + (info.launchStage ? ' (' + info.launchStage + ')' : ''));
+    }
     else {
       const body = await res.text();
       bad('Vertex respondió HTTP ' + res.status + ' para ' + model + ': ' + body.replace(/\s+/g, ' ').slice(0, 300));
