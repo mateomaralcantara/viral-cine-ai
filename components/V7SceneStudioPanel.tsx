@@ -46,10 +46,18 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
     if (!waiting) return;
     const timer = setInterval(() => {
       void fetch(endpoint, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'resume-scene', scene }) }).then(() => refresh()).catch(() => undefined);
+        body: JSON.stringify({ action: 'resume-scene', scene }) })
+        .then(async (r) => { reportResume(await r.json()); await refresh(); }).catch(() => undefined);
     }, 30000);
     return () => clearInterval(timer);
   }, [waiting, endpoint, scene, refresh]);
+
+  /** Muestra los errores de recuperación en vez de ignorarlos (si no, una toma podría quedar «submitted» sin aviso). */
+  function reportResume(data: unknown) {
+    const r = (data as { result?: { results?: Array<{ shotId: string; status: string; error?: string }> } } | null)?.result;
+    const failed = (r?.results ?? []).filter((x) => x.error || x.status === 'error');
+    if (failed.length) setMessage('Error al recuperar: ' + failed.map((x) => x.shotId + ': ' + (x.error || x.status)).join(' · '));
+  }
 
   async function post(body: Record<string, unknown>, label: string) {
     setBusy(label); setMessage('');
@@ -129,7 +137,7 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
           </div>
         </> : <p className="mt-1 text-sm text-slate-300">No quedan tomas pendientes. {waiting ? 'Recuperando videos y enviando la cola cada 30 s…' : ''}</p>}
         <button type="button" className="button-secondary mt-3" disabled={!!busy}
-          onClick={() => void post({ action: 'resume-scene', scene }, 'resume-scene')}>Recuperar todas · gratis</button>
+          onClick={() => void post({ action: 'resume-scene', scene }, 'resume-scene').then((d) => reportResume(d))}>Recuperar todas · gratis</button>
       </div>}
 
       <div className="mt-5 space-y-4">

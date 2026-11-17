@@ -17,7 +17,7 @@ import { execFile } from 'node:child_process';
 import { mkdir, open, readdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { GoogleGenAI } from '@google/genai';
+import { GenerateVideosOperation, GoogleGenAI } from '@google/genai';
 import { readV7FilmBundle, v7FilmRoot } from '@/lib/v7/storage/film-store';
 import { indexedScenes } from '@/lib/v7/production/scene-approval-board';
 import { veoSeconds } from '@/lib/v7/production/cinema-core-policy';
@@ -656,9 +656,11 @@ export async function resumeSceneShot(filmId: string, shotId: string) {
     if (!record.operationName) throw new Error('Solicitud sin ID de Google: resultado incierto. No reenviar; reconciliar.');
     if (record.operationName.startsWith(INTERACTION_PREFIX)) return resumeInteraction(googleClient('gemini'), filmId, record);
     const ai = googleClient(record.platform ?? 'gemini');
-    const operation = await ai.operations.getVideosOperation({
-      operation: { name: record.operationName } as Parameters<typeof ai.operations.getVideosOperation>[0]['operation']
-    });
+    // El SDK necesita una instancia real de operación (usa _fromAPIResponse); un objeto con solo
+    // el nombre hace fallar la consulta y la toma se quedaría en «submitted» para siempre.
+    const saved = new GenerateVideosOperation();
+    saved.name = record.operationName;
+    const operation = await ai.operations.getVideosOperation({ operation: saved });
     if (!operation.done) {
       record.status = 'processing';
       await writeRecord(filmId, record);

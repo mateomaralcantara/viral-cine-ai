@@ -244,3 +244,10 @@ test('Un 429 por cuota no cuesta nada, no bloquea la toma y la escena la reinten
     assert.equal(shot.revisionUsed, false, 'el mismo texto se puede reintentar');
   });
 });
+
+test('La recuperación de Veo usa una instancia GenerateVideosOperation, nunca un objeto con solo el nombre', async () => {
+  const { readFile: read } = await import('node:fs/promises');
+  const source = await read(new URL('../lib/v7/production/scene-veo-engine.ts', import.meta.url), 'utf8');
+  assert.match(source, /new GenerateVideosOperation\(\)/);
+  assert.doesNotMatch(source, /operation: \{ name: record\.operationName \}/);
+});
