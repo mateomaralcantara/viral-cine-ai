@@ -49,7 +49,9 @@ export async function sceneLabels(filmId: string) {
 
 export type SceneVeoStatus =
   | 'reserved' | 'submitted' | 'processing' | 'review-required'
-  | 'failed-unknown' | 'failed-no-video';
+  | 'failed-unknown' | 'failed-no-video'
+  /** Google rechazó por cuota (HTTP 429) antes de crear el trabajo: sin costo, se reintenta igual. */
+  | 'quota-rejected';
 
 export type SceneVeoRecord = {
   schemaVersion: 1;
@@ -125,6 +127,12 @@ function rejectedBeforeCreation(error: unknown) {
   return Number.isInteger(status) && status >= 400 && status < 500 && status !== 408 && status !== 429;
 }
 const INTERACTION_PREFIX = 'interaction:';
+const QUOTA_PATTERN = /"code":\s*429|\b429\b|RESOURCE_EXHAUSTED|Quota exceeded/i;
+/** Rechazo por cuota al crear: Google no creó ningún trabajo, así que no hay cobro posible. */
+function quotaRejected(error: unknown) {
+  const status = Number((error as { status?: unknown })?.status);
+  return status === 429 || QUOTA_PATTERN.test(String(error instanceof Error ? error.message : error));
+}
 
 export function veoSceneRate(): number | null {
   const value = Number(process.env.V7_VEO_USD_PER_SECOND || 0);
@@ -259,6 +267,10 @@ export async function readShotRecord(filmId: string, shotId: string): Promise<Sc
   try {
     const record = JSON.parse(await readFile(recordPath(filmId, shotId), 'utf8')) as SceneVeoRecord;
     if (record.filmId !== filmId || record.shotId !== shotId) throw new Error('Registro de Veo no coincide con la toma.');
+    // Normalización de solo lectura: un 429 sin ID de operación nunca creó un trabajo.
+    if (record.status === 'failed-unknown' && !record.operationName && QUOTA_PATTERN.test(record.error ?? '')) {
+      return { ...record, status: 'quota-rejected', estimatedUsd: 0 };
+    }
     return record;
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null;
@@ -368,7 +380,7 @@ export async function sceneStudioBoard(filmId: string, sceneLabel: string) {
       error: record?.error ?? null,
       promptText: revision?.promptText ?? shot.defaultPrompt,
       revisionId: revision?.revisionId ?? null,
-      revisionUsed: Boolean(record && revision && record.revisionId === revision.revisionId),
+      revisionUsed: Boolean(record && revision && record.status !== 'quota-rejected' && record.revisionId === revision.revisionId),
       mode: reference ? 'image-to-video' : 'text-to-video',
       referenceSha256: reference?.sha256 ?? null,
       estimatedUsd,
@@ -496,7 +508,8 @@ async function dispatchAuthorized(filmId: string, plan: Awaited<ReturnType<typeo
   }
   for (const item of receipt.shots) {
     if (inFlight >= sceneMaxInFlight()) break;
-    if (await readShotRecord(filmId, item.shotId)) continue;
+    const current = await readShotRecord(filmId, item.shotId);
+    if (current && current.status !== 'quota-rejected') continue;
     const shot = plan.shots.find((s) => s.shotId === item.shotId)!;
     try {
       const r = await submitLocked(filmId, plan, shot, item.revisionId, item.estimatedUsd, cap);
@@ -540,14 +553,18 @@ async function submitLocked(filmId: string, plan: Awaited<ReturnType<typeof scen
     if (!revision || revision.revisionId !== input.revisionId) throw new Error('El prompt cambió: revisa y autoriza la versión más reciente.');
     const existing = await readShotRecord(filmId, shotId);
     if (existing) {
-      const redoable = existing.status === 'failed-no-video' || (redo && existing.status === 'review-required');
+      const redoable = existing.status === 'failed-no-video' || existing.status === 'quota-rejected' ||
+        (redo && existing.status === 'review-required');
       if (!redoable) {
         throw new Error('La toma ya tiene una operación (' + existing.status + '). Recupera la misma tarea; nunca se reenvía.');
       }
       if (redo && await fileExists(path.join(shotDir(filmId, shotId), 'artistic-approval.json'))) {
         throw new Error('La toma ya está aprobada artísticamente. No se rehace una toma aprobada.');
       }
-      if (existing.revisionId === revision.revisionId) throw new Error('Esta versión ya se usó. Guarda una versión corregida antes de otro intento.');
+      // Tras un rechazo por cuota se puede repetir el mismo texto: nunca se generó nada.
+      if (existing.status !== 'quota-rejected' && existing.revisionId === revision.revisionId) {
+        throw new Error('Esta versión ya se usó. Guarda una versión corregida antes de otro intento.');
+      }
     }
     const exposure = await sceneExposureUsd(filmId, plan.sceneLabel);
     if (exposure + estimatedUsd > cap + 0.000001) {
@@ -555,7 +572,15 @@ async function submitLocked(filmId: string, plan: Awaited<ReturnType<typeof scen
     }
     if (existing) {
       await mkdir(attemptsDir(filmId, shotId), { recursive: true });
-      await rename(recordPath(filmId, shotId), path.join(attemptsDir(filmId, shotId), existing.revisionId + '.json'));
+      const archivedName = existing.status === 'quota-rejected' ? existing.revisionId + '-cuota-' + Date.now() : existing.revisionId;
+      if (existing.status === 'quota-rejected') {
+        // Se archiva con costo 0: Google no creó ningún trabajo.
+        await writeFile(path.join(attemptsDir(filmId, shotId), archivedName + '.json'),
+          JSON.stringify({ ...existing, estimatedUsd: 0 }, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+        await unlink(recordPath(filmId, shotId));
+      } else {
+        await rename(recordPath(filmId, shotId), path.join(attemptsDir(filmId, shotId), archivedName + '.json'));
+      }
       // El video anterior se archiva junto a su registro: nunca se borra.
       if (await fileExists(candidatePath(filmId, shotId))) {
         await rename(candidatePath(filmId, shotId), path.join(attemptsDir(filmId, shotId), existing.revisionId + '.mp4'));
@@ -608,10 +633,13 @@ async function submitLocked(filmId: string, plan: Awaited<ReturnType<typeof scen
       await writeRecord(filmId, record);
       return { shotId, status: record.status, estimatedUsd, noAutomaticRetries: true };
     } catch (error) {
-      // Un rechazo 4xx no creó trabajo: se permite otro intento con una versión corregida.
-      record.status = rejectedBeforeCreation(error) ? 'failed-no-video' : 'failed-unknown';
+      // 429: rechazo por cuota, sin trabajo creado ni costo; se reintenta solo más tarde.
+      // Otro 4xx: no creó trabajo; se permite otro intento con una versión corregida.
+      record.status = quotaRejected(error) ? 'quota-rejected' : rejectedBeforeCreation(error) ? 'failed-no-video' : 'failed-unknown';
+      if (record.status === 'quota-rejected') record.estimatedUsd = 0;
       record.error = safeError(error);
       await writeRecord(filmId, record);
+      if (record.status === 'quota-rejected') throw new Error('Límite de Google por minuto (sin costo). Se reintentará solo: ' + record.error);
       throw new Error((record.status === 'failed-no-video' ? 'Google rechazó la solicitud (no se creó video): ' : 'Google no confirmó la solicitud. No se reenviará: ') + record.error);
     }
   }

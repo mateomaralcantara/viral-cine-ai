@@ -139,7 +139,7 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
           const canSubmit = Boolean(board.providerEnabled && board.tariffConfigured && board.capUsd > 0 &&
             shot.revisionId && !dirty && !shot.revisionUsed && shot.authorization &&
             (auth[shot.shotId] || '').trim() === shot.authorization &&
-            (shot.status === 'not-started' || shot.status === 'failed-no-video'));
+            (shot.status === 'not-started' || shot.status === 'failed-no-video' || shot.status === 'quota-rejected'));
           return (
             <div key={shot.shotId} className="rounded-2xl border border-white/10 p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -185,7 +185,7 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
                   {(dirty || shot.revisionUsed) && <p className="mt-1 text-xs text-slate-400">Primero guarda una versión nueva del texto.</p>}
                 </details>
               )}
-              {(shot.status === 'not-started' || shot.status === 'failed-no-video') && shot.authorization && (
+              {(shot.status === 'not-started' || shot.status === 'failed-no-video' || shot.status === 'quota-rejected') && shot.authorization && (
                 <div className="mt-3 rounded-xl border border-amber-400/30 p-3">
                   <p className="text-xs text-amber-200">Para generar escribe exactamente: <b>{shot.authorization}</b></p>
                   <div className="mt-2 flex flex-wrap gap-2">

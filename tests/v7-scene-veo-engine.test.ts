@@ -224,3 +224,23 @@ test('Vertex AI con un modelo Omni se rechaza antes de reservar o llamar a Googl
     }
   });
 });
+
+test('Un 429 por cuota no cuesta nada, no bloquea la toma y la escena la reintenta sola', async () => {
+  await withStudio(async (filmId) => {
+    const label = 'E03-P04';
+    const rev = await savePromptRevision(filmId, label, PROMPT);
+    await mkdir(path.dirname(recordPath(filmId, label)), { recursive: true });
+    // Registro escrito por la versión anterior: failed-unknown con error 429 y sin ID de operación.
+    await writeFile(recordPath(filmId, label), JSON.stringify({ schemaVersion: 1, provider: 'veo', filmId, shotId: label, sceneLabel: 'E03',
+      model: 'veo-3.1-fast-generate-001', platform: 'vertex', durationSeconds: 8, estimatedUsd: 1.2, revisionId: rev.revisionId,
+      status: 'failed-unknown', error: '{"error":{"code":429,"message":"Quota exceeded for aiplatform.googleapis.com/long_running_online_prediction_requests_per_base_model"}}' }));
+    const { readShotRecord } = await import('../lib/v7/production/scene-veo-engine');
+    const record = await readShotRecord(filmId, label);
+    assert.equal(record?.status, 'quota-rejected');
+    assert.equal(await sceneExposureUsd(filmId, 'E03'), 0);
+    const board = await sceneStudioBoard(filmId, 'E03');
+    const shot = board.shots.find((s) => s.shotId === label)!;
+    assert.equal(shot.status, 'quota-rejected');
+    assert.equal(shot.revisionUsed, false, 'el mismo texto se puede reintentar');
+  });
+});
