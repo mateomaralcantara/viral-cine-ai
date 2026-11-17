@@ -104,7 +104,9 @@
     "crear:primera-pagina": "node --import tsx scripts/crear-pelicula.ts primera",
     "verificar:vertex": "node --import tsx scripts/verificar-vertex.ts",
     "crear:pelicula": "node --import tsx scripts/crear-pelicula.ts",
-    "crear:convidados": "node --import tsx scripts/crear-pelicula.ts convidados"
+    "crear:convidados": "node --import tsx scripts/crear-pelicula.ts convidados",
+    "voces": "node --import tsx scripts/pelicula-final.ts voces",
+    "montar": "node --import tsx scripts/pelicula-final.ts montar"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",
