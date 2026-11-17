@@ -599,7 +599,7 @@ async function submitLocked(filmId: string, plan: Awaited<ReturnType<typeof scen
         },
         config: {
           aspectRatio: '16:9', numberOfVideos: 1, durationSeconds: shot.providerSeconds, resolution: '720p',
-          personGeneration: reference ? 'allow_adult' : 'allow_all'
+          personGeneration: reference || record.platform === 'vertex' ? 'allow_adult' : 'allow_all'
         }
       });
       if (!operation.name) throw new Error('Google no devolvió el ID de la operación; resultado incierto.');
