@@ -4,13 +4,13 @@
 #   powershell -ExecutionPolicy Bypass -File .\scripts\VERIFICAR-VIRALCINE.ps1
 # Opcional:
 #   -Escena E05      revisa solo esa escena
-#   -Pelicula primera   revisa «La primera página» (por defecto: «Dos toques de bocina»)
+#   -Pelicula primera|convidados   película a revisar (por defecto: «Dos toques de bocina»)
 #   -SinRed          no consulta a ElevenLabs ni a OpenAI
 param([string]$Escena = '', [string]$Pelicula = 'dos-toques', [switch]$SinRed)
 $ErrorActionPreference = 'Continue'
 $root = Split-Path $PSScriptRoot -Parent
 $envFile = Join-Path $root '.env.local'
-$filmId = if ($Pelicula -match 'primera') { 'film-la-primera-pagina-v7' } else { 'film-dos-toques-de-bocina-v7' }
+$filmId = if ($Pelicula -match 'primera') { 'film-la-primera-pagina-v7' } elseif ($Pelicula -match 'convidados|agape') { 'film-los-convidados-al-agape-v7' } else { 'film-dos-toques-de-bocina-v7' }
 Write-Host "Película: $filmId"
 
 function Title($t) { Write-Host ''; Write-Host "=== $t ===" -ForegroundColor Cyan }
@@ -46,7 +46,7 @@ Write-Host "  Datos: $data"
 $film = Join-Path $data "v7\films\$filmId"
 if (-not (Test-Path $film)) { Bad "No encuentro la carpeta de datos: $film"; exit 1 }
 $hasProbe = [bool](Get-Command ffprobe -ErrorAction SilentlyContinue)
-$scenes = if ($Escena) { @([int]($Escena -replace '\D', '')) } elseif ($filmId -like '*primera*') { 1..3 } else { 1..10 }
+$scenes = if ($Escena) { @([int]($Escena -replace '\D', '')) } elseif ($filmId -like '*primera*') { 1..3 } elseif ($filmId -like '*convidados*') { 1..5 } else { 1..10 }
 $totalOk = 0; $totalShots = 0
 foreach ($e in $scenes) {
   $rows = @()
@@ -75,7 +75,7 @@ foreach ($e in $scenes) {
   $assembled = Get-ChildItem (Join-Path $film ("scenes\e{0:D2}" -f $e)) -Filter '*.mp4' -ErrorAction SilentlyContinue | Select-Object -First 1
   if ($assembled) { Ok ("Escena montada: " + $assembled.Name) }
 }
-$filmShots = if ($filmId -like "*primera*") { 15 } else { 80 }
+$filmShots = if ($filmId -like "*primera*") { 15 } elseif ($filmId -like "*convidados*") { 22 } else { 80 }
 Write-Host ("  TOTAL: {0} tomas con video de {1} empezadas (la película tiene {2})" -f $totalOk, $totalShots, $filmShots)
 
 # ---------- 3. Voces ----------

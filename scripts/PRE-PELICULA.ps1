@@ -7,7 +7,7 @@
 #   -Data "C:\ruta\.data"   carpeta de datos (por defecto, VIRALCINE_DATA_DIR de .env.local)
 #   -MaxSeconds 8            duración máxima de cada toma en el corte
 #   -Silencio                quita el audio original de los clips
-#   -Pelicula primera        une «La primera página» (por defecto: «Dos toques de bocina»)
+#   -Pelicula primera|convidados   película a unir (por defecto: «Dos toques de bocina»)
 param(
   [string]$Data = '',
   [double]$MaxSeconds = 8,
@@ -15,7 +15,7 @@ param(
   [string]$Pelicula = 'dos-toques'
 )
 $ErrorActionPreference = 'Stop'
-$filmId = if ($Pelicula -match 'primera') { 'film-la-primera-pagina-v7' } else { 'film-dos-toques-de-bocina-v7' }
+$filmId = if ($Pelicula -match 'primera') { 'film-la-primera-pagina-v7' } elseif ($Pelicula -match 'convidados|agape') { 'film-los-convidados-al-agape-v7' } else { 'film-dos-toques-de-bocina-v7' }
 
 if (-not $Data) {
   $line = Get-Content (Join-Path $PSScriptRoot '..\.env.local') -ErrorAction SilentlyContinue |
