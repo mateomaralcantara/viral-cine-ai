@@ -106,7 +106,8 @@
     "crear:pelicula": "node --import tsx scripts/crear-pelicula.ts",
     "crear:convidados": "node --import tsx scripts/crear-pelicula.ts convidados",
     "voces": "node --import tsx scripts/pelicula-final.ts voces",
-    "montar": "node --import tsx scripts/pelicula-final.ts montar"
+    "montar": "node --import tsx scripts/pelicula-final.ts montar",
+    "auditoria": "node --import tsx scripts/auditoria-creditos.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",
