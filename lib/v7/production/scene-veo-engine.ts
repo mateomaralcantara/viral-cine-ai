@@ -327,13 +327,13 @@ function safeError(error: unknown) {
     .slice(0, 400);
 }
 
-function googleClient(platform: VideoPlatform = 'gemini') {
+export function googleClient(platform: VideoPlatform = 'gemini', location?: string) {
   if (platform === 'vertex') {
     const v = vertexConfig();
     const problem = platformProblem('vertex');
     if (problem) throw new Error(problem);
     return new GoogleGenAI({
-      vertexai: true, project: v.project, location: v.location,
+      vertexai: true, project: v.project, location: location || v.location,
       googleAuthOptions: { keyFilename: v.keyFile, scopes: ['https://www.googleapis.com/auth/cloud-platform'] }
     });
   }
