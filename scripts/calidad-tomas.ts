@@ -21,7 +21,8 @@ import { readV7FilmBundle, v7FilmRoot } from '../lib/v7/storage/film-store';
 import { indexedScenes } from '../lib/v7/production/scene-approval-board';
 import { googleClient, latestPromptRevision, videoPlatform } from '../lib/v7/production/scene-veo-engine';
 import { speakerKey } from '../lib/v7/production/film-voice-mix';
-import { buildReviewPrompt, normalizeReview, reviewCostUsd, REVIEW_JSON_SCHEMA, type ShotReview } from '../lib/v7/qa/shot-vision-review';
+import { buildReviewPrompt, type ShotReview } from '../lib/v7/qa/shot-vision-review';
+import { VisionReviewer } from '../lib/v7/qa/shot-vision-runner';
 
 nextEnv.loadEnvConfig(process.cwd());
 const FILMS: Record<string, string> = { convidados: CONVIDADOS_ID, primera: PRIMERA_PAGINA_ID, 'dos-toques': 'film-dos-toques-de-bocina-v7' };
@@ -32,7 +33,6 @@ const option = (f: string) => { const i = args.indexOf(f); return i >= 0 ? args[
 const flag = (f: string) => args.includes(f);
 if (!filmId) { console.log('Uso: npm run calidad -- ' + Object.keys(FILMS).join('|') + ' [--revisar] [--escena E03] [--toma E02-P04] [--repetir]'); process.exit(1); }
 
-const MODELS = (process.env.V7_QA_MODEL?.trim() ? [process.env.V7_QA_MODEL.trim()] : ['gemini-3-flash', 'gemini-3-flash-preview', 'gemini-2.5-flash']);
 const exists = (f: string) => access(f).then(() => true, () => false);
 const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
 const root = v7FilmRoot(filmId);
@@ -82,37 +82,16 @@ async function main() {
 
   const platform = videoPlatform();
   const ai = googleClient(platform, platform === 'vertex' ? (process.env.V7_QA_LOCATION?.trim() || 'global') : undefined);
-  const coverPart = cover ? { inlineData: { mimeType: cover.endsWith('.png') ? 'image/png' : 'image/jpeg', data: (await readFile(cover)).toString('base64') } } : null;
-  let modelIndex = 0;
+  const reviewer = new VisionReviewer(ai, cover ? { mimeType: cover.endsWith('.png') ? 'image/png' : 'image/jpeg', data: (await readFile(cover)).toString('base64') } : null);
   const results: Saved[] = [...cached];
   if (flag('--revisar')) for (const job of jobs) {
     process.stdout.write(`  ${job.label}... `);
-    let saved: Saved | null = null;
-    while (!saved) {
-      const model = MODELS[modelIndex];
-      try {
-        const res = await ai.models.generateContent({
-          model,
-          contents: [{ role: 'user', parts: [
-            { inlineData: { mimeType: 'video/mp4', data: job.bytes.toString('base64') } },
-            ...(coverPart ? [coverPart] : []),
-            { text: buildReviewPrompt(job.input) }
-          ] }],
-          config: { temperature: 0.2, responseMimeType: 'application/json', responseJsonSchema: REVIEW_JSON_SCHEMA }
-        });
-        const review = normalizeReview(res.text ?? '');
-        const inputTokens = res.usageMetadata?.promptTokenCount ?? 0;
-        const outputTokens = (res.usageMetadata?.candidatesTokenCount ?? 0) + (res.usageMetadata?.thoughtsTokenCount ?? 0);
-        saved = { ...review, label: job.label, model, videoSha256: job.hash, inputTokens, outputTokens,
-          costUsd: reviewCostUsd(inputTokens, outputTokens), reviewedAt: new Date().toISOString() };
-      } catch (e) {
-        const msg = String((e as Error)?.message ?? e);
-        if (/404|NOT_FOUND|not found|is not supported/i.test(msg) && modelIndex < MODELS.length - 1) { modelIndex++; continue; }
-        console.log('ERROR: ' + msg.replace(/\s+/g, ' ').slice(0, 220));
-        break;
-      }
-    }
-    if (!saved) continue;
+    let saved: Saved;
+    try {
+      const { hasCover: _c, ...input } = job.input;
+      const review = await reviewer.review(job.bytes, input);
+      saved = { ...review, label: job.label, videoSha256: job.hash, reviewedAt: new Date().toISOString() };
+    } catch (e) { console.log('ERROR: ' + (e as Error).message); continue; }
     await mkdir(path.dirname(job.reportFile), { recursive: true });
     await writeFile(job.reportFile, JSON.stringify(saved, null, 2) + '\n');
     results.push(saved);

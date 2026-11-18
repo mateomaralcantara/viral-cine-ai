@@ -19,6 +19,7 @@ import { CONVIDADOS_ID } from '../lib/v7/presets/los-convidados-al-agape';
 import { PRIMERA_PAGINA_ID } from '../lib/v7/presets/la-primera-pagina';
 import { readV7FilmBundle, v7FilmRoot } from '../lib/v7/storage/film-store';
 import { indexedScenes } from '../lib/v7/production/scene-approval-board';
+import { currentShotVideo } from '../lib/v7/production/shot-current-video';
 import {
   pickCasting, planCharacters, shotTiming, voicePlan, voiceSettings, VOICE_START_SECONDS,
   type AvailableVoice, type Casting, type VoiceLine
@@ -238,15 +239,15 @@ async function montar() {
   for (const scene of indexedScenes(film)) {
     for (const { shot, label } of scene.shots) {
       const dir = path.join(root, label.toLowerCase());
-      const video = [label + '-runway-gen4-turbo.mp4', label + '-veo-candidato.mp4'].map((f) => path.join(dir, f));
-      const src = (await Promise.all(video.map(async (f) => (await exists(f)) ? f : null))).find(Boolean);
+      const current = await currentShotVideo(dir, label);
+      const src = current?.file;
       if (!src) { missingVideo.push(label); continue; }
       const hasLine = (shot.spokenText ?? '').trim().length > 0;
       const voice = hasLine && await exists(voiceFile(label)) ? voiceFile(label) : null;
       if (hasLine && !voice) missingVoice.push(label);
       const p = await shotPart(work, ++i, label, src, voice, ambient);
       parts.push(p.out);
-      console.log(`  OK ${label}  ${p.seconds.toFixed(1)} s${p.freeze ? ` (alargada ${p.freeze.toFixed(1)} s para la voz)` : ''}${voice ? '' : hasLine ? '  SIN VOZ' : ''}`);
+      console.log(`  OK ${label}${current?.repaired ? ' (reparada)' : ''}  ${p.seconds.toFixed(1)} s${p.freeze ? ` (alargada ${p.freeze.toFixed(1)} s para la voz)` : ''}${voice ? '' : hasLine ? '  SIN VOZ' : ''}`);
     }
   }
   if (!parts.length) throw new Error('No hay videos generados todavía.');
