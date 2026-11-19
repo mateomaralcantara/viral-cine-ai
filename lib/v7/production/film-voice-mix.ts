@@ -125,7 +125,9 @@ export function speechSeconds(text: string) {
 
 /** Convierte una frase en uno o varios subtítulos (máx. 2 líneas cada uno), repartiendo el tiempo. */
 export function cuesForLine(text: string, start: number, end: number): SubtitleCue[] {
-  const lines = wrapSubtitle(text);
+  // Si la frase cabe en 2 líneas algo más anchas (hasta 52), mejor un solo bloque que un bloque relámpago.
+  const width = text.length <= 100 ? Math.min(52, Math.max(42, Math.ceil(text.length / 2) + 4)) : 42;
+  const lines = wrapSubtitle(text, width);
   const blocks: string[] = [];
   for (let i = 0; i < lines.length; i += 2) blocks.push(lines.slice(i, i + 2).join('\n'));
   const total = blocks.reduce((n, b) => n + b.length, 0) || 1;
