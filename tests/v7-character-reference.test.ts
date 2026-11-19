@@ -1,11 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { keyframePrompt, masterPortraitPrompt, needsIdentityFix, sanitizePrompt, shotShows } from '../lib/v7/production/character-reference';
-
-test('sanitizePrompt quita palabras que hacen saltar el filtro', () => {
-  assert.equal(sanitizePrompt('una luz blanca intensa y divina inunda'), 'una luz blanca intensa y cálida inunda');
-  assert.ok(!/sagrad/i.test(sanitizePrompt('un lugar sagrado')));
-});
+import { needsIdentityFix, shotShows } from '../lib/v7/production/character-reference';
+import { characterKeyFromId, masterFromPhotosPrompt, multiKeyframePrompt, newSheet, serieOf, slug } from '../lib/v7/production/character-identity';
+import { REVIEW_RULES } from '../lib/v7/qa/shot-vision-review';
 
 test('needsIdentityFix según el informe del revisor', () => {
   assert.ok(needsIdentityFix({ identidad: 2, problemas: [] }));
@@ -14,14 +11,25 @@ test('needsIdentityFix según el informe del revisor', () => {
   assert.ok(!needsIdentityFix(null));
 });
 
-test('prompts de imagen: misma persona, sin texto, bocas cerradas', () => {
-  const m = masterPortraitPrompt('Martin', 'barba oscura');
-  assert.match(m, /misma persona/); assert.match(m, /Sin texto/);
-  const k = keyframePrompt('Martin', 'Martin en la cima, luz divina');
-  assert.match(k, /PRIMER FOTOGRAMA/); assert.match(k, /bocas cerradas/i); assert.ok(!/divina/.test(k));
+test('shotShows detecta al personaje (con o sin tilde)', () => {
+  assert.ok(shotShows('Martin', 'Plano de Martín junto a la ventana'));
+  assert.ok(shotShows('Heraldo', 'el Heraldo espera'));
+  assert.ok(!shotShows('Martin', 'Un salón vacío con columnas'));
 });
 
-test('shotShows detecta al protagonista', () => {
-  assert.ok(shotShows('Martin', 'Plano de Martin junto a la ventana'));
-  assert.ok(!shotShows('Martin', 'Un salón vacío con columnas'));
+test('serie y claves de personaje', () => {
+  assert.equal(serieOf({ id: 'film-los-convidados-al-agape-v7', metadata: {} }), 'los-convidados-al-agape');
+  assert.equal(serieOf({ id: 'film-capitulo-1-v7', metadata: { serie: 'los-convidados-al-agape' } }), 'los-convidados-al-agape');
+  assert.equal(characterKeyFromId('film-x-v7-character-fiscal'), 'fiscal');
+  assert.equal(slug('El Fiscal'), 'fiscal');
+  assert.throws(() => serieOf({ id: 'x', metadata: { serie: '../etc' } }));
+});
+
+test('prompts de identidad: misma persona o entidad, sin censura de lo divino', () => {
+  const s = { ...newSheet('dios', 'Dios', 'una presencia de luz con rostro anciano y sereno, majestuosa y divina') };
+  const m = masterFromPhotosPrompt(s, 2);
+  assert.match(m, /2 imágenes/); assert.match(m, /divina/);
+  const k = multiKeyframePrompt([{ nombre: 'Martin', descripcion: '' }, { nombre: 'Dios', descripcion: 'luz divina' }], 'Martin ante una luz divina');
+  assert.match(k, /Imagen 2: Dios/); assert.match(k, /luz divina/);
+  assert.ok(REVIEW_RULES.some((r) => /divinas.*permitidas/i.test(r)), 'el revisor no penaliza lo divino');
 });

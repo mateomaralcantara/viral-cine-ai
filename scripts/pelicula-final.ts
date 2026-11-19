@@ -20,6 +20,7 @@ import { PRIMERA_PAGINA_ID } from '../lib/v7/presets/la-primera-pagina';
 import { readV7FilmBundle, v7FilmRoot } from '../lib/v7/storage/film-store';
 import { indexedScenes } from '../lib/v7/production/scene-approval-board';
 import { currentShotVideo } from '../lib/v7/production/shot-current-video';
+import { listSheets, serieOf } from '../lib/v7/production/character-identity';
 import {
   pickCasting, planCharacters, shotTiming, voicePlan, voiceSettings, VOICE_START_SECONDS,
   type AvailableVoice, type Casting, type VoiceLine
@@ -126,6 +127,9 @@ async function voces() {
   const speakers = [...new Set(lines.map((l) => l.speaker))];
   await mkdir(voiceDir, { recursive: true });
   const previous = await readJson<Casting>(castingFile, {});
+  // La voz de la ficha del personaje (serie) manda: misma voz en todos los capítulos.
+  const serie = serieOf(film);
+  for (const sheet of await listSheets(serie)) if (sheet.voz && speakers.includes(sheet.key)) previous[sheet.key] = { voiceId: sheet.voz.voiceId, name: sheet.voz.nombre };
   const casting = pickCasting(speakers, await listVoices(), previous);
   if (JSON.stringify(casting) !== JSON.stringify(previous)) await writeFile(castingFile, JSON.stringify(casting, null, 2) + '\n');
 

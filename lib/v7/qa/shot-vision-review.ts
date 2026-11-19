@@ -33,7 +33,7 @@ export const REVIEW_RULES = [
   'No debe haber texto, letras, subtítulos, logotipos ni marcas de agua en pantalla.',
   'Anatomía correcta: manos, dedos, caras y cuerpos sin deformaciones ni fusiones.',
   'Movimiento natural: sin saltos, parpadeos de imagen, objetos que aparecen o desaparecen.',
-  'Sin rostros de niños, violencia explícita ni figuras que parezcan divinas o religiosas.'
+  'Sin rostros de niños ni violencia explícita. Las figuras divinas, religiosas o sobrenaturales están permitidas si el guion las pide.'
 ];
 
 export function buildReviewPrompt(input: ShotReviewInput) {
