@@ -22,9 +22,10 @@ import { PRIMERA_PAGINA_ID } from '../lib/v7/presets/la-primera-pagina';
 import { readV7FilmBundle, v7FilmRoot } from '../lib/v7/storage/film-store';
 import {
   assertKey, characterDir, characterKeyFromId, hasMaster, listPhotos, listSheets, masterFromPhotosPrompt, masterPath,
-  newSheet, photosDir, readSheet, serieOf, writeSheet, type CharacterSheet
+  newSheet, nextOrder, photosDir, readSheet, serieOf, writeSheet, type CharacterSheet
 } from '../lib/v7/production/character-identity';
 import { GeminiImageMaker, IMAGE_USD, imageRef } from '../lib/v7/production/gemini-image';
+import { importFromScript } from '../lib/v7/production/character-studio';
 
 nextEnv.loadEnvConfig(process.cwd());
 const FILMS: Record<string, string> = { convidados: CONVIDADOS_ID, primera: PRIMERA_PAGINA_ID };
@@ -52,24 +53,9 @@ async function main() {
   switch (cmd) {
     case 'importar': {
       if (!filmId) throw new Error('importar necesita el nombre de una película: ' + Object.keys(FILMS).join(', '));
-      const { film } = await readV7FilmBundle(filmId);
-      let casting: Record<string, { voiceId: string; name: string }> = {};
-      try { casting = JSON.parse(await readFile(path.join(v7FilmRoot(filmId), 'voces', 'casting.json'), 'utf8')); } catch { /* sin voces aún */ }
-      for (const c of film.characters) {
-        const key = characterKeyFromId(c.id);
-        const old = await readSheet(serie, key);
-        const voice = casting[key] ? { voiceId: casting[key].voiceId, nombre: casting[key].name } : null;
-        if (old) {
-          if (!old.voz && voice) { await writeSheet(serie, { ...old, voz: voice }); console.log(`  ${key}: ya existía, añadida su voz`); }
-          else console.log(`  ${key}: ya existía, no se toca`);
-          continue;
-        }
-        const desc = /sin imagen/i.test(c.appearance) ? '' : c.appearance;
-        await writeSheet(serie, newSheet(key, c.name, desc, voice));
-        console.log(`  ${key}: ficha creada${voice ? ' (con voz ' + voice.nombre + ')' : ''}`);
-      }
-      console.log(`\nSerie «${serie}». Sube 1–3 fotos de cada personaje en su carpeta «fotos»:`);
-      console.log('  npm run personaje -- carpeta ' + target + ' <personaje>');
+      const created = await importFromScript(filmId);
+      console.log(created.length ? '  Fichas creadas: ' + created.join(', ') : '  Todas las fichas ya existían (no se tocan).');
+      console.log(`\nSerie «${serie}». Lo más cómodo: en el estudio, pestaña PERSONAJES · IDENTIDAD.`);
       return;
     }
     case 'lista': {
@@ -92,7 +78,7 @@ async function main() {
     case 'nuevo': {
       const key = assertKey(who ?? '', 'personaje');
       if (await readSheet(serie, key)) throw new Error('Ya existe. Edita su ficha.json o usa otro nombre.');
-      await writeSheet(serie, newSheet(key, option('--nombre') ?? key, option('--descripcion') ?? ''));
+      await writeSheet(serie, { ...newSheet(key, option('--nombre') ?? key, option('--descripcion') ?? ''), orden: await nextOrder(serie) });
       console.log('Ficha creada. Sube sus fotos en: ' + photosDir(serie, key));
       return;
     }

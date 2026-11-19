@@ -9,7 +9,8 @@
  *
  * Todas las películas de la serie usan la misma ficha: misma cara y misma voz.
  */
-import { access, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { access, mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { FilmV7 } from '@/lib/v7/domain/film';
 import { v7DataRoot } from '@/lib/v7/storage/film-store';
@@ -22,6 +23,8 @@ export type CharacterSheet = {
   voz: { voiceId: string; nombre: string } | null;
   notas: string;
   aprobado: { maestroSha256: string; fecha: string } | null;
+  /** Número del personaje en la serie (1, 2, 3…). */
+  orden?: number;
 };
 
 const SAFE = /^[a-z0-9][a-z0-9-]{0,60}$/;
@@ -67,7 +70,7 @@ export async function listSheets(serie: string): Promise<CharacterSheet[]> {
   try { names = (await readdir(seriesRoot(serie), { withFileTypes: true })).filter((d) => d.isDirectory()).map((d) => d.name); } catch { return []; }
   const out: CharacterSheet[] = [];
   for (const n of names.sort()) { const s = await readSheet(serie, n); if (s) out.push(s); }
-  return out;
+  return out.sort((a, b) => (a.orden ?? 9999) - (b.orden ?? 9999) || a.key.localeCompare(b.key));
 }
 export async function listPhotos(serie: string, key: string) {
   try {
@@ -102,4 +105,60 @@ export function multiKeyframePrompt(cast: Array<{ nombre: string; descripcion: s
     `TOMA: ${shotPrompt.replace(/\s+/g, ' ').trim()}`,
     'Bocas cerradas. Manos naturales. Sin texto, letras, subtítulos, logotipos ni marcas de agua.'
   ].join('\n');
+}
+
+/** Clave única para un nombre nuevo: «El Fiscal» -> fiscal, fiscal-2… */
+export async function uniqueKey(serie: string, nombre: string) {
+  const base = slug(nombre) || 'personaje';
+  let key = base;
+  for (let i = 2; await readSheet(serie, key); i++) key = (base.slice(0, 55) + '-' + i);
+  return assertKey(key, 'personaje');
+}
+
+export async function nextOrder(serie: string) {
+  return (await listSheets(serie)).reduce((n, s) => Math.max(n, s.orden ?? 0), 0) + 1;
+}
+
+const PHOTO_NAME = /^[a-z0-9][a-z0-9._-]{0,80}\.(jpe?g|png|webp)$/i;
+export const MAX_PHOTOS = 6;
+export const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
+
+/** Comprueba la cabecera real del archivo (no solo la extensión). */
+export function imageKind(bytes: Buffer): 'jpg' | 'png' | 'webp' | null {
+  if (bytes.length > 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'jpg';
+  if (bytes.length > 8 && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'png';
+  if (bytes.length > 12 && bytes.subarray(0, 4).toString('ascii') === 'RIFF' && bytes.subarray(8, 12).toString('ascii') === 'WEBP') return 'webp';
+  return null;
+}
+
+export async function savePhoto(serie: string, key: string, bytes: Buffer) {
+  if (!(await readSheet(serie, key))) throw new Error('No existe ese personaje.');
+  if (bytes.length > MAX_PHOTO_BYTES) throw new Error('La foto pesa más de 8 MB.');
+  const kind = imageKind(bytes);
+  if (!kind) throw new Error('Solo fotos JPG, PNG o WEBP.');
+  if ((await listPhotos(serie, key)).length >= MAX_PHOTOS) throw new Error(`Máximo ${MAX_PHOTOS} fotos por personaje. Quita alguna.`);
+  const name = `foto-${new Date().toISOString().replace(/\D/g, '').slice(0, 14)}-${createHash('sha256').update(bytes).digest('hex').slice(0, 8)}.${kind}`;
+  await mkdir(photosDir(serie, key), { recursive: true });
+  await writeFile(path.join(photosDir(serie, key), name), bytes, { flag: 'wx' });
+  return name;
+}
+
+/** «Quitar» una foto la mueve a fotos/archivo (nunca se borra). */
+export async function removePhoto(serie: string, key: string, name: string) {
+  if (!PHOTO_NAME.test(name)) throw new Error('Nombre de foto inválido.');
+  const from = path.join(photosDir(serie, key), name);
+  if (!(await exists(from))) throw new Error('No existe esa foto.');
+  const dir = path.join(photosDir(serie, key), 'archivo');
+  await mkdir(dir, { recursive: true });
+  await rename(from, path.join(dir, name));
+}
+
+export function photoFilePath(serie: string, key: string, name: string) {
+  if (name === 'maestro') return masterPath(serie, key);
+  if (!PHOTO_NAME.test(name)) throw new Error('Nombre de foto inválido.');
+  return path.join(photosDir(serie, key), name);
+}
+
+export function masterApproved(sheet: CharacterSheet, masterBytes: Buffer | null) {
+  return !!(masterBytes && sheet.aprobado && sheet.aprobado.maestroSha256 === createHash('sha256').update(masterBytes).digest('hex'));
 }
