@@ -109,7 +109,8 @@
     "montar": "node --import tsx scripts/pelicula-final.ts montar",
     "auditoria": "node --import tsx scripts/auditoria-creditos.ts",
     "calidad": "node --import tsx scripts/calidad-tomas.ts",
-    "reparar": "node --import tsx scripts/reparar-tomas.ts"
+    "reparar": "node --import tsx scripts/reparar-tomas.ts",
+    "referencia": "node --import tsx scripts/referencia-personaje.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",
