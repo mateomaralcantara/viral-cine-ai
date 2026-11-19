@@ -6,6 +6,8 @@
  *   npm run montar -- convidados            película final: video + voces + (música) + cierre. Gratis, local.
  *       --musica "C:\ruta\cancion.mp3"     música de fondo (o deja musica.mp3 en la carpeta de la película)
  *       --sin-ambiente                     quita el sonido original de Veo
+ *       --ingles                           añade subtítulos en inglés (traducción con Gemini, céntimos)
+ *       --subtitulos-fijos                 versión extra con los subtítulos grabados (español; con --fijos-en-ingles, inglés)
  *
  * Archivos: <película>\voces\casting.json (editable), <película>\voces\E0X-P0Y.mp3,
  * <película>\final\<título>-<fecha>.mp4. Nunca borra videos ni voces: lo reemplazado va a voces\archivo.
@@ -23,6 +25,7 @@ import { indexedScenes } from '../lib/v7/production/scene-approval-board';
 import { currentShotVideo } from '../lib/v7/production/shot-current-video';
 import { listSheets, serieOf } from '../lib/v7/production/character-identity';
 import { speakerKey } from '../lib/v7/production/film-voice-mix';
+import { translateToEnglish } from '../lib/v7/production/subtitle-translate';
 import {
   buildSrt, cuesForLine, isOnCamera, pickCasting, speechSeconds, type SubtitleCue, planCharacters, shotTiming, voicePlan, voiceSettings, voiceTreatment, VOICE_ALIASES, VOICE_START_SECONDS,
   type AvailableVoice, type Casting, type VoiceLine
@@ -330,19 +333,31 @@ async function montar() {
     await ffmpeg(['-i', joined, '-af', master, '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', final]);
   }
   const music = tracks.length > 0;
-  // Subtítulos en español: archivo .srt + pista seleccionable dentro del MP4.
+  // Subtítulos: español siempre; inglés con --ingles. Pistas seleccionables (apagadas por defecto) + archivos .srt.
   let burned = '';
   if (cues.length) {
     const srt = final.replace(/\.mp4$/, '.srt');
     await writeFile(srt, buildSrt(cues), 'utf8');
+    const tracks: Array<{ file: string; lang: string; title: string }> = [{ file: srt, lang: 'spa', title: 'Español' }];
+    if (flag('--ingles')) {
+      const sentences = [...new Set(cues.map((c) => c.text.replace(/\n/g, ' ')))];
+      const english = await translateToEnglish(root, sentences, film.premise);
+      // Se traduce cada bloque completo y se vuelve a partir en líneas de 42 caracteres.
+      const enCues = cues.flatMap((c) => cuesForLine(english.get(c.text.replace(/\n/g, ' ')) ?? c.text, c.start, c.end));
+      const enSrt = final.replace(/\.mp4$/, '.en.srt');
+      await writeFile(enSrt, buildSrt(enCues), 'utf8');
+      tracks.push({ file: enSrt, lang: 'eng', title: 'English' });
+    }
     const withSubs = path.join(work, 'con-subtitulos.mp4');
-    await ffmpeg(['-i', final, '-i', srt, '-map', '0:v', '-map', '0:a', '-map', '1:0', '-c', 'copy', '-c:s', 'mov_text',
-      '-metadata:s:s:0', 'language=spa', '-metadata:s:s:0', 'title=Español', '-disposition:s:0', 'default', '-movflags', '+faststart', withSubs]);
+    const subArgs = tracks.flatMap((t) => ['-i', t.file]);
+    const maps = tracks.flatMap((_, k) => ['-map', `${k + 1}:0`]);
+    const meta = tracks.flatMap((t, k) => [`-metadata:s:s:${k}`, `language=${t.lang}`, `-metadata:s:s:${k}`, `title=${t.title}`, `-disposition:s:${k}`, '0']);
+    await ffmpeg(['-i', final, ...subArgs, '-map', '0:v', '-map', '0:a', ...maps, '-c', 'copy', '-c:s', 'mov_text', ...meta, '-movflags', '+faststart', withSubs]);
     await rm(final, { force: true });
     await rename(withSubs, final).catch(async () => { await copyFile(withSubs, final); });
     if (flag('--subtitulos-fijos')) {
       // Grabados en la imagen (para redes sociales): se ven en cualquier reproductor.
-      await copyFile(srt, path.join(work, 'subs.srt'));
+      await copyFile(flag('--ingles') && flag('--fijos-en-ingles') ? final.replace(/\.mp4$/, '.en.srt') : srt, path.join(work, 'subs.srt'));
       burned = final.replace(/\.mp4$/, '-subtitulada.mp4');
       const style = "FontName=Arial,FontSize=20,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=2,Shadow=0,MarginV=34";
       await ffmpeg(['-i', final, '-vf', `subtitles=subs.srt:force_style='${style}'`, '-map', '0:v', '-map', '0:a',
@@ -352,7 +367,7 @@ async function montar() {
   await rm(work, { recursive: true, force: true });
   console.log(`\nPELÍCULA LISTA: ${parts.length} partes, ${Math.round(total)} s (${(total / 60).toFixed(1)} min)${music ? `, con música (${tracks.length} pista${tracks.length > 1 ? 's' : ''})` : ', sin música'}.`);
   console.log('Archivo: ' + final);
-  if (cues.length) console.log(`Subtítulos en español: ${cues.length} (pista seleccionable en el MP4 y archivo .srt)` + (burned ? `\nVersión con subtítulos grabados: ${burned}` : '  ·  para grabarlos en la imagen: --subtitulos-fijos'));
+  if (cues.length) console.log(`Subtítulos en español: ${cues.length} (${flag('--ingles') ? 'español + inglés' : 'español'}: pistas seleccionables en el MP4 y archivos .srt)` + (burned ? `\nVersión con subtítulos grabados: ${burned}` : '  ·  grabados en la imagen: --subtitulos-fijos' + (flag('--ingles') ? '' : '  ·  inglés: --ingles')));
   if (missingVideo.length) console.log('Sin video todavía: ' + missingVideo.join(', '));
   if (missingVoice.length) console.log('Sin voz todavía: ' + missingVoice.join(', ') + '  ->  npm run voces -- ' + key + ' --generar');
 }
