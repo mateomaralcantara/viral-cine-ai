@@ -16,6 +16,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import nextEnv from '@next/env';
+import { FILM_KEYS } from '../lib/v7/presets/film-registry';
 import { CONVIDADOS_ID } from '../lib/v7/presets/los-convidados-al-agape';
 import { PRIMERA_PAGINA_ID } from '../lib/v7/presets/la-primera-pagina';
 import { readV7FilmBundle, v7FilmRoot } from '../lib/v7/storage/film-store';
@@ -27,7 +28,7 @@ import { characterKeyFromId, listSheets, masterPath, multiKeyframePrompt, serieO
 import { GeminiImageMaker, IMAGE_USD, imageRef } from '../lib/v7/production/gemini-image';
 
 nextEnv.loadEnvConfig(process.cwd());
-const FILMS: Record<string, string> = { convidados: CONVIDADOS_ID, primera: PRIMERA_PAGINA_ID };
+const FILMS: Record<string, string> = FILM_KEYS;
 const args = process.argv.slice(2);
 const key = args.find((a) => FILMS[a]) ?? '';
 const filmId = FILMS[key];

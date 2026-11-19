@@ -28,7 +28,7 @@ export class VisionReviewer {
           ] }],
           config: { temperature: 0.2, responseMimeType: 'application/json', responseJsonSchema: REVIEW_JSON_SCHEMA }
         });
-        const review = normalizeReview(res.text ?? '');
+        const review = normalizeReview(res.text ?? '', { onCamera: input.onCamera });
         const inputTokens = res.usageMetadata?.promptTokenCount ?? 0;
         const outputTokens = (res.usageMetadata?.candidatesTokenCount ?? 0) + (res.usageMetadata?.thoughtsTokenCount ?? 0);
         return { ...review, model, inputTokens, outputTokens, costUsd: reviewCostUsd(inputTokens, outputTokens) };

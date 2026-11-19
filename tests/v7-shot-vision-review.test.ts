@@ -29,3 +29,11 @@ test('reviewCostUsd', () => {
   assert.equal(reviewCostUsd(1_000_000, 0), 0.5);
   assert.ok(reviewCostUsd(5000, 800) < 0.01);
 });
+
+test('diálogo en cámara: hablar no es defecto y la regla pide labios sincronizados', async () => {
+  const { rulesFor } = await import('../lib/v7/qa/shot-vision-review');
+  assert.equal(normalizeReview({ ...base, bocasHablando: true }, { onCamera: true }).veredicto, 'aprobar');
+  assert.ok(rulesFor({ onCamera: true }).some((r) => /labios sincronizados/.test(r)));
+  const p = buildReviewPrompt({ label: 'E01-P03', title: 't', prompt: 'p', spokenText: '¿Por qué me miras así?', speaker: 'esposa', characters: [], hasCover: false, onCamera: true });
+  assert.match(p, /DIÁLOGO EN CÁMARA/);
+});

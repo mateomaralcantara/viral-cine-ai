@@ -7,7 +7,7 @@
 #   -Data "C:\ruta\.data"   carpeta de datos (por defecto, VIRALCINE_DATA_DIR de .env.local)
 #   -MaxSeconds 8            duración máxima de cada toma en el corte
 #   -Silencio                quita el audio original de los clips
-#   -Pelicula primera|convidados   película a unir (por defecto: «Dos toques de bocina»)
+#   -Pelicula primera|convidados|episodio1   película a unir (por defecto: «Dos toques de bocina»)
 param(
   [string]$Data = '',
   [double]$MaxSeconds = 8,
@@ -15,7 +15,7 @@ param(
   [string]$Pelicula = 'dos-toques'
 )
 $ErrorActionPreference = 'Stop'
-$filmId = if ($Pelicula -match 'primera') { 'film-la-primera-pagina-v7' } elseif ($Pelicula -match 'convidados|agape') { 'film-los-convidados-al-agape-v7' } else { 'film-dos-toques-de-bocina-v7' }
+$filmId = if ($Pelicula -match 'primera') { 'film-la-primera-pagina-v7' } elseif ($Pelicula -match 'episodio|ep1|ep01') { 'film-convidados-ep01-v7' } elseif ($Pelicula -match 'convidados|agape') { 'film-los-convidados-al-agape-v7' } else { 'film-dos-toques-de-bocina-v7' }
 
 if (-not $Data) {
   $line = Get-Content (Join-Path $PSScriptRoot '..\.env.local') -ErrorAction SilentlyContinue |
@@ -39,7 +39,7 @@ New-Item -ItemType Directory -Force -Path $work | Out-Null
 $parts = @()
 $missing = @()
 foreach ($e in 1..10) {
-  foreach ($p in 1..12) {
+  foreach ($p in 1..40) {
     $label = 'E{0:D2}-P{1:D2}' -f $e, $p
     $dir = Join-Path $film $label.ToLower()
     if (-not (Test-Path $dir)) { continue }

@@ -48,3 +48,8 @@ test('acceptRepair exige mejora real', () => {
   assert.ok(!acceptRepair(review({ puntuacion: 5 }), review({ puntuacion: 5.2 })));
   assert.ok(!acceptRepair(review({ puntuacion: 5 }), review({ puntuacion: 7, coincideConGuion: 6 })));
 });
+
+test('diálogo en cámara: nunca se silencia el audio', () => {
+  const p = planRepair(review({ bocasHablando: true, problemas: [{ tipo: 'bocas', gravedad: 'medio', descripcion: 'mueve los labios' }] }), 8, 1, { onCamera: true });
+  assert.ok(!p.muteOriginal);
+});

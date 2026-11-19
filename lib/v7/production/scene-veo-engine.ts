@@ -624,7 +624,10 @@ async function submitLocked(filmId: string, plan: Awaited<ReturnType<typeof scen
         },
         config: {
           aspectRatio: '16:9', numberOfVideos: 1, durationSeconds: shot.providerSeconds, resolution: '720p',
-          personGeneration: reference || record.platform === 'vertex' ? 'allow_adult' : 'allow_all'
+          personGeneration: reference || record.platform === 'vertex' ? 'allow_adult' : 'allow_all',
+          // Vertex: audio nativo (ambiente y diálogos en cámara con labios sincronizados).
+          // AI Studio no acepta este parámetro (genera audio por defecto en Veo 3.x).
+          ...(record.platform === 'vertex' ? { generateAudio: true } : {})
         }
       });
       if (!operation.name) throw new Error('Google no devolvió el ID de la operación; resultado incierto.');

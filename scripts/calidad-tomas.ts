@@ -15,6 +15,7 @@ import { createHash } from 'node:crypto';
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import nextEnv from '@next/env';
+import { FILM_KEYS } from '../lib/v7/presets/film-registry';
 import { CONVIDADOS_ID } from '../lib/v7/presets/los-convidados-al-agape';
 import { PRIMERA_PAGINA_ID } from '../lib/v7/presets/la-primera-pagina';
 import { readV7FilmBundle, v7FilmRoot } from '../lib/v7/storage/film-store';
@@ -25,7 +26,7 @@ import { buildReviewPrompt, type ShotReview } from '../lib/v7/qa/shot-vision-rev
 import { VisionReviewer } from '../lib/v7/qa/shot-vision-runner';
 
 nextEnv.loadEnvConfig(process.cwd());
-const FILMS: Record<string, string> = { convidados: CONVIDADOS_ID, primera: PRIMERA_PAGINA_ID, 'dos-toques': 'film-dos-toques-de-bocina-v7' };
+const FILMS: Record<string, string> = FILM_KEYS;
 const args = process.argv.slice(2);
 const key = args.find((a) => !a.startsWith('--') && !/^E\d\d/i.test(a)) ?? '';
 const filmId = FILMS[key];
@@ -67,7 +68,7 @@ async function main() {
       const characters = film.characters.filter((c) => shot.characterIds.includes(c.id) && c.appearance && !/sin imagen/i.test(c.appearance))
         .map((c) => ({ name: c.name, appearance: c.appearance }));
       jobs.push({ label, video, bytes, hash, reportFile, input: {
-        label, title: shot.title, prompt: revision?.promptText ?? shot.visualPrompt, spokenText: shot.spokenText ?? '',
+        label, title: shot.title, prompt: revision?.promptText ?? shot.visualPrompt, spokenText: shot.spokenText ?? '', onCamera: shot.metadata?.onCameraDialogue === true,
         speaker: speakerKey(film.id, shot.speakerId), characters, hasCover: !!cover
       } });
     }

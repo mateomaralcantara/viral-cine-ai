@@ -8,8 +8,13 @@ import { VoiceProfileSchema } from '@/lib/v7/domain/voice-profile';
 import { createInitialV7Workflow } from '@/lib/v7/domain/workflow';
 import type { StoredFilmBundle } from '@/lib/v7/storage/film-store';
 
-export type ShortFilmBeat = { title: string; camera: string; prompt: string; line: string; voice: string; seconds?: number };
-export type ShortFilmScene = { title: string; summary: string; location: string; wardrobe: string; cast: string[]; beats: ShortFilmBeat[] };
+/**
+ * onCamera = el personaje dice la frase EN CÁMARA (Veo genera voz y labios en español).
+ * Sin onCamera, la frase es voz en off (ElevenLabs) y las bocas van cerradas.
+ */
+export type ShortFilmBeat = { title: string; camera: string; prompt: string; line: string; voice: string; seconds?: 4 | 6 | 8; onCamera?: boolean };
+/** music = descripción de la música original de la secuencia (para generarla o elegirla). */
+export type ShortFilmScene = { title: string; summary: string; location: string; wardrobe: string; cast: string[]; beats: ShortFilmBeat[]; music?: string; musicPrompt?: string };
 export type ShortFilmCharacter = { key: string; name: string; age: number; role: string; appearance: string; voice: string };
 export type ShortFilmSpec = {
   id: string; title: string; premise: string; genre: string; audience: string; visualStyle: string;
@@ -36,14 +41,16 @@ export function buildShortFilmBundle(spec: ShortFilmSpec, now: string = new Date
   const sceneSeconds = (scene: ShortFilmScene) => scene.beats.reduce((n, b) => n + (b.seconds ?? DEFAULT_SHOT_SECONDS), 0);
   const stats = shortFilmStats(spec);
 
-  const acts = spec.scenes.map((scene, index) => {
-    const actId = filmId + '-act-' + (index + 1);
-    const sequenceId = actId + '-sequence-1';
+  // Cada escena es una secuencia; las escenas se reparten en como máximo 5 actos
+  // (con 5 escenas o menos, una por acto: mismos ids que siempre).
+  const perAct = Math.ceil(spec.scenes.length / 5);
+  const sequences = spec.scenes.map((scene, index) => {
+    const actNumber = Math.floor(index / perAct) + 1;
+    const actId = filmId + '-act-' + actNumber;
+    const sequenceId = actId + '-sequence-' + (index % perAct + 1);
     const sceneId = filmId + '-scene-' + String(index + 1).padStart(2, '0');
-    return {
-      id: actId, filmId, order: index + 1, title: scene.title, dramaticObjective: scene.summary,
-      sequences: [{
-        id: sequenceId, actId, order: 1, title: scene.title, objective: scene.summary,
+    return { actNumber, actId, sequence: {
+        id: sequenceId, actId, order: index % perAct + 1, title: scene.title, objective: scene.summary,
         scenes: [{
           id: sceneId, sequenceId, order: index + 1, title: scene.title, summary: scene.summary,
           durationSeconds: sceneSeconds(scene),
@@ -57,13 +64,17 @@ export function buildShortFilmBundle(spec: ShortFilmSpec, now: string = new Date
             visualPrompt: beat.prompt, camera: beat.camera, spokenText: beat.line,
             speakerId: characterId(beat.voice), characterIds: scene.cast.map(characterId),
             strategy: 'cinematic-video-candidate',
-            metadata: { curatedPrompt: true, voiceOver: true, providerCalls: 0, lipsyncStatus: 'not-needed' },
+            metadata: { curatedPrompt: true, voiceOver: !beat.onCamera, onCameraDialogue: beat.onCamera === true, providerCalls: 0, lipsyncStatus: beat.onCamera ? 'native-veo' : 'not-needed' },
             takes: []
           })),
-          metadata: { location: scene.location, costume: scene.wardrobe }
+          metadata: { location: scene.location, costume: scene.wardrobe, ...(scene.music ? { music: scene.music } : {}), ...(scene.musicPrompt ? { musicPrompt: scene.musicPrompt } : {}) }
         }]
-      }]
-    };
+      } };
+  });
+  const acts = [...new Set(sequences.map((x) => x.actNumber))].map((n) => {
+    const own = sequences.filter((x) => x.actNumber === n);
+    const first = spec.scenes[(n - 1) * perAct];
+    return { id: own[0].actId, filmId, order: n, title: own.length > 1 ? 'Acto ' + n : first.title, dramaticObjective: own.map((x) => x.sequence.objective).join(' '), sequences: own.map((x) => x.sequence) };
   });
 
   const film = FilmV7Schema.parse({

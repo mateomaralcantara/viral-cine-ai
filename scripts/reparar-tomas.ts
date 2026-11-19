@@ -18,6 +18,7 @@ import { copyFile, mkdir, readFile, writeFile, access } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import nextEnv from '@next/env';
+import { FILM_KEYS } from '../lib/v7/presets/film-registry';
 import { CONVIDADOS_ID } from '../lib/v7/presets/los-convidados-al-agape';
 import { PRIMERA_PAGINA_ID } from '../lib/v7/presets/la-primera-pagina';
 import { readV7FilmBundle, v7FilmRoot } from '../lib/v7/storage/film-store';
@@ -31,7 +32,7 @@ import type { ShotReview } from '../lib/v7/qa/shot-vision-review';
 
 const run = promisify(execFile);
 nextEnv.loadEnvConfig(process.cwd());
-const FILMS: Record<string, string> = { convidados: CONVIDADOS_ID, primera: PRIMERA_PAGINA_ID, 'dos-toques': 'film-dos-toques-de-bocina-v7' };
+const FILMS: Record<string, string> = FILM_KEYS;
 const args = process.argv.slice(2);
 const key = args.find((a) => !a.startsWith('--') && !/^E\d\d/i.test(a) && !/^\d+$/.test(a)) ?? '';
 const filmId = FILMS[key];
@@ -97,7 +98,8 @@ async function main() {
       if (rec.originalSha256 === sha && await exists(repairedVideoPath(dir, label))) { console.log(`  ${label}: ya reparada (usa --repetir para rehacerla)`); fixed.push(label); continue; }
     }
     const duration = await probe(original);
-    const firstPlan = planRepair(before, duration, 1);
+    const onCamera = shot.metadata?.onCameraDialogue === true;
+    const firstPlan = planRepair(before, duration, 1, { onCamera });
     console.log(`  ${label}  ${before.veredicto.toUpperCase()} ${before.puntuacion}/10`);
     for (const a of firstPlan.actions) console.log(`     · ${a}`);
     for (const u of firstPlan.unfixable) console.log(`     ✗ No se arregla gratis: ${u}`);
@@ -111,14 +113,14 @@ async function main() {
     const characters = film.characters.filter((c) => shot.characterIds.includes(c.id) && c.appearance && !/sin imagen/i.test(c.appearance)).map((c) => ({ name: c.name, appearance: c.appearance }));
     let accepted = false;
     for (let n = 1; n <= attempts && !accepted; n++) {
-      const plan = planRepair(before, duration, n);
+      const plan = planRepair(before, duration, n, { onCamera });
       const out = path.join(work, `${label}-intento-${n}.mp4`);
       try { await render(original, plan, out); } catch (e) { console.log(`     intento ${n}: FFmpeg falló: ${String((e as Error).message).slice(0, 160)}`); continue; }
       let after: ShotReview | null = null;
       if (reviewer) {
         try {
           const r = await reviewer.review(await readFile(out), { label, title: shot.title, prompt: revision?.promptText ?? shot.visualPrompt,
-            spokenText: shot.spokenText ?? '', speaker: speakerKey(film.id, shot.speakerId), characters });
+            spokenText: shot.spokenText ?? '', onCamera: shot.metadata?.onCameraDialogue === true, speaker: speakerKey(film.id, shot.speakerId), characters });
           cost += r.costUsd; after = r;
           await writeFile(path.join(work, `${label}-intento-${n}-calidad.json`), JSON.stringify(r, null, 2) + '\n');
         } catch (e) { console.log(`     intento ${n}: el revisor falló: ${(e as Error).message}`); continue; }

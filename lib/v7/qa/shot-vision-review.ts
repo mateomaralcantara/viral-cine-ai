@@ -11,6 +11,8 @@ export type ShotReviewInput = {
   speaker: string;
   characters: Array<{ name: string; appearance: string }>;
   hasCover: boolean;
+  /** Diálogo dicho en cámara: el personaje DEBE hablar con labios sincronizados. */
+  onCamera?: boolean;
 };
 
 export type ReviewIssue = { tipo: string; gravedad: 'critico' | 'medio' | 'leve'; descripcion: string; segundo?: number };
@@ -36,6 +38,12 @@ export const REVIEW_RULES = [
   'Sin rostros de niños ni violencia explícita. Las figuras divinas, religiosas o sobrenaturales están permitidas si el guion las pide.'
 ];
 
+export function rulesFor(input: Pick<ShotReviewInput, 'onCamera'>) {
+  return input.onCamera
+    ? REVIEW_RULES.map((r) => r.startsWith('Nadie debe mover los labios') ? 'Solo habla el personaje del diálogo, en español, con labios sincronizados y voz natural; los demás con la boca cerrada.' : r)
+    : REVIEW_RULES;
+}
+
 export function buildReviewPrompt(input: ShotReviewInput) {
   const cast = input.characters.length
     ? input.characters.map((c) => `- ${c.name}: ${c.appearance}`).join('\n')
@@ -45,8 +53,10 @@ export function buildReviewPrompt(input: ShotReviewInput) {
     input.hasCover ? 'También se adjunta la portada del libro: los personajes deben parecerse a los de la portada.' : '',
     '\nTEXTO CON EL QUE SE GENERÓ LA TOMA:\n' + input.prompt,
     '\nPERSONAJES (descripción fija):\n' + cast,
-    '\nVOZ EN OFF QUE SE AÑADIRÁ DESPUÉS (' + input.speaker + '): «' + input.spokenText + '»',
-    '\nREGLAS:\n' + REVIEW_RULES.map((r, i) => `${i + 1}. ${r}`).join('\n'),
+    input.onCamera
+      ? '\nDIÁLOGO EN CÁMARA (' + input.speaker + '): debe decir en español, con los labios sincronizados: «' + input.spokenText + '». Evalúa si se entiende y si los labios coinciden.'
+      : '\nVOZ EN OFF QUE SE AÑADIRÁ DESPUÉS (' + input.speaker + '): «' + input.spokenText + '»',
+    '\nREGLAS:\n' + rulesFor(input).map((r, i) => `${i + 1}. ${r}`).join('\n'),
     '\nPUNTÚA de 0 a 10 (10 = cine profesional sin defectos). identidad = parecido de los personajes con su descripción; null si no aparece ningún personaje reconocible.',
     'veredicto: «aprobar» si puntuacion >= 8 y ningún problema crítico; «rehacer» si hay algún problema crítico o puntuacion < 6; si no, «revisar».',
     'Si el veredicto es «rehacer», escribe en promptSugerido un texto nuevo y completo, en español, que corrija los problemas y respete las reglas',
@@ -86,7 +96,7 @@ export const REVIEW_JSON_SCHEMA = {
 const clamp = (n: unknown) => Math.max(0, Math.min(10, Math.round(Number(n) * 10) / 10 || 0));
 
 /** Valida la respuesta del modelo y aplica las reglas de veredicto de forma determinista. */
-export function normalizeReview(raw: unknown): ShotReview {
+export function normalizeReview(raw: unknown, opts: { onCamera?: boolean } = {}): ShotReview {
   const r = (typeof raw === 'string' ? JSON.parse(raw) : raw) as Record<string, unknown>;
   if (!r || typeof r !== 'object') throw new Error('Respuesta de calidad vacía.');
   const problemas: ReviewIssue[] = Array.isArray(r.problemas) ? r.problemas.map((p) => {
@@ -95,7 +105,8 @@ export function normalizeReview(raw: unknown): ShotReview {
     return { tipo: String(x.tipo ?? 'otro'), gravedad, descripcion: String(x.descripcion ?? ''), ...(Number.isFinite(Number(x.segundo)) && x.segundo != null ? { segundo: Number(x.segundo) } : {}) };
   }) : [];
   const textoEnPantalla = r.textoEnPantalla === true;
-  const bocasHablando = r.bocasHablando === true;
+  // En un diálogo en cámara hablar es lo correcto: no cuenta como defecto.
+  const bocasHablando = !opts.onCamera && r.bocasHablando === true;
   if (textoEnPantalla && !problemas.some((p) => p.tipo.includes('texto'))) problemas.push({ tipo: 'texto en pantalla', gravedad: 'critico', descripcion: 'Aparece texto o letras en la imagen.' });
   if (bocasHablando && !problemas.some((p) => p.tipo.includes('boca'))) problemas.push({ tipo: 'bocas', gravedad: 'medio', descripcion: 'Algún personaje mueve los labios como si hablara.' });
   const puntuacion = clamp(r.puntuacion);

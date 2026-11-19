@@ -21,6 +21,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import nextEnv from '@next/env';
+import { FILM_KEYS } from '../lib/v7/presets/film-registry';
 import { CONVIDADOS_ID } from '../lib/v7/presets/los-convidados-al-agape';
 import { PRIMERA_PAGINA_ID } from '../lib/v7/presets/la-primera-pagina';
 import { readV7FilmBundle, v7FilmRoot } from '../lib/v7/storage/film-store';
@@ -33,7 +34,7 @@ import { importFromScript } from '../lib/v7/production/character-studio';
 
 nextEnv.loadEnvConfig(process.cwd());
 const run = promisify(execFile);
-const FILMS: Record<string, string> = { convidados: CONVIDADOS_ID, primera: PRIMERA_PAGINA_ID };
+const FILMS: Record<string, string> = FILM_KEYS;
 const [cmd, target, who] = process.argv.slice(2).filter((a, i, all) => !a.startsWith('--') && !(i > 0 && all[i - 1].startsWith('--')));
 const args = process.argv.slice(2);
 const flag = (f: string) => args.includes(f);

@@ -15,21 +15,23 @@ import { access, copyFile, mkdir, readFile, rename, rm, writeFile } from 'node:f
 import path from 'node:path';
 import { promisify } from 'node:util';
 import nextEnv from '@next/env';
+import { FILM_KEYS } from '../lib/v7/presets/film-registry';
 import { CONVIDADOS_ID } from '../lib/v7/presets/los-convidados-al-agape';
 import { PRIMERA_PAGINA_ID } from '../lib/v7/presets/la-primera-pagina';
 import { readV7FilmBundle, v7FilmRoot } from '../lib/v7/storage/film-store';
 import { indexedScenes } from '../lib/v7/production/scene-approval-board';
 import { currentShotVideo } from '../lib/v7/production/shot-current-video';
 import { listSheets, serieOf } from '../lib/v7/production/character-identity';
+import { speakerKey } from '../lib/v7/production/film-voice-mix';
 import {
-  pickCasting, planCharacters, shotTiming, voicePlan, voiceSettings, VOICE_START_SECONDS,
+  isOnCamera, pickCasting, planCharacters, shotTiming, voicePlan, voiceSettings, voiceTreatment, VOICE_ALIASES, VOICE_START_SECONDS,
   type AvailableVoice, type Casting, type VoiceLine
 } from '../lib/v7/production/film-voice-mix';
 
 const run = promisify(execFile);
 nextEnv.loadEnvConfig(process.cwd());
 
-const FILMS: Record<string, string> = { convidados: CONVIDADOS_ID, primera: PRIMERA_PAGINA_ID };
+const FILMS: Record<string, string> = FILM_KEYS;
 const args = process.argv.slice(2);
 const mode = args[0];
 const key = args[1] ?? '';
@@ -124,17 +126,23 @@ async function voces() {
   const lines = voicePlan(film);
   const closing = typeof film.metadata?.closingCard === 'string' ? film.metadata.closingCard as string : '';
   if (closing) lines.push({ label: 'CIERRE', title: 'Pregunta final', text: closing, speaker: 'narrador' });
-  const speakers = [...new Set(lines.map((l) => l.speaker))];
+  const allSpeakers = [...new Set(lines.map((l) => l.speaker))];
+  // Los alias (voz interior = la voz de Martin) no ocupan una voz propia.
+  const speakers = [...new Set(allSpeakers.map((s) => VOICE_ALIASES[s] ?? s))];
   await mkdir(voiceDir, { recursive: true });
   const previous = await readJson<Casting>(castingFile, {});
   // La voz de la ficha del personaje (serie) manda: misma voz en todos los capítulos.
   const serie = serieOf(film);
   for (const sheet of await listSheets(serie)) if (sheet.voz && speakers.includes(sheet.key)) previous[sheet.key] = { voiceId: sheet.voz.voiceId, name: sheet.voz.nombre };
-  const casting = pickCasting(speakers, await listVoices(), previous);
-  if (JSON.stringify(casting) !== JSON.stringify(previous)) await writeFile(castingFile, JSON.stringify(casting, null, 2) + '\n');
+  const picked = pickCasting(speakers, await listVoices(), previous);
+  if (JSON.stringify(picked) !== JSON.stringify(previous)) await writeFile(castingFile, JSON.stringify(picked, null, 2) + '\n');
+  const casting: Casting = { ...picked };
+  for (const s of allSpeakers) if (VOICE_ALIASES[s]) casting[s] = picked[VOICE_ALIASES[s]];
 
   console.log('\nCASTING (puedes cambiarlo en ' + castingFile + '):');
-  for (const s of speakers) console.log(`  ${s.padEnd(9)} -> ${casting[s].name}  (${lines.filter((l) => l.speaker === s).length} frases)`);
+  for (const s of allSpeakers) console.log(`  ${s.padEnd(15)} -> ${casting[s].name}${VOICE_ALIASES[s] ? ' (con tratamiento sonoro)' : ''}  (${lines.filter((l) => l.speaker === s).length} frases)`);
+  const onCam = film.acts.flatMap((a) => a.sequences.flatMap((q) => q.scenes.flatMap((sc) => sc.shots))).filter(isOnCamera).length;
+  if (onCam) console.log(`  (${onCam} diálogos en cámara: la voz la pone Veo con los labios sincronizados)`);
   const todo = await pending(lines, casting);
   const chars = planCharacters(todo);
   console.log(`\nVoces: ${lines.length - todo.length} listas, ${todo.length} por generar (${chars} caracteres; total guion ${planCharacters(lines)}).`);
@@ -166,21 +174,22 @@ async function findFont(work: string) {
   return false;
 }
 
-async function shotPart(work: string, index: number, label: string, video: string, voice: string | null, ambient: boolean) {
+async function shotPart(work: string, index: number, label: string, video: string, voice: string | null, ambient: boolean, opts: { onCamera?: boolean; treatment?: string | null } = {}) {
   const videoSeconds = await probe(video);
   const voiceSeconds = voice ? await probe(voice) : null;
   const t = shotTiming(videoSeconds, voiceSeconds);
   const out = path.join(work, String(index).padStart(3, '0') + '-' + label + '.mp4');
   const input = ['-i', video];
   const vf = VF + (t.freeze > 0 ? `,tpad=stop_mode=clone:stop_duration=${fmt(t.freeze)}` : '');
-  const amb = ambient && await hasAudio(video)
-    ? `[0:a]aresample=48000,volume=${voice ? 0.3 : 0.8},apad[amb]`
+  const amb = (ambient || opts.onCamera) && await hasAudio(video)
+    ? `[0:a]aresample=48000,volume=${opts.onCamera ? 1.0 : voice ? 0.3 : 0.8},apad[amb]`
     : `anullsrc=r=48000:cl=stereo[amb]`;
   let filter = `[0:v]${vf}[v];${amb}`;
   if (voice) {
     input.push('-i', voice);
     const ms = Math.round(VOICE_START_SECONDS * 1000);
-    filter += `;[1:a]aresample=48000,aformat=channel_layouts=stereo,adelay=${ms}|${ms},volume=1.6,apad[vo];[amb][vo]amix=inputs=2:duration=longest:normalize=0[a]`;
+    const fx = opts.treatment ? opts.treatment + ',' : '';
+    filter += `;[1:a]${fx}aresample=48000,aformat=channel_layouts=stereo,adelay=${ms}|${ms},volume=1.6,apad[vo];[amb][vo]amix=inputs=2:duration=longest:normalize=0[a]`;
   } else filter += ';[amb]anull[a]';
   await ffmpeg([...input, '-filter_complex', filter, '-map', '[v]', '-map', '[a]', '-t', fmt(t.total), ...ENC, out]);
   return { out, seconds: t.total, freeze: t.freeze };
@@ -240,19 +249,26 @@ async function montar() {
   const missingVideo: string[] = [];
   const missingVoice: string[] = [];
   let i = 0;
+  let cursor = 0;
+  const spans: Array<{ label: string; start: number; seconds: number }> = [];
   for (const scene of indexedScenes(film)) {
+    const sceneStart = cursor;
     for (const { shot, label } of scene.shots) {
       const dir = path.join(root, label.toLowerCase());
       const current = await currentShotVideo(dir, label);
       const src = current?.file;
       if (!src) { missingVideo.push(label); continue; }
-      const hasLine = (shot.spokenText ?? '').trim().length > 0;
+      const onCamera = isOnCamera(shot);
+      const speaker = speakerKey(film.id, shot.speakerId);
+      const hasLine = !onCamera && (shot.spokenText ?? '').trim().length > 0;
       const voice = hasLine && await exists(voiceFile(label)) ? voiceFile(label) : null;
       if (hasLine && !voice) missingVoice.push(label);
-      const p = await shotPart(work, ++i, label, src, voice, ambient);
+      const p = await shotPart(work, ++i, label, src, voice, ambient, { onCamera, treatment: voiceTreatment(speaker) });
       parts.push(p.out);
-      console.log(`  OK ${label}${current?.repaired ? ' (reparada)' : ''}  ${p.seconds.toFixed(1)} s${p.freeze ? ` (alargada ${p.freeze.toFixed(1)} s para la voz)` : ''}${voice ? '' : hasLine ? '  SIN VOZ' : ''}`);
+      cursor += p.seconds;
+      console.log(`  OK ${label}${current?.repaired ? ' (reparada)' : ''}  ${p.seconds.toFixed(1)} s${onCamera ? '  diálogo en cámara' : ''}${p.freeze ? ` (alargada ${p.freeze.toFixed(1)} s para la voz)` : ''}${voice ? '' : hasLine ? '  SIN VOZ' : ''}`);
     }
+    if (cursor > sceneStart) spans.push({ label: scene.label, start: sceneStart, seconds: cursor - sceneStart });
   }
   if (!parts.length) throw new Error('No hay videos generados todavía.');
 
@@ -267,7 +283,8 @@ async function montar() {
   const cover = (await Promise.all(coverName.map(async (f) => (await exists(path.join(root, f))) ? path.join(root, f) : null))).find(Boolean) ?? null;
   const book = typeof film.metadata?.book === 'string' ? (film.metadata.book as string).split('—') : [film.title];
   const author = typeof film.metadata?.author === 'string' ? 'Una novela de ' + film.metadata.author : '';
-  parts.push(await cardPart(work, 'cierre-titulo', [book[0].trim().toUpperCase(), ...(book[1] ? [book[1].trim()] : []), ...(author ? [author] : [])], 6, null, cover, font));
+  const endLines = Array.isArray(film.metadata?.endCardLines) ? (film.metadata.endCardLines as unknown[]).map(String) : null;
+  parts.push(await cardPart(work, 'cierre-titulo', endLines ?? [book[0].trim().toUpperCase(), ...(book[1] ? [book[1].trim()] : []), ...(author ? [author] : [])], 6, null, endLines ? null : cover, font));
   console.log('  OK cierre: ' + (cover ? 'portada del libro' : 'título del libro'));
 
   const list = path.join(work, 'lista.txt');
@@ -276,21 +293,41 @@ async function montar() {
   await ffmpeg(['-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', joined]);
   const total = await probe(joined);
 
-  const music = option('--musica') ?? ((await exists(path.join(root, 'musica.mp3'))) ? path.join(root, 'musica.mp3') : undefined);
-  if (music && !(await exists(music))) throw new Error('No encuentro la música: ' + music);
-  const safeTitle = film.title.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase();
+  const globalMusic = option('--musica') ?? ((await exists(path.join(root, 'musica.mp3'))) ? path.join(root, 'musica.mp3') : undefined);
+  if (globalMusic && !(await exists(globalMusic))) throw new Error('No encuentro la música: ' + globalMusic);
+  // Música por secuencia: <película>\musica\E01.mp3 (o .wav/.m4a). Si falta, la global (si hay).
+  const cues: Array<{ file: string; start: number; seconds: number }> = [];
+  for (const span of spans) {
+    let file: string | undefined;
+    for (const ext of ['mp3', 'wav', 'm4a']) { const f = path.join(root, 'musica', `${span.label}.${ext}`); if (await exists(f)) { file = f; break; } }
+    if (file) cues.push({ file, start: span.start, seconds: span.seconds });
+  }
+  if (!cues.length && globalMusic) cues.push({ file: globalMusic, start: 0, seconds: total });
+  const safeTitle = film.title.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase().slice(0, 80);
   const final = path.join(finalDir, `${safeTitle}-${stamp}.mp4`);
   const master = 'loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000';
-  if (music) {
-    await ffmpeg(['-i', joined, '-stream_loop', '-1', '-i', music, '-filter_complex',
-      `[1:a]aresample=48000,aformat=channel_layouts=stereo,volume=0.22,afade=t=in:d=3,afade=t=out:st=${fmt(total - 4)}:d=4,atrim=0:${fmt(total)}[m];` +
-      `[0:a][m]amix=inputs=2:duration=first:normalize=0,${master}[a]`,
-      '-map', '0:v', '-map', '[a]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', final]);
+  if (cues.length) {
+    const inputs = ['-i', joined];
+    const chains: string[] = ['[0:a]asplit=2[dlg][key]'];
+    cues.forEach((c, k) => {
+      inputs.push('-stream_loop', '-1', '-i', c.file);
+      const ms = Math.round(c.start * 1000);
+      const fadeOut = Math.max(0, c.seconds - 2.5);
+      chains.push(`[${k + 1}:a]aresample=48000,aformat=channel_layouts=stereo,atrim=0:${fmt(c.seconds)},asetpts=PTS-STARTPTS,` +
+        `afade=t=in:d=1.5,afade=t=out:st=${fmt(fadeOut)}:d=2.5,volume=0.3,adelay=${ms}|${ms}[m${k}]`);
+    });
+    const mix = cues.map((_, k) => `[m${k}]`).join('');
+    // La música baja sola cuando hay voz (los diálogos siempre se entienden).
+    chains.push(`${mix}amix=inputs=${cues.length}:duration=longest:normalize=0,apad,atrim=0:${fmt(total)}[mus]`);
+    chains.push('[mus][key]sidechaincompress=threshold=0.02:ratio=10:attack=15:release=450[duck]');
+    chains.push(`[dlg][duck]amix=inputs=2:duration=first:normalize=0,${master}[a]`);
+    await ffmpeg([...inputs, '-filter_complex', chains.join(';'), '-map', '0:v', '-map', '[a]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', final]);
   } else {
     await ffmpeg(['-i', joined, '-af', master, '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', final]);
   }
+  const music = cues.length > 0;
   await rm(work, { recursive: true, force: true });
-  console.log(`\nPELÍCULA LISTA: ${parts.length} partes, ${Math.round(total)} s (${(total / 60).toFixed(1)} min)${music ? ', con música' : ', sin música'}.`);
+  console.log(`\nPELÍCULA LISTA: ${parts.length} partes, ${Math.round(total)} s (${(total / 60).toFixed(1)} min)${music ? `, con música (${cues.length} pista${cues.length > 1 ? 's' : ''})` : ', sin música'}.`);
   console.log('Archivo: ' + final);
   if (missingVideo.length) console.log('Sin video todavía: ' + missingVideo.join(', '));
   if (missingVoice.length) console.log('Sin voz todavía: ' + missingVoice.join(', ') + '  ->  npm run voces -- ' + key + ' --generar');

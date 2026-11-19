@@ -56,7 +56,7 @@ export function cleanWindow(duration: number, badSeconds: number[], margin = 0.6
   return best.end - best.start >= minimum ? { start: round(best.start), end: round(best.end) } : null;
 }
 
-export function planRepair(review: ShotReview, duration: number, attempt = 1): RepairPlan {
+export function planRepair(review: ShotReview, duration: number, attempt = 1, opts: { onCamera?: boolean } = {}): RepairPlan {
   const plan: RepairPlan = { attempt, zoom: 1, anchorX: 0.5, anchorY: 0.5, window: null, speed: 1, deflicker: false, muteOriginal: false, actions: [], unfixable: [] };
   const issues = review.problemas.map((p) => ({ ...p, all: p.tipo + ' ' + p.descripcion }));
   const strong = attempt >= 2;
@@ -75,7 +75,8 @@ export function planRepair(review: ShotReview, duration: number, attempt = 1): R
     plan.actions.push(`Se quita el tramo con fallo: se usa ${win.start.toFixed(1)}–${win.end.toFixed(1)} s` + (plan.speed < 1 ? ` en cámara lenta (${Math.round(plan.speed * 100)} %)` : ''));
   }
   if (issues.some((p) => has(p.all, RE.flicker)) || strong) { plan.deflicker = true; plan.actions.push('Quitar parpadeo y ruido'); }
-  if (review.bocasHablando || issues.some((p) => has(p.all, RE.mouth))) {
+  // En un diálogo en cámara el audio ES el diálogo: nunca se silencia.
+  if (!opts.onCamera && (review.bocasHablando || issues.some((p) => has(p.all, RE.mouth)))) {
     plan.muteOriginal = true;
     plan.actions.push('Silenciar el audio original (las bocas no se pueden cerrar sin regenerar)');
     if (strong && plan.zoom < 1.15) { plan.zoom = 1.15; plan.actions.push('Zoom para restar protagonismo a los personajes del fondo'); }

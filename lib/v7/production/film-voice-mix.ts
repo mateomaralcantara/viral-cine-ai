@@ -24,7 +24,7 @@ export function speakerKey(filmId: string, speakerId: string | undefined) {
 
 export function voicePlan(film: FilmV7): VoiceLine[] {
   return indexedScenes(film).flatMap((scene) => scene.shots
-    .filter(({ shot }) => (shot.spokenText ?? '').trim().length > 0)
+    .filter(({ shot }) => (shot.spokenText ?? '').trim().length > 0 && shot.metadata?.onCameraDialogue !== true)
     .map(({ shot, label }) => ({
       label, title: shot.title, text: shot.spokenText!.trim(), speaker: speakerKey(film.id, shot.speakerId)
     })));
@@ -39,8 +39,27 @@ export const VOICE_PREFERENCES: Record<string, string[]> = {
   narrador: ['George', 'Brian', 'Daniel', 'Bill', 'Adam'],
   martin: ['Liam', 'Chris', 'Eric', 'Will', 'Antoni', 'Josh'],
   heraldo: ['Bill', 'Daniel', 'Arnold', 'Roger', 'George'],
-  fiscal: ['Callum', 'Clyde', 'Charlie', 'Roger', 'Harry']
+  fiscal: ['Callum', 'Clyde', 'Charlie', 'Roger', 'Harry'],
+  esposa: ['Sarah', 'Charlotte', 'Matilda', 'Alice', 'Lily', 'Jessica'],
+  'voz-desconocida': ['Arnold', 'Clyde', 'Harry', 'Roger', 'Callum']
 };
+
+/** Personajes que no tienen voz propia: usan la voz de otro con tratamiento sonoro. */
+export const VOICE_ALIASES: Record<string, string> = { 'voz-interior': 'martin' };
+
+/** Tratamiento sonoro por personaje (filtro de audio de FFmpeg), o null. */
+export function voiceTreatment(speaker: string): string | null {
+  switch (speaker) {
+    case 'voz-interior': return 'highpass=f=140,lowpass=f=6500,aecho=0.8:0.55:45:0.22,volume=0.95';
+    case 'voz-desconocida': return 'asetrate=44100*0.8,aresample=48000,lowpass=f=3800,aecho=0.8:0.8:180|360:0.45|0.3,volume=1.3';
+    default: return null;
+  }
+}
+
+/** ¿La toma lleva diálogo dicho en cámara por Veo (voz y labios nativos)? */
+export function isOnCamera(shot: { metadata?: Record<string, unknown> }) {
+  return shot.metadata?.onCameraDialogue === true;
+}
 
 export function pickCasting(speakers: string[], voices: AvailableVoice[], existing: Casting = {}): Casting {
   const casting: Casting = {};
@@ -70,6 +89,9 @@ export function voiceSettings(speaker: string) {
     case 'martin': return { stability: 0.38, similarity_boost: 0.8, style: 0.45, speed: 0.95, use_speaker_boost: true };
     case 'heraldo': return { stability: 0.65, similarity_boost: 0.8, style: 0.15, speed: 0.88, use_speaker_boost: true };
     case 'fiscal': return { stability: 0.45, similarity_boost: 0.8, style: 0.4, speed: 0.95, use_speaker_boost: true };
+    case 'voz-interior': return { stability: 0.6, similarity_boost: 0.8, style: 0.2, speed: 0.95, use_speaker_boost: true };
+    case 'voz-desconocida': return { stability: 0.85, similarity_boost: 0.7, style: 0.05, speed: 0.75, use_speaker_boost: true };
+    case 'esposa': return { stability: 0.5, similarity_boost: 0.8, style: 0.3, speed: 0.92, use_speaker_boost: true };
     default: return { stability: 0.5, similarity_boost: 0.8, style: 0.25, speed: 1, use_speaker_boost: true };
   }
 }
