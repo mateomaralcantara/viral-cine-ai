@@ -102,3 +102,50 @@ export function shotTiming(videoSeconds: number, voiceSeconds: number | null) {
   const total = Math.max(videoSeconds, needed);
   return { total: Math.round(total * 1000) / 1000, freeze: Math.max(0, Math.round((total - videoSeconds) * 1000) / 1000) };
 }
+
+// ---------------------------------------------------------------- SUBTÍTULOS
+export type SubtitleCue = { start: number; end: number; text: string };
+
+/** Parte un texto en líneas de como máximo `max` caracteres, sin cortar palabras. */
+export function wrapSubtitle(text: string, max = 42) {
+  const lines: string[] = [];
+  let current = '';
+  for (const word of text.replace(/\s+/g, ' ').trim().split(' ')) {
+    if (current && (current + ' ' + word).length > max) { lines.push(current); current = word; }
+    else current = current ? current + ' ' + word : word;
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+/** Duración estimada de una frase dicha (≈14 caracteres por segundo, mínimo 1,2 s). */
+export function speechSeconds(text: string) {
+  return Math.max(1.2, text.length / 14);
+}
+
+/** Convierte una frase en uno o varios subtítulos (máx. 2 líneas cada uno), repartiendo el tiempo. */
+export function cuesForLine(text: string, start: number, end: number): SubtitleCue[] {
+  const lines = wrapSubtitle(text);
+  const blocks: string[] = [];
+  for (let i = 0; i < lines.length; i += 2) blocks.push(lines.slice(i, i + 2).join('\n'));
+  const total = blocks.reduce((n, b) => n + b.length, 0) || 1;
+  const cues: SubtitleCue[] = [];
+  let t = start;
+  for (const b of blocks) {
+    const d = (end - start) * (b.length / total);
+    cues.push({ start: t, end: t + d, text: b });
+    t += d;
+  }
+  return cues;
+}
+
+const srtTime = (s: number) => {
+  const ms = Math.max(0, Math.round(s * 1000));
+  const h = Math.floor(ms / 3600000), m = Math.floor(ms / 60000) % 60, sec = Math.floor(ms / 1000) % 60, r = ms % 1000;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')},${String(r).padStart(3, '0')}`;
+};
+
+export function buildSrt(cues: SubtitleCue[]) {
+  return cues.filter((c) => c.text.trim() && c.end > c.start)
+    .map((c, i) => `${i + 1}\n${srtTime(c.start)} --> ${srtTime(c.end)}\n${c.text}\n`).join('\n');
+}

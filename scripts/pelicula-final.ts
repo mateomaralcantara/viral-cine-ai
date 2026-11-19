@@ -24,7 +24,7 @@ import { currentShotVideo } from '../lib/v7/production/shot-current-video';
 import { listSheets, serieOf } from '../lib/v7/production/character-identity';
 import { speakerKey } from '../lib/v7/production/film-voice-mix';
 import {
-  isOnCamera, pickCasting, planCharacters, shotTiming, voicePlan, voiceSettings, voiceTreatment, VOICE_ALIASES, VOICE_START_SECONDS,
+  buildSrt, cuesForLine, isOnCamera, pickCasting, speechSeconds, type SubtitleCue, planCharacters, shotTiming, voicePlan, voiceSettings, voiceTreatment, VOICE_ALIASES, VOICE_START_SECONDS,
   type AvailableVoice, type Casting, type VoiceLine
 } from '../lib/v7/production/film-voice-mix';
 
@@ -192,7 +192,7 @@ async function shotPart(work: string, index: number, label: string, video: strin
     filter += `;[1:a]${fx}aresample=48000,aformat=channel_layouts=stereo,adelay=${ms}|${ms},volume=1.6,apad[vo];[amb][vo]amix=inputs=2:duration=longest:normalize=0[a]`;
   } else filter += ';[amb]anull[a]';
   await ffmpeg([...input, '-filter_complex', filter, '-map', '[v]', '-map', '[a]', '-t', fmt(t.total), ...ENC, out]);
-  return { out, seconds: t.total, freeze: t.freeze };
+  return { out, seconds: t.total, freeze: t.freeze, voiceSeconds };
 }
 
 async function cardPart(work: string, name: string, lines: string[], seconds: number, voice: string | null, cover: string | null, font: boolean) {
@@ -251,6 +251,7 @@ async function montar() {
   let i = 0;
   let cursor = 0;
   const spans: Array<{ label: string; start: number; seconds: number }> = [];
+  const cues: SubtitleCue[] = [];
   for (const scene of indexedScenes(film)) {
     const sceneStart = cursor;
     for (const { shot, label } of scene.shots) {
@@ -265,6 +266,9 @@ async function montar() {
       if (hasLine && !voice) missingVoice.push(label);
       const p = await shotPart(work, ++i, label, src, voice, ambient, { onCamera, treatment: voiceTreatment(speaker) });
       parts.push(p.out);
+      const line = (shot.spokenText ?? '').trim();
+      if (line && voice && p.voiceSeconds) cues.push(...cuesForLine(line, cursor + VOICE_START_SECONDS, cursor + VOICE_START_SECONDS + p.voiceSeconds));
+      else if (line && onCamera) cues.push(...cuesForLine(line, cursor + 0.3, Math.min(cursor + p.seconds - 0.15, cursor + 0.3 + speechSeconds(line) + 0.6)));
       cursor += p.seconds;
       console.log(`  OK ${label}${current?.repaired ? ' (reparada)' : ''}  ${p.seconds.toFixed(1)} s${onCamera ? '  diálogo en cámara' : ''}${p.freeze ? ` (alargada ${p.freeze.toFixed(1)} s para la voz)` : ''}${voice ? '' : hasLine ? '  SIN VOZ' : ''}`);
     }
@@ -296,39 +300,59 @@ async function montar() {
   const globalMusic = option('--musica') ?? ((await exists(path.join(root, 'musica.mp3'))) ? path.join(root, 'musica.mp3') : undefined);
   if (globalMusic && !(await exists(globalMusic))) throw new Error('No encuentro la música: ' + globalMusic);
   // Música por secuencia: <película>\musica\E01.mp3 (o .wav/.m4a). Si falta, la global (si hay).
-  const cues: Array<{ file: string; start: number; seconds: number }> = [];
+  const tracks: Array<{ file: string; start: number; seconds: number }> = [];
   for (const span of spans) {
     let file: string | undefined;
     for (const ext of ['mp3', 'wav', 'm4a']) { const f = path.join(root, 'musica', `${span.label}.${ext}`); if (await exists(f)) { file = f; break; } }
-    if (file) cues.push({ file, start: span.start, seconds: span.seconds });
+    if (file) tracks.push({ file, start: span.start, seconds: span.seconds });
   }
-  if (!cues.length && globalMusic) cues.push({ file: globalMusic, start: 0, seconds: total });
+  if (!tracks.length && globalMusic) tracks.push({ file: globalMusic, start: 0, seconds: total });
   const safeTitle = film.title.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase().slice(0, 80);
   const final = path.join(finalDir, `${safeTitle}-${stamp}.mp4`);
   const master = 'loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000';
-  if (cues.length) {
+  if (tracks.length) {
     const inputs = ['-i', joined];
     const chains: string[] = ['[0:a]asplit=2[dlg][key]'];
-    cues.forEach((c, k) => {
+    tracks.forEach((c, k) => {
       inputs.push('-stream_loop', '-1', '-i', c.file);
       const ms = Math.round(c.start * 1000);
       const fadeOut = Math.max(0, c.seconds - 2.5);
       chains.push(`[${k + 1}:a]aresample=48000,aformat=channel_layouts=stereo,atrim=0:${fmt(c.seconds)},asetpts=PTS-STARTPTS,` +
         `afade=t=in:d=1.5,afade=t=out:st=${fmt(fadeOut)}:d=2.5,volume=0.3,adelay=${ms}|${ms}[m${k}]`);
     });
-    const mix = cues.map((_, k) => `[m${k}]`).join('');
+    const mix = tracks.map((_, k) => `[m${k}]`).join('');
     // La música baja sola cuando hay voz (los diálogos siempre se entienden).
-    chains.push(`${mix}amix=inputs=${cues.length}:duration=longest:normalize=0,apad,atrim=0:${fmt(total)}[mus]`);
+    chains.push(`${mix}amix=inputs=${tracks.length}:duration=longest:normalize=0,apad,atrim=0:${fmt(total)}[mus]`);
     chains.push('[mus][key]sidechaincompress=threshold=0.02:ratio=10:attack=15:release=450[duck]');
     chains.push(`[dlg][duck]amix=inputs=2:duration=first:normalize=0,${master}[a]`);
     await ffmpeg([...inputs, '-filter_complex', chains.join(';'), '-map', '0:v', '-map', '[a]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', final]);
   } else {
     await ffmpeg(['-i', joined, '-af', master, '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', final]);
   }
-  const music = cues.length > 0;
+  const music = tracks.length > 0;
+  // Subtítulos en español: archivo .srt + pista seleccionable dentro del MP4.
+  let burned = '';
+  if (cues.length) {
+    const srt = final.replace(/\.mp4$/, '.srt');
+    await writeFile(srt, buildSrt(cues), 'utf8');
+    const withSubs = path.join(work, 'con-subtitulos.mp4');
+    await ffmpeg(['-i', final, '-i', srt, '-map', '0:v', '-map', '0:a', '-map', '1:0', '-c', 'copy', '-c:s', 'mov_text',
+      '-metadata:s:s:0', 'language=spa', '-metadata:s:s:0', 'title=Español', '-disposition:s:0', 'default', '-movflags', '+faststart', withSubs]);
+    await rm(final, { force: true });
+    await rename(withSubs, final).catch(async () => { await copyFile(withSubs, final); });
+    if (flag('--subtitulos-fijos')) {
+      // Grabados en la imagen (para redes sociales): se ven en cualquier reproductor.
+      await copyFile(srt, path.join(work, 'subs.srt'));
+      burned = final.replace(/\.mp4$/, '-subtitulada.mp4');
+      const style = "FontName=Arial,FontSize=20,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=2,Shadow=0,MarginV=34";
+      await ffmpeg(['-i', final, '-vf', `subtitles=subs.srt:force_style='${style}'`, '-map', '0:v', '-map', '0:a',
+        '-c:v', 'libx264', '-preset', 'medium', '-crf', '19', '-c:a', 'copy', '-movflags', '+faststart', burned], work);
+    }
+  }
   await rm(work, { recursive: true, force: true });
-  console.log(`\nPELÍCULA LISTA: ${parts.length} partes, ${Math.round(total)} s (${(total / 60).toFixed(1)} min)${music ? `, con música (${cues.length} pista${cues.length > 1 ? 's' : ''})` : ', sin música'}.`);
+  console.log(`\nPELÍCULA LISTA: ${parts.length} partes, ${Math.round(total)} s (${(total / 60).toFixed(1)} min)${music ? `, con música (${tracks.length} pista${tracks.length > 1 ? 's' : ''})` : ', sin música'}.`);
   console.log('Archivo: ' + final);
+  if (cues.length) console.log(`Subtítulos en español: ${cues.length} (pista seleccionable en el MP4 y archivo .srt)` + (burned ? `\nVersión con subtítulos grabados: ${burned}` : '  ·  para grabarlos en la imagen: --subtitulos-fijos'));
   if (missingVideo.length) console.log('Sin video todavía: ' + missingVideo.join(', '));
   if (missingVoice.length) console.log('Sin voz todavía: ' + missingVoice.join(', ') + '  ->  npm run voces -- ' + key + ' --generar');
 }

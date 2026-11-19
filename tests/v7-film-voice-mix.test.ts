@@ -36,3 +36,13 @@ test('shotTiming: alarga la toma solo si la voz no cabe', () => {
   assert.deepEqual(shotTiming(8, 9), { total: 9.95, freeze: 1.95 });
   assert.deepEqual(shotTiming(8, null), { total: 8, freeze: 0 });
 });
+
+test('subtítulos: líneas de 42 caracteres, máx. 2 por bloque y formato SRT', async () => {
+  const { wrapSubtitle, cuesForLine, buildSrt } = await import('../lib/v7/production/film-voice-mix');
+  const text = 'Si pudieras elegir entre haber existido y no haber nacido nunca... ¿qué elegirías?';
+  assert.ok(wrapSubtitle(text).every((l) => l.length <= 42));
+  const cues = cuesForLine(text + ' ' + text, 10, 20);
+  assert.ok(cues.length >= 2 && cues.every((c) => c.text.split('\n').length <= 2));
+  assert.equal(cues[0].start, 10); assert.ok(Math.abs(cues.at(-1)!.end - 20) < 1e-9);
+  assert.match(buildSrt([{ start: 3723.5, end: 3725, text: 'Hola' }]), /^1\n01:02:03,500 --> 01:02:05,000\nHola\n/);
+});
