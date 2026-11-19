@@ -71,6 +71,14 @@ async function main() {
     const seconds = scene.scene.durationSeconds;
     jobs.push({ label: scene.label, title: scene.scene.title, prompt, seconds, clips: Math.min(6, Math.max(1, Math.ceil(seconds / (CLIP_SECONDS - 3)))) });
   }
+  // Tema principal de la apertura (reparto y agentes, ~40 s).
+  if (!only || only === 'APERTURA') {
+    const out = path.join(musicDir, 'APERTURA.wav');
+    if (!flag('--repetir') && await exists(out)) console.log('  APERTURA: ya tiene música');
+    else jobs.unshift({ label: 'APERTURA', title: 'Tema principal (apertura)', seconds: 45, clips: 2,
+      prompt: typeof film.metadata?.openingMusicPrompt === 'string' ? film.metadata.openingMusicPrompt
+        : 'Original cinematic main title theme, solemn, mysterious and emotional: deep strings, a solo cello melody, soft wordless choir pads, slow majestic build. No vocals.' });
+  }
   const clips = jobs.reduce((n, j) => n + j.clips, 0);
   console.log(`Música original (${MODEL}): ${jobs.length} secuencias, ${clips} fragmentos de 30 s · costo ~US$${(clips * CLIP_USD).toFixed(2)}`);
   for (const j of jobs) console.log(`  ${j.label}  ${j.title}  (~${j.seconds} s -> ${j.clips} fragmento${j.clips > 1 ? 's' : ''})`);

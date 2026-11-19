@@ -5,6 +5,7 @@
  *   npm run voces -- convidados --generar   genera con ElevenLabs solo las voces que faltan
  *   npm run montar -- convidados            película final: video + voces + (música) + cierre. Gratis, local.
  *       --musica "C:\ruta\cancion.mp3"     música de fondo (o deja musica.mp3 en la carpeta de la película)
+ *       --sin-apertura / --sin-creditos      sin la apertura (reparto y agentes) o sin los créditos finales
  *       --sin-ambiente                     quita el sonido original de Veo
  *       --ingles                           añade subtítulos en inglés (traducción con Gemini, céntimos)
  *       --subtitulos-fijos                 versión extra con los subtítulos grabados (español; con --fijos-en-ingles, inglés)
@@ -13,7 +14,7 @@
  * <película>\final\<título>-<fecha>.mp4. Nunca borra videos ni voces: lo reemplazado va a voces\archivo.
  */
 import { execFile } from 'node:child_process';
-import { access, copyFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { access, copyFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import nextEnv from '@next/env';
@@ -23,7 +24,8 @@ import { PRIMERA_PAGINA_ID } from '../lib/v7/presets/la-primera-pagina';
 import { readV7FilmBundle, v7FilmRoot } from '../lib/v7/storage/film-store';
 import { indexedScenes } from '../lib/v7/production/scene-approval-board';
 import { currentShotVideo } from '../lib/v7/production/shot-current-video';
-import { listSheets, serieOf } from '../lib/v7/production/character-identity';
+import { listPhotos, listSheets, masterPath, serieOf } from '../lib/v7/production/character-identity';
+import { agentCredits, chunk, endCredits, type ProductionFacts } from '../lib/v7/production/film-credits';
 import { speakerKey } from '../lib/v7/production/film-voice-mix';
 import { translateToEnglish } from '../lib/v7/production/subtitle-translate';
 import {
@@ -228,6 +230,131 @@ async function cardPart(work: string, name: string, lines: string[], seconds: nu
   return out;
 }
 
+type CardText = { text: string; size: number; color?: string; gap?: number };
+let cardCount = 0;
+/** Tarjeta de créditos: textos centrados, o retrato a la izquierda y textos a la derecha. */
+async function creditCard(work: string, items: CardText[], seconds: number, font: boolean, portrait: string | null = null) {
+  const name = 'credito-' + String(++cardCount).padStart(3, '0');
+  const out = path.join(work, name + '.mp4');
+  const inputs = ['-f', 'lavfi', '-t', fmt(seconds), '-i', 'color=c=0x07070b:s=1280x720:r=24'];
+  if (portrait) inputs.push('-loop', '1', '-t', fmt(seconds), '-i', portrait);
+  inputs.push('-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo');
+  const heights = items.map((t) => t.size * 1.35 + (t.gap ?? 0));
+  let y = Math.round((720 - heights.reduce((a, b) => a + b, 0)) / 2);
+  const fontPart = font ? 'fontfile=fuente.ttf:' : '';
+  const draws: string[] = [];
+  for (const [k, t] of items.entries()) {
+    const file = `${name}-${k}.txt`;
+    await writeFile(path.join(work, file), t.text, 'utf8');
+    const x = portrait ? '660' : '(w-tw)/2';
+    draws.push(`drawtext=${fontPart}textfile=${file}:fontcolor=${t.color ?? 'white'}:fontsize=${t.size}:x=${x}:y=${y + (t.gap ?? 0)}`);
+    y += heights[k];
+  }
+  const fade = `fade=t=in:st=0:d=0.6,fade=t=out:st=${fmt(seconds - 0.6)}:d=0.6`;
+  let filter: string;
+  if (portrait) {
+    // Retrato con un leve acercamiento (efecto Ken Burns) y marco dorado fino.
+    filter = `[1:v]crop='min(iw,trunc(ih*0.8/2)*2)':ih,scale=-2:520,setsar=1,pad=iw+6:ih+6:3:3:color=0xb8963e,` +
+      `zoompan=z='min(zoom+0.0006,1.06)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=wxh:fps=24[pt];` +
+      `[0:v][pt]overlay=x=110:y=(H-h)/2:shortest=1,${draws.join(',')},format=yuv420p,${fade}[v]`;
+    // zoompan necesita conocer el tamaño de salida: se calcula del retrato escalado.
+    const { stdout } = await run('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', portrait]);
+    const [w, h] = stdout.trim().split(',').map(Number);
+    const sw = Math.round((Math.min(w, Math.floor(h * 0.8 / 2) * 2) / h) * 520 / 2) * 2 + 6;
+    filter = filter.replace('s=wxh', `s=${sw}x526`);
+  } else {
+    filter = `[0:v]${draws.join(',')},format=yuv420p,${fade}[v]`;
+  }
+  const audioIndex = portrait ? 2 : 1;
+  await ffmpeg([...inputs, '-filter_complex', filter + `;[${audioIndex}:a]anull[a]`, '-map', '[v]', '-map', '[a]', '-t', fmt(seconds), ...ENC, out], work);
+  return { out, seconds };
+}
+
+/** Lo que de verdad se usó en la película, leído de los registros de producción. */
+async function productionFacts(film: Awaited<ReturnType<typeof readV7FilmBundle>>['film'], shotVideos: Map<string, { file: string; repaired: boolean } | null>) {
+  const models = new Set<string>();
+  let platform: 'vertex' | 'gemini' | undefined;
+  let reviewed = false;
+  let onCamera = false;
+  for (const scene of indexedScenes(film)) for (const { shot, label } of scene.shots) {
+    const dir = path.join(root, label.toLowerCase());
+    const rec = await readJson<{ model?: string; platform?: 'vertex' | 'gemini' } | null>(path.join(dir, 'provider-operation.json'), null);
+    if (rec?.model && shotVideos.get(label)) { models.add(rec.model); platform ??= rec.platform; }
+    if (await exists(path.join(dir, 'runway-gen4-turbo-operation.json')) && shotVideos.get(label)) models.add('runway-gen4-turbo');
+    if (!reviewed) { try { reviewed = (await readdir(path.join(dir, 'calidad'))).some((f) => f.endsWith('.json')); } catch { /* sin revisión */ } }
+    if (isOnCamera(shot) && shotVideos.get(label)) onCamera = true;
+  }
+  const casting = await readJson<Casting>(castingFile, {});
+  const voiceCast: Array<{ character: string; voice: string }> = [];
+  const keys = new Set(voicePlan(film).map((l) => l.speaker));
+  for (const c of film.characters) {
+    const k = speakerKey(film.id, c.id);
+    const v = casting[VOICE_ALIASES[k] ?? k];
+    if (keys.has(k) && v && await exists(voiceDir)) voiceCast.push({ character: c.name, voice: v.name.split(' - ')[0] + ' (ElevenLabs)' + (VOICE_ALIASES[k] ? ' · tratamiento interior' : '') });
+  }
+  let music = false;
+  try { music = (await readdir(path.join(root, 'musica'))).some((f) => /\.(wav|mp3|m4a)$/i.test(f)); } catch { /* sin música */ }
+  const serie = serieOf(film);
+  let identities = 0;
+  for (const sheet of await listSheets(serie)) {
+    if (sheet.aprobado && film.characters.some((c) => speakerKey(film.id, c.id) === sheet.key)) identities++;
+  }
+  const [title, subtitle] = film.title.split('·').map((t) => t.trim());
+  const facts: ProductionFacts = {
+    title, subtitle, author: typeof film.metadata?.author === 'string' ? film.metadata.author : undefined,
+    videoModels: [...models], videoPlatform: platform, voiceCast, dialogueOnCamera: onCamera, originalMusic: music,
+    qualityReviewed: reviewed, repairedShots: [...shotVideos.values()].filter((v) => v?.repaired).length,
+    characterIdentities: identities, englishSubtitles: flag('--ingles'), spanishSubtitles: true
+  };
+  return facts;
+}
+
+/** Retrato del personaje: el oficial aprobado o, si no hay, su primera foto. */
+async function portraitOf(serie: string, key: string) {
+  if (await exists(masterPath(serie, key))) return masterPath(serie, key);
+  const photos = await listPhotos(serie, key);
+  return photos[0] ?? null;
+}
+
+async function openingSequence(work: string, film: Awaited<ReturnType<typeof readV7FilmBundle>>['film'], facts: ProductionFacts, font: boolean) {
+  const cards: Array<{ out: string; seconds: number }> = [];
+  const gold = '0xd9b45a', grey = '0xb9b9c4';
+  cards.push(await creditCard(work, [{ text: 'VIRALCINE STUDIO', size: 56, color: gold }, { text: 'presenta', size: 30, color: grey, gap: 10 }], 3.5, font));
+  cards.push(await creditCard(work, [{ text: 'Una película creada por', size: 30, color: grey }, { text: 'agentes de inteligencia artificial', size: 44, gap: 8 }], 3.5, font));
+  for (const group of chunk(agentCredits(facts), 3)) {
+    cards.push(await creditCard(work, group.flatMap((c, k) => [{ text: c.role.toUpperCase(), size: 22, color: grey, gap: k ? 26 : 0 }, { text: c.name, size: 38 }]), 4.5, font));
+  }
+  const serie = serieOf(film);
+  const visual = film.characters.filter((c) => !/sin imagen/i.test(c.appearance));
+  for (const c of visual) {
+    const key = speakerKey(film.id, c.id);
+    const portrait = await portraitOf(serie, key);
+    if (!portrait) continue;
+    const sheet = (await listSheets(serie)).find((x) => x.key === key);
+    cards.push(await creditCard(work, [
+      { text: (sheet?.nombre ?? c.name).toUpperCase(), size: 50, color: gold },
+      { text: (sheet?.notas ? sheet.notas.split('.')[0] : c.role), size: 26, color: grey, gap: 14 },
+      ...(sheet?.aprobado ? [{ text: 'Identidad oficial · Agente de Casting', size: 20, color: grey, gap: 30 }] : [])
+    ], 3.5, font, portrait));
+  }
+  const voiceOnly = film.characters.filter((c) => /sin imagen/i.test(c.appearance)).map((c) => facts.voiceCast.find((v) => v.character === c.name)).filter(Boolean) as ProductionFacts['voiceCast'];
+  if (voiceOnly.length) {
+    cards.push(await creditCard(work, [{ text: 'VOCES', size: 24, color: grey }, ...voiceOnly.map((v, k) => ({ text: `${v.character}  ·  ${v.voice.replace(' (ElevenLabs)', '')}`, size: 32, gap: k ? 4 : 14 }))], 4.5, font));
+  }
+  if (facts.author) cards.push(await creditCard(work, [{ text: 'Basada en la novela de', size: 30, color: grey }, { text: facts.author, size: 52, gap: 8 }], 3.5, font));
+  cards.push(await creditCard(work, [{ text: facts.title, size: 62, color: gold }, ...(facts.subtitle ? [{ text: facts.subtitle, size: 30, gap: 16 }] : [])], 5, font));
+  return cards;
+}
+
+async function endCreditsSequence(work: string, facts: ProductionFacts, font: boolean) {
+  const grey = '0xb9b9c4';
+  const cards: Array<{ out: string; seconds: number }> = [];
+  for (const group of chunk(endCredits(facts), 5)) {
+    cards.push(await creditCard(work, group.flatMap((c, k) => [{ text: c.role, size: 20, color: grey, gap: k ? 20 : 0 }, { text: c.name, size: 32 }]), 5, font));
+  }
+  return cards;
+}
+
 /** Parte la pregunta en dos líneas por la coma más cercana al centro. */
 function splitLine(text: string): string[] {
   if (text.length <= 42) return [text];
@@ -251,15 +378,27 @@ async function montar() {
   const parts: string[] = [];
   const missingVideo: string[] = [];
   const missingVoice: string[] = [];
+  // Videos de cada toma (una sola lectura) y datos reales de producción para los créditos.
+  const shotVideos = new Map<string, { file: string; repaired: boolean } | null>();
+  for (const scene of indexedScenes(film)) for (const { label } of scene.shots) shotVideos.set(label, await currentShotVideo(path.join(root, label.toLowerCase()), label));
+  const facts = await productionFacts(film, shotVideos);
   let i = 0;
   let cursor = 0;
+  const spansOpening: Array<{ label: string; start: number; seconds: number }> = [];
+  if (!flag('--sin-apertura')) {
+    const opening = await openingSequence(work, film, facts, font);
+    for (const c of opening) { parts.push(c.out); cursor += c.seconds; }
+    spansOpening.push({ label: 'APERTURA', start: 0, seconds: cursor });
+    console.log(`  OK apertura: ${opening.length} tarjetas (${cursor.toFixed(1)} s) · reparto y agentes`);
+  }
   const spans: Array<{ label: string; start: number; seconds: number }> = [];
+  spans.push(...spansOpening);
   const cues: SubtitleCue[] = [];
   for (const scene of indexedScenes(film)) {
     const sceneStart = cursor;
     for (const { shot, label } of scene.shots) {
       const dir = path.join(root, label.toLowerCase());
-      const current = await currentShotVideo(dir, label);
+      const current = shotVideos.get(label) ?? null;
       const src = current?.file;
       if (!src) { missingVideo.push(label); continue; }
       const onCamera = isOnCamera(shot);
@@ -293,6 +432,11 @@ async function montar() {
   const endLines = Array.isArray(film.metadata?.endCardLines) ? (film.metadata.endCardLines as unknown[]).map(String) : null;
   parts.push(await cardPart(work, 'cierre-titulo', endLines ?? [book[0].trim().toUpperCase(), ...(book[1] ? [book[1].trim()] : []), ...(author ? [author] : [])], 6, null, endLines ? null : cover, font));
   console.log('  OK cierre: ' + (cover ? 'portada del libro' : 'título del libro'));
+  if (!flag('--sin-creditos')) {
+    const credits = await endCreditsSequence(work, facts, font);
+    for (const c of credits) parts.push(c.out);
+    console.log(`  OK créditos finales: ${credits.length} tarjetas`);
+  }
 
   const list = path.join(work, 'lista.txt');
   await writeFile(list, parts.map((p) => "file '" + p.replace(/\\/g, '/') + "'").join('\n') + '\n', 'ascii');
