@@ -12,7 +12,11 @@
  * «convidados» puede ser el nombre corto de una película o directamente el de la serie.
  * Las fotos se suben copiándolas a <personaje>\fotos (jpg, png o webp; 1 a 3 fotos).
  */
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
+import { mkdtemp, rm } from 'node:fs/promises';
+import os from 'node:os';
+import { promisify } from 'node:util';
+import { CONVIDADOS_REPARTO, CONVIDADOS_SERIE } from '../lib/v7/presets/convidados-reparto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -22,18 +26,19 @@ import { PRIMERA_PAGINA_ID } from '../lib/v7/presets/la-primera-pagina';
 import { readV7FilmBundle, v7FilmRoot } from '../lib/v7/storage/film-store';
 import {
   assertKey, characterDir, characterKeyFromId, hasMaster, listPhotos, listSheets, masterFromPhotosPrompt, masterPath,
-  newSheet, nextOrder, photosDir, readSheet, serieOf, writeSheet, type CharacterSheet
+  newSheet, nextOrder, photosDir, savePhoto, readSheet, serieOf, writeSheet, type CharacterSheet
 } from '../lib/v7/production/character-identity';
 import { GeminiImageMaker, IMAGE_USD, imageRef } from '../lib/v7/production/gemini-image';
 import { importFromScript } from '../lib/v7/production/character-studio';
 
 nextEnv.loadEnvConfig(process.cwd());
+const run = promisify(execFile);
 const FILMS: Record<string, string> = { convidados: CONVIDADOS_ID, primera: PRIMERA_PAGINA_ID };
 const [cmd, target, who] = process.argv.slice(2).filter((a, i, all) => !a.startsWith('--') && !(i > 0 && all[i - 1].startsWith('--')));
 const args = process.argv.slice(2);
 const flag = (f: string) => args.includes(f);
 const option = (f: string) => { const i = args.indexOf(f); return i >= 0 ? args[i + 1] : undefined; };
-const USAGE = 'Uso: npm run personaje -- importar|lista|nuevo|carpeta|maestro|aprobar <película o serie> [personaje]';
+const USAGE = 'Uso: npm run personaje -- importar|reparto|lista|nuevo|carpeta|maestro|aprobar <película o serie> [personaje]';
 
 async function resolveSerie(name: string | undefined) {
   if (!name) throw new Error(USAGE);
@@ -56,6 +61,36 @@ async function main() {
       const created = await importFromScript(filmId);
       console.log(created.length ? '  Fichas creadas: ' + created.join(', ') : '  Todas las fichas ya existían (no se tocan).');
       console.log(`\nSerie «${serie}». Lo más cómodo: en el estudio, pestaña PERSONAJES · IDENTIDAD.`);
+      return;
+    }
+    case 'reparto': {
+      // npm run personaje -- reparto convidados "C:\ruta\hoja-de-personajes.png"
+      const sheetImage = process.argv.slice(2).filter((a) => !a.startsWith('--'))[2];
+      if (!sheetImage) throw new Error('Indica la ruta de la imagen del reparto entre comillas.');
+      if (serie !== CONVIDADOS_SERIE) throw new Error('Este reparto es de la serie ' + CONVIDADOS_SERIE + '.');
+      const { stdout } = await run('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', sheetImage]);
+      const [w, h] = stdout.trim().split(',').map(Number);
+      if (!w || !h) throw new Error('No pude leer la imagen: ' + sheetImage);
+      const tmp = await mkdtemp(path.join(os.tmpdir(), 'reparto-'));
+      try {
+        for (const [i, m] of CONVIDADOS_REPARTO.entries()) {
+          const [fx, fy, fw, fh] = m.box;
+          const out = path.join(tmp, m.key + '.jpg');
+          await run('ffmpeg', ['-nostdin', '-v', 'error', '-y', '-i', sheetImage, '-vf',
+            `crop=${Math.round(fw * w)}:${Math.round(fh * h)}:${Math.round(fx * w)}:${Math.round(fy * h)},scale=-2:720:flags=lanczos`, '-q:v', '2', out]);
+          const old = await readSheet(serie, m.key);
+          const sheet: CharacterSheet = old
+            ? { ...old, nombre: m.nombre, descripcion: old.descripcion || m.descripcion, notas: old.notas || m.rol, orden: i + 1 }
+            : { ...newSheet(m.key, m.nombre, m.descripcion), notas: m.rol, orden: i + 1 };
+          await writeSheet(serie, sheet);
+          const bytes = await readFile(out);
+          const hash = createHash('sha256').update(bytes).digest('hex').slice(0, 8);
+          const already = (await listPhotos(serie, m.key)).some((f) => f.includes(hash));
+          if (!already) await savePhoto(serie, m.key, bytes);
+          console.log(`  ${String(i + 1).padStart(2)}. ${m.nombre.padEnd(20)} ${old ? 'ficha actualizada' : 'ficha creada'}${already ? '' : ' + foto'}`);
+        }
+      } finally { await rm(tmp, { recursive: true, force: true }); }
+      console.log(`\n${CONVIDADOS_REPARTO.length} personajes listos. Ábrelos en el estudio, pestaña PERSONAJES · IDENTIDAD.`);
       return;
     }
     case 'lista': {

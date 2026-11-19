@@ -58,7 +58,7 @@ async function main() {
     const revision = await latestPromptRevision(filmId, label).catch(() => null);
     const current = revision?.promptText ?? shot.visualPrompt;
     const inScene = approved.filter((s) => shot.characterIds.some((id) => characterKeyFromId(id) === s.key));
-    const named = inScene.filter((s) => shotShows(s.nombre.replace(/^(el|la)\s+/i, ''), current));
+    const named = inScene.filter((s) => shotShows(s.nombre.replace(/^(el|la)\s+/i, '').split(/\s+/)[0], current));
     const cast = (named.length ? named : inScene).slice(0, 3);
     if (!cast.length) continue;
     let report: (IdentityReport & { promptSugerido?: string }) | null = null;
