@@ -26,9 +26,20 @@ export async function originalShotVideo(dir: string, label: string) {
 export const repairedVideoPath = (dir: string, label: string) => path.join(dir, label + '-reparada.mp4');
 export const repairRecordPath = (dir: string, label: string) => path.join(dir, 'reparacion', label + '-reparada.json');
 
+export const trimmedVideoPath = (dir: string, label: string) => path.join(dir, label + '-recortada.mp4');
+export const trimmedRecordPath = (dir: string, label: string) => path.join(dir, label + '-recortada.json');
+
 export async function currentShotVideo(dir: string, label: string, opts: { dialogue?: boolean } = {}): Promise<{ file: string; repaired: boolean } | null> {
   const original = await originalShotVideo(dir, label);
   if (!original) return null;
+  // Recorte hecho por el autor (se quitó un trozo que no se entendía): misma voz y labios sincronizados.
+  const trimmed = trimmedVideoPath(dir, label);
+  if (await exists(trimmed)) {
+    try {
+      const rec = JSON.parse(await readFile(trimmedRecordPath(dir, label), 'utf8')) as { originalSha256?: string };
+      if (rec.originalSha256 && rec.originalSha256 === await fileSha256(original)) return { file: trimmed, repaired: true };
+    } catch { /* sin registro válido */ }
+  }
   const repaired = repairedVideoPath(dir, label);
   if (await exists(repaired)) {
     try {

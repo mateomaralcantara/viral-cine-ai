@@ -1,19 +1,18 @@
 /**
- * ARREGLAR UNA FRASE (solo audio, sin regenerar video) y FIJAR la toma.
+ * QUITAR LO QUE NO SE ENTIENDE de una toma, conservando la voz ORIGINAL del personaje, y FIJARLA.
  *
- *   npm run frase -- episodio1 --toma E01-P10 --conservar "Si Dios existe" --resto "voy a pedirle que te deje conmigo"
+ *   npm run frase -- episodio1 --quitar E01-P10                 plan: qué trozo se quitaría (céntimos, no cambia nada)
+ *   npm run frase -- episodio1 --quitar E01-P10 --aplicar       lo quita
+ *   npm run frase -- episodio1 --quitar E01-P10 --tramo 1.8-3.4 --aplicar   quitar un tramo exacto (segundos)
  *
- * 1. Escucha la toma y encuentra dónde termina lo que se conserva (transcripción con tiempos + pausa real).
- * 2. Borra lo que viene después (lo que no se entiende).
- * 3. Continúa con el resto de la frase en la voz oficial del personaje.
- * 4. Fija la toma: ningún agente la vuelve a tocar.
- * El video no cambia. El original nunca se borra.
+ * Se recorta ese trozo del VIDEO y del AUDIO a la vez: la voz es la original y los labios siguen
+ * sincronizados. No se añade ninguna voz. El original nunca se borra. La toma queda fijada.
  *
  *   npm run frase -- episodio1 --fijar E01-P01,E01-P02     solo fijar tomas
  *   npm run frase -- episodio1 --soltar E01-P10            quitar la fijación
  */
 import { execFile } from 'node:child_process';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import nextEnv from '@next/env';
@@ -21,7 +20,7 @@ import { FILM_KEYS } from '../lib/v7/presets/film-registry';
 import { readV7FilmBundle, v7FilmRoot } from '../lib/v7/storage/film-store';
 import { indexedScenes } from '../lib/v7/production/scene-approval-board';
 import { googleClient, videoPlatform } from '../lib/v7/production/scene-veo-engine';
-import { currentShotVideo, fileSha256 } from '../lib/v7/production/shot-current-video';
+import { currentShotVideo, fileSha256, originalShotVideo, trimmedRecordPath, trimmedVideoPath } from '../lib/v7/production/shot-current-video';
 import { speakerKey, voiceSettings } from '../lib/v7/production/film-voice-mix';
 import { lockShot, unlockShot } from '../lib/v7/production/shot-lock';
 import { QA_MODELS } from '../lib/v7/qa/shot-vision-runner';
@@ -76,9 +75,66 @@ async function tts(text: string, voiceId: string, speaker: string, out: string) 
   await writeFile(out, Buffer.from(await res.arrayBuffer()));
 }
 
+type Word = { palabra: string; inicio: number; fin: number; inteligible: boolean };
+/** Palabras con tiempos; marca las que no son español real o no se entienden. */
+async function wordsOf(audio: string): Promise<Word[]> {
+  const platform = videoPlatform();
+  const ai = googleClient(platform, platform === 'vertex' ? (process.env.V7_QA_LOCATION?.trim() || 'global') : undefined);
+  const data = (await readFile(audio)).toString('base64');
+  const prompt = 'Escucha este audio en español. Lista TODAS las palabras habladas en orden con su inicio y fin en segundos. ' +
+    'Marca inteligible=false las que no son palabras reales del español o no se entienden. ' +
+    'Responde solo JSON: [{"palabra":"…","inicio":0.0,"fin":0.0,"inteligible":true}]';
+  for (const model of QA_MODELS) {
+    try {
+      const res = await ai.models.generateContent({ model, contents: [{ role: 'user', parts: [{ inlineData: { mimeType: 'audio/mp3', data } }, { text: prompt }] }],
+        config: { temperature: 0, responseMimeType: 'application/json' } });
+      const list = JSON.parse(res.text ?? '[]') as Word[];
+      if (Array.isArray(list)) return list.filter((w) => Number.isFinite(w.inicio) && Number.isFinite(w.fin));
+    } catch (e) { if (!/404|NOT_FOUND|not found|is not supported/i.test(String((e as Error)?.message))) throw e; }
+  }
+  throw new Error('No pude escuchar la toma.');
+}
+
+async function quitar(label: string) {
+  const dir = path.join(root, label.toLowerCase());
+  const original = await originalShotVideo(dir, label);
+  if (!original) throw new Error('La toma ' + label + ' no tiene video.');
+  const duration = Number((await run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', original])).stdout.trim());
+  let from: number, to: number;
+  const manual = option('--tramo');
+  if (manual) {
+    [from, to] = manual.split('-').map(Number);
+    if (!(from >= 0 && to > from && to <= duration + 0.01)) throw new Error('Tramo inválido. Ejemplo: --tramo 1.8-3.4');
+  } else {
+    const work = path.join(root, 'voces', 'frases');
+    await mkdir(work, { recursive: true });
+    const audio = path.join(work, `${label}-escucha.mp3`);
+    await run('ffmpeg', ['-nostdin', '-v', 'error', '-y', '-i', original, '-vn', '-ac', '1', '-ar', '22050', audio]);
+    const words = await wordsOf(audio);
+    console.log('Se oye: ' + words.map((w) => (w.inteligible ? w.palabra : `[${w.palabra}]`) + `(${w.inicio.toFixed(1)})`).join(' '));
+    const bad = words.filter((w) => !w.inteligible);
+    if (!bad.length) { console.log(`${label}: todo se entiende; no hay nada que quitar.`); return; }
+    from = Math.max(0, bad[0].inicio - 0.05);
+    to = Math.min(duration, bad[bad.length - 1].fin + 0.05);
+  }
+  console.log(`${label}: se quitaría del segundo ${from.toFixed(2)} al ${to.toFixed(2)} (${(to - from).toFixed(2)} s), en video y audio.`);
+  if (!args.includes('--aplicar')) { console.log('No se cambió nada. Para aplicarlo, repite con --aplicar'); return; }
+  const out = trimmedVideoPath(dir, label);
+  const keep = `not(between(t,${from.toFixed(3)},${to.toFixed(3)}))`;
+  await run('ffmpeg', ['-nostdin', '-v', 'error', '-y', '-i', original, '-filter_complex',
+    `[0:v]select='${keep}',setpts=N/FRAME_RATE/TB[v];[0:a]aselect='${keep}',asetpts=N/SR/TB,afade=t=in:st=${from.toFixed(3)}:d=0.04[a]`,
+    '-map', '[v]', '-map', '[a]', '-c:v', 'libx264', '-crf', '18', '-preset', 'medium', '-c:a', 'aac', '-ar', '48000', out]);
+  await writeFile(trimmedRecordPath(dir, label), JSON.stringify({ label, originalSha256: await fileSha256(original), from, to, createdAt: new Date().toISOString() }, null, 2) + '\n');
+  // Cualquier frase añadida antes con otra voz queda desactivada.
+  for (const f of [`${label}.editada.mp3`, `${label}.editada.json`]) await rm(path.join(root, 'voces', f), { force: true });
+  await lockShot(dir, `se quitó lo que no se entendía (${from.toFixed(2)}–${to.toFixed(2)} s)`);
+  console.log(`${label}: listo. Voz original de Martin, sin el trozo ininteligible. FIJADA. Siguiente: npm run montar -- ${key}`);
+}
+
 async function main() {
   for (const label of list('--soltar')) { await unlockShot(path.join(root, label.toLowerCase())); console.log(`${label}: ya no está fijada.`); }
   for (const label of list('--fijar')) { await lockShot(path.join(root, label.toLowerCase()), 'aprobada por el autor'); console.log(`${label}: FIJADA (ningún agente la tocará).`); }
+  for (const l of list('--quitar')) await quitar(l);
   const label = list('--toma')[0];
   const keep = option('--conservar');
   const rest = option('--resto');

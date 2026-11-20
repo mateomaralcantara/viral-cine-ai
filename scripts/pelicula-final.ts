@@ -173,14 +173,6 @@ async function videoHasSpeech(label: string) {
   return (rev?.promptText ?? '').includes('«');
 }
 
-/** Frase arreglada a mano (npm run frase): <toma>.editada.mp3, ligada al video exacto. */
-async function editedVoiceFor(label: string, videoFile: string) {
-  const rec = await readJson<{ sha?: string } | null>(path.join(voiceDir, label + '.editada.json'), null);
-  const file = path.join(voiceDir, label + '.editada.mp3');
-  if (!rec?.sha || !(await exists(file))) return null;
-  return rec.sha === (await fileSha256(videoFile)).slice(0, 16) ? file : null;
-}
-
 /** La voz oficial convertida de esta toma, si corresponde al video que usa la película. */
 async function cameraVoiceFor(label: string, videoFile: string) {
   const rec = await readJson<{ sha?: string } | null>(cameraRecord(label), null);
@@ -557,7 +549,7 @@ async function montar() {
       const onCamera = isOnCamera(shot);
       const speaker = speakerKey(film.id, shot.speakerId);
       const hasLine = !onCamera && (shot.spokenText ?? '').trim().length > 0;
-      const camVoice = onCamera ? (await editedVoiceFor(label, src)) ?? (flag('--voz-oficial-camara') ? await cameraVoiceFor(label, src) : null) : null;
+      const camVoice = onCamera && flag('--voz-oficial-camara') ? await cameraVoiceFor(label, src) : null;
       const voice = camVoice ?? (hasLine && await exists(voiceFile(label)) ? voiceFile(label) : null);
       if (hasLine && !voice) missingVoice.push(label);
       // Voz en off sobre un video que se generó hablando: se silencia el video para que no tape la voz.
