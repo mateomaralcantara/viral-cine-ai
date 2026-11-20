@@ -6,7 +6,8 @@
  *   npm run referencia -- convidados                 tomas a preparar (las que el revisor marcó por la cara)
  *   npm run referencia -- convidados --generar       crear los fotogramas (~US$0.04 cada uno)
  *       --tomas E01-P01,E04-P03     elegir tomas a mano
- *       --todas                     todas las tomas con algún personaje aprobado
+ *       --todas                     todas las tomas donde el texto nombra a un personaje aprobado
+ *       --escena E01                solo esa escena
  *
  * Deja <toma>\E0X-P0Y-referencia.jpg y guarda una versión nueva del texto (el corregido
  * por el revisor si existe). Luego en el estudio: «Rehacer esta toma».
@@ -51,16 +52,20 @@ async function main() {
     return;
   }
   console.log(`Personajes oficiales: ${approved.map((s) => s.nombre).join(', ')}`);
+  const onlyScene = option('--escena')?.toUpperCase();
   const wanted = option('--tomas')?.toUpperCase().split(',').map((s) => s.trim()).filter(Boolean);
   type Job = { label: string; prompt: string; cast: CharacterSheet[]; why: string };
   const jobs: Job[] = [];
   for (const scene of indexedScenes(film)) for (const { shot, label } of scene.shots) {
     if (wanted && !wanted.includes(label)) continue;
+    if (onlyScene && !label.startsWith(onlyScene + '-')) continue;
     const revision = await latestPromptRevision(filmId, label).catch(() => null);
     const current = revision?.promptText ?? shot.visualPrompt;
     const inScene = approved.filter((s) => shot.characterIds.some((id) => characterKeyFromId(id) === s.key));
     const named = inScene.filter((s) => shotShows(s.nombre.replace(/^(el|la)\s+/i, '').split(/\s+/)[0], current));
-    const cast = (named.length ? named : inScene).slice(0, 3);
+    // Solo los personajes que el texto de la toma nombra: una toma sin personas (un objeto,
+    // un paisaje) nunca recibe una cara. A mano (--tomas) se acepta el reparto de la escena.
+    const cast = (named.length ? named : wanted ? inScene : []).slice(0, 3);
     if (!cast.length) continue;
     let report: (IdentityReport & { promptSugerido?: string }) | null = null;
     const dir = path.join(root, label.toLowerCase());
@@ -80,7 +85,7 @@ async function main() {
   console.log(`Fotogramas a crear: ${jobs.length} · costo ~US$${(jobs.length * IMAGE_USD).toFixed(2)}`);
   for (const j of jobs) console.log(`  ${j.label}  ${j.cast.map((c) => c.nombre).join(' + ')}  (${j.why})`);
   if (!flag('--generar')) {
-    console.log('\nNo se generó nada. Para crearlos: npm run referencia -- ' + key + ' --generar' + (wanted ? ' --tomas ' + wanted.join(',') : flag('--todas') ? ' --todas' : ''));
+    console.log('\nNo se generó nada. Para crearlos: npm run referencia -- ' + key + ' --generar' + (wanted ? ' --tomas ' + wanted.join(',') : flag('--todas') ? ' --todas' : '') + (onlyScene ? ' --escena ' + onlyScene : ''));
     return;
   }
   const maker = new GeminiImageMaker();
