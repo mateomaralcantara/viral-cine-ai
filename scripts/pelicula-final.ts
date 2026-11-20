@@ -553,7 +553,10 @@ async function montar() {
       const voice = camVoice ?? (hasLine && await exists(voiceFile(label)) ? voiceFile(label) : null);
       if (hasLine && !voice) missingVoice.push(label);
       // Voz en off sobre un video que se generó hablando: se silencia el video para que no tape la voz.
-      const muteVideo = !onCamera && !!voice && await videoHasSpeech(label);
+      // Si la toma nació como diálogo (frase «» en el guion, plan B anterior o video generado hablando),
+      // su video trae voces: con voz en off se silencia por completo.
+      const bornAsDialogue = (shot.visualPrompt ?? '').includes('«') || shot.metadata?.planB != null;
+      const muteVideo = !onCamera && !!voice && (bornAsDialogue || await videoHasSpeech(label));
       const p = await shotPart(work, ++i, label, src, voice, ambient, { onCamera, cameraVoice: !!camVoice, muteVideo, treatment: camVoice ? null : voiceTreatment(speaker) });
       parts.push(p.out);
       const line = (shot.spokenText ?? '').trim();
