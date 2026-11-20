@@ -8,13 +8,14 @@
  *       --tomas E01-P01,E04-P03     elegir tomas a mano
  *       --todas                     todas las tomas donde el texto nombra a un personaje aprobado
  *       --escena E01                solo esa escena
+ *       --repetir                   rehace también las que ya tienen fotograma
  *
  * Deja <toma>\E0X-P0Y-referencia.jpg y guarda una versión nueva del texto (el corregido
  * por el revisor si existe). Luego en el estudio: «Rehacer esta toma».
  * No genera video ni gasta en Veo. Nunca borra: lo reemplazado va a «archivo».
  */
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import nextEnv from '@next/env';
 import { FILM_KEYS } from '../lib/v7/presets/film-registry';
@@ -38,6 +39,7 @@ const option = (f: string) => { const i = args.indexOf(f); return i >= 0 ? args[
 if (!filmId) { console.log('Uso: npm run referencia -- ' + Object.keys(FILMS).join('|') + ' [--generar] [--tomas E01-P01,E04-P03] [--todas]'); process.exit(1); }
 const root = v7FilmRoot(filmId);
 const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
+const exists = (f: string) => access(f).then(() => true, () => false);
 
 async function main() {
   const { film } = await readV7FilmBundle(filmId);
@@ -56,6 +58,7 @@ async function main() {
   const wanted = option('--tomas')?.toUpperCase().split(',').map((s) => s.trim()).filter(Boolean);
   type Job = { label: string; prompt: string; cast: CharacterSheet[]; why: string };
   const jobs: Job[] = [];
+  const skipped: string[] = [];
   for (const scene of indexedScenes(film)) for (const { shot, label } of scene.shots) {
     if (wanted && !wanted.includes(label)) continue;
     if (onlyScene && !label.startsWith(onlyScene + '-')) continue;
@@ -75,9 +78,12 @@ async function main() {
     }
     const pick = wanted ? true : flag('--todas') || needsIdentityFix(report);
     if (!pick) continue;
+    // Ya tiene fotograma: no se repite (ni se paga) salvo --repetir o elegida a mano.
+    if (!wanted && !flag('--repetir') && await exists(shotReferencePath(filmId, label))) { skipped.push(label); continue; }
     jobs.push({ label, prompt: (report?.promptSugerido?.trim() || current), cast,
       why: wanted ? 'elegida a mano' : flag('--todas') ? 'tiene personajes oficiales' : `el revisor dio cara ${report?.identidad ?? '?'}/10` });
   }
+  if (skipped.length) console.log(`Ya tienen fotograma (no se repiten): ${skipped.join(', ')}`);
   if (!jobs.length) {
     console.log('No hay tomas que preparar. Usa --tomas E01-P01,E04-P03 o --todas, o revisa antes: npm run calidad -- ' + key + ' --revisar');
     return;
@@ -98,6 +104,7 @@ async function main() {
       await savePromptRevision(filmId, j.label, j.prompt);
       done.push(j.label);
       console.log('OK');
+      await new Promise((r) => setTimeout(r, 4000)); // ritmo suave para no chocar con el límite por minuto
     } catch (e) { console.log('ERROR: ' + (e as Error).message); }
   }
   console.log(`\nListas ${done.length} de ${jobs.length}. Revisa cada foto en la carpeta de la toma (E0X-P0Y-referencia.jpg).`);

@@ -32,6 +32,7 @@ export async function archiveFile(file: string) {
 
 export class GeminiImageMaker {
   private modelIndex = 0;
+  private quotaRetries = 0;
   private ai = (() => {
     const platform = videoPlatform();
     return googleClient(platform, platform === 'vertex' ? (process.env.V7_QA_LOCATION?.trim() || 'global') : undefined);
@@ -60,10 +61,19 @@ export class GeminiImageMaker {
         try {
           await run('ffmpeg', ['-nostdin', '-v', 'error', '-y', '-i', tmp, '-vf', 'scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720', '-q:v', '2', out]);
         } finally { await rm(tmp, { force: true }); }
+        this.quotaRetries = 0;
         return model;
       } catch (e) {
         const msg = String((e as Error)?.message ?? e);
         if (/404|NOT_FOUND|not found|is not supported/i.test(msg) && this.modelIndex < IMAGE_MODELS.length - 1) { this.modelIndex++; continue; }
+        // 429 = límite por minuto de Google: no se creó imagen ni se cobra. Se espera y se reintenta.
+        if (/"code":\s*429|\b429\b|RESOURCE_EXHAUSTED|Resource exhausted/i.test(msg) && this.quotaRetries < 6) {
+          const wait = Math.min(90, 15 * 2 ** this.quotaRetries);
+          this.quotaRetries++;
+          process.stdout.write(`(límite de Google, espero ${wait} s) `);
+          await new Promise((r) => setTimeout(r, wait * 1000));
+          continue;
+        }
         throw new Error(msg.replace(/\s+/g, ' ').slice(0, 300));
       }
     }
