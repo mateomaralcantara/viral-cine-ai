@@ -6,6 +6,7 @@
  *   npm run montar -- convidados            película final: video + voces + (música) + cierre. Gratis, local.
  *       --musica "C:\ruta\cancion.mp3"     música de fondo (o deja musica.mp3 en la carpeta de la película)
  *       --voz-oficial-camara [--toma E01-P04]   (prueba) diálogos en cámara con la voz oficial del personaje
+ *       --escena E03                       avance de UNA escena (sin apertura ni créditos)
  *       --sin-portada                      sin la portada del libro al final
  *       --sin-apertura / --sin-creditos      sin la apertura (reparto y agentes) o sin los créditos finales
  *       --sin-ambiente                     quita el sonido original de Veo
@@ -530,7 +531,8 @@ async function montar() {
   let i = 0;
   let cursor = 0;
   const spansOpening: Array<{ label: string; start: number; seconds: number }> = [];
-  if (!flag('--sin-apertura')) {
+  const onlyScene = option('--escena')?.toUpperCase();
+  if (!flag('--sin-apertura') && !onlyScene) {
     const opening = await openingSequence(work, film, facts, font);
     for (const c of opening) { parts.push(c.out); cursor += c.seconds; }
     spansOpening.push({ label: 'APERTURA', start: 0, seconds: cursor });
@@ -540,6 +542,7 @@ async function montar() {
   spans.push(...spansOpening);
   const cues: SubtitleCue[] = [];
   for (const scene of indexedScenes(film)) {
+    if (onlyScene && scene.label !== onlyScene) continue;
     const sceneStart = cursor;
     for (const { shot, label } of scene.shots) {
       const dir = path.join(root, label.toLowerCase());
@@ -570,7 +573,7 @@ async function montar() {
   if (!parts.length) throw new Error('No hay videos generados todavía.');
 
   const closing = typeof film.metadata?.closingCard === 'string' ? film.metadata.closingCard as string : '';
-  if (closing) {
+  if (closing && !onlyScene) {
     const voice = await exists(voiceFile('CIERRE')) ? voiceFile('CIERRE') : null;
     const secs = Math.max(6, voice ? (await probe(voice)) + 2 : 6);
     parts.push(await cardPart(work, 'cierre-pregunta', splitLine(closing), secs, voice, null, font));
@@ -581,17 +584,17 @@ async function montar() {
   const book = typeof film.metadata?.book === 'string' ? (film.metadata.book as string).split('—') : [film.title];
   const author = typeof film.metadata?.author === 'string' ? 'Una novela de ' + film.metadata.author : '';
   const endLines = Array.isArray(film.metadata?.endCardLines) ? (film.metadata.endCardLines as unknown[]).map(String) : null;
-  parts.push(await cardPart(work, 'cierre-titulo', endLines ?? [book[0].trim().toUpperCase(), ...(book[1] ? [book[1].trim()] : []), ...(author ? [author] : [])], 6, null, endLines ? null : cover, font));
-  console.log('  OK cierre: ' + (cover ? 'portada del libro' : 'título del libro'));
+  if (!onlyScene) parts.push(await cardPart(work, 'cierre-titulo', endLines ?? [book[0].trim().toUpperCase(), ...(book[1] ? [book[1].trim()] : []), ...(author ? [author] : [])], 6, null, endLines ? null : cover, font));
+  if (!onlyScene) console.log('  OK cierre: ' + (cover ? 'portada del libro' : 'título del libro'));
   let endSeconds = 0;
-  if (!flag('--sin-creditos')) {
+  if (!flag('--sin-creditos') && !onlyScene) {
     const credits = await endCreditsSequence(work, facts, font, serieOf(film));
     for (const c of credits) { parts.push(c.out); endSeconds += c.seconds; }
     console.log(`  OK créditos finales: ${credits.length} tarjetas`);
   }
   // La portada del libro cierra la película (después de los créditos).
   // Si la tarjeta de título ya mostró la portada, no se repite al final.
-  const finalCover = flag('--sin-portada') || (!endLines && cover) ? null : await bookCover(serieOf(film));
+  const finalCover = onlyScene || flag('--sin-portada') || (!endLines && cover) ? null : await bookCover(serieOf(film));
   if (finalCover) {
     parts.push((await coverCard(work, finalCover, 7)).out);
     endSeconds += 7;
@@ -631,7 +634,7 @@ async function montar() {
     if (endFile) tracks.push({ file: endFile, start: Math.max(0, total - endSeconds), seconds: endSeconds });
   }
   const safeTitle = film.title.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase().slice(0, 80);
-  const final = path.join(finalDir, `${safeTitle}-${stamp}.mp4`);
+  const final = path.join(finalDir, onlyScene ? `avance-${onlyScene}-${stamp}.mp4` : `${safeTitle}-${stamp}.mp4`);
   const master = 'loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000';
   if (tracks.length) {
     const inputs = ['-i', joined];
