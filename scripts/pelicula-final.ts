@@ -21,11 +21,12 @@ import nextEnv from '@next/env';
 import { FILM_KEYS } from '../lib/v7/presets/film-registry';
 import { CONVIDADOS_ID } from '../lib/v7/presets/los-convidados-al-agape';
 import { PRIMERA_PAGINA_ID } from '../lib/v7/presets/la-primera-pagina';
-import { readV7FilmBundle, v7FilmRoot } from '../lib/v7/storage/film-store';
+import { readV7FilmBundle, v7DataRoot as v7DataRootDir, v7FilmRoot } from '../lib/v7/storage/film-store';
 import { indexedScenes } from '../lib/v7/production/scene-approval-board';
 import { currentShotVideo } from '../lib/v7/production/shot-current-video';
 import { listPhotos, listSheets, masterPath, serieOf } from '../lib/v7/production/character-identity';
 import { agentCredits, chunk, endCredits, type ProductionFacts } from '../lib/v7/production/film-credits';
+import { SERIES_CREDITS } from '../lib/v7/presets/series-credits';
 import { speakerKey } from '../lib/v7/production/film-voice-mix';
 import { translateToEnglish } from '../lib/v7/production/subtitle-translate';
 import {
@@ -270,6 +271,40 @@ async function creditCard(work: string, items: CardText[], seconds: number, font
   return { out, seconds };
 }
 
+/** Tarjeta con dos fotos lado a lado (autor y personaje) y textos debajo. */
+async function dualPhotoCard(work: string, left: string, right: string, items: CardText[], seconds: number, font: boolean) {
+  const name = 'credito-' + String(++cardCount).padStart(3, '0');
+  const out = path.join(work, name + '.mp4');
+  // Llenan el marco (recorte centrado arriba). La foto del autor (k=1) se acerca a cabeza y torso.
+  const box = (k: number) => `[${k}:v]${k === 1 ? 'crop=iw:ih*0.75:0:0,' : ''}scale=340:430:force_original_aspect_ratio=increase,crop=340:430:(iw-ow)/2:0,setsar=1,` +
+    `pad=346:436:3:3:color=0xb8963e[p${k}]`;
+  const fontPart = font ? 'fontfile=fuente.ttf:' : '';
+  let y = 545;
+  const draws: string[] = [];
+  for (const [k, t] of items.entries()) {
+    const file = `${name}-${k}.txt`;
+    await writeFile(path.join(work, file), t.text, 'utf8');
+    draws.push(`drawtext=${fontPart}textfile=${file}:fontcolor=${t.color ?? 'white'}:fontsize=${t.size}:x=(w-tw)/2:y=${y + (t.gap ?? 0)}`);
+    y += t.size * 1.35 + (t.gap ?? 0);
+  }
+  const fade = `fade=t=in:st=0:d=0.6,fade=t=out:st=${fmt(seconds - 0.6)}:d=0.6`;
+  const filter = `${box(1)};${box(2)};[0:v][p1]overlay=x=270:y=70[a];[a][p2]overlay=x=664:y=70,${draws.join(',')},format=yuv420p,${fade}[v];[3:a]anull[a2]`;
+  await ffmpeg(['-f', 'lavfi', '-t', fmt(seconds), '-i', 'color=c=0x07070b:s=1280x720:r=24',
+    '-loop', '1', '-t', fmt(seconds), '-i', left, '-loop', '1', '-t', fmt(seconds), '-i', right,
+    '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo',
+    '-filter_complex', filter, '-map', '[v]', '-map', '[a2]', '-t', fmt(seconds), ...ENC, out], work);
+  return { out, seconds };
+}
+
+/** Foto del autor de la serie: autor.jpg/png/webp en la carpeta de personajes de la serie. */
+async function authorPhoto(serie: string) {
+  for (const ext of ['jpg', 'jpeg', 'png', 'webp']) {
+    const f = path.join(v7DataRootDir(), 'personajes', serie, 'autor.' + ext);
+    if (await exists(f)) return f;
+  }
+  return null;
+}
+
 /** Lo que de verdad se usó en la película, leído de los registros de producción. */
 async function productionFacts(film: Awaited<ReturnType<typeof readV7FilmBundle>>['film'], shotVideos: Map<string, { file: string; repaired: boolean } | null>) {
   const models = new Set<string>();
@@ -320,8 +355,9 @@ async function openingSequence(work: string, film: Awaited<ReturnType<typeof rea
   const cards: Array<{ out: string; seconds: number }> = [];
   const gold = '0xd9b45a', grey = '0xb9b9c4';
   cards.push(await creditCard(work, [{ text: 'VIRALCINE STUDIO', size: 56, color: gold }, { text: 'presenta', size: 30, color: grey, gap: 10 }], 3.5, font));
-  cards.push(await creditCard(work, [{ text: 'Una película creada por', size: 30, color: grey }, { text: 'agentes de inteligencia artificial', size: 44, gap: 8 }], 3.5, font));
-  for (const group of chunk(agentCredits(facts), 3)) {
+  const custom = SERIES_CREDITS[serieOf(film)];
+  cards.push(await creditCard(work, [{ text: 'Una película creada por', size: 30, color: grey }, { text: custom?.createdBy ?? 'agentes de inteligencia artificial', size: custom ? 56 : 44, color: custom ? gold : 'white', gap: 8 }], 3.5, font));
+  for (const group of chunk(custom?.lines ?? agentCredits(facts), 3)) {
     cards.push(await creditCard(work, group.flatMap((c, k) => [{ text: c.role.toUpperCase(), size: 22, color: grey, gap: k ? 26 : 0 }, { text: c.name, size: 38 }]), 4.5, font));
   }
   const serie = serieOf(film);
@@ -341,15 +377,30 @@ async function openingSequence(work: string, film: Awaited<ReturnType<typeof rea
   if (voiceOnly.length) {
     cards.push(await creditCard(work, [{ text: 'VOCES', size: 24, color: grey }, ...voiceOnly.map((v, k) => ({ text: `${v.character}  ·  ${v.voice.replace(' (ElevenLabs)', '')}`, size: 32, gap: k ? 4 : 14 }))], 4.5, font));
   }
-  if (facts.author) cards.push(await creditCard(work, [{ text: 'Basada en la novela de', size: 30, color: grey }, { text: facts.author, size: 52, gap: 8 }], 3.5, font));
+  const authorName = custom?.author ?? facts.author;
+  const photo = custom ? await authorPhoto(serie) : null;
+  const characterPhoto = custom?.authorCharacter ? await portraitOf(serie, custom.authorCharacter) : null;
+  if (authorName && photo && characterPhoto) {
+    cards.push(await dualPhotoCard(work, photo, characterPhoto, [
+      { text: authorName.toUpperCase(), size: 44, color: gold },
+      { text: custom?.authorCaption ?? 'Autor de la novela', size: 24, color: grey, gap: 6 }
+    ], 5, font));
+  } else if (authorName) {
+    cards.push(await creditCard(work, [{ text: 'Basada en la novela de', size: 30, color: grey }, { text: authorName, size: 52, gap: 8 }], 3.5, font, photo));
+  }
   cards.push(await creditCard(work, [{ text: facts.title, size: 62, color: gold }, ...(facts.subtitle ? [{ text: facts.subtitle, size: 30, gap: 16 }] : [])], 5, font));
   return cards;
 }
 
-async function endCreditsSequence(work: string, facts: ProductionFacts, font: boolean) {
+async function endCreditsSequence(work: string, facts: ProductionFacts, font: boolean, serie: string) {
   const grey = '0xb9b9c4';
   const cards: Array<{ out: string; seconds: number }> = [];
-  for (const group of chunk(endCredits(facts), 5)) {
+  const custom = SERIES_CREDITS[serie];
+  const lines = custom
+    ? [{ role: 'Una película creada por', name: custom.createdBy }, { role: 'Basada en la novela de', name: custom.author },
+      ...facts.voiceCast.map((v) => ({ role: 'Voz de ' + v.character, name: v.voice })), ...custom.lines]
+    : endCredits(facts);
+  for (const group of chunk(lines, 5)) {
     cards.push(await creditCard(work, group.flatMap((c, k) => [{ text: c.role, size: 20, color: grey, gap: k ? 20 : 0 }, { text: c.name, size: 32 }]), 5, font));
   }
   return cards;
@@ -433,7 +484,7 @@ async function montar() {
   parts.push(await cardPart(work, 'cierre-titulo', endLines ?? [book[0].trim().toUpperCase(), ...(book[1] ? [book[1].trim()] : []), ...(author ? [author] : [])], 6, null, endLines ? null : cover, font));
   console.log('  OK cierre: ' + (cover ? 'portada del libro' : 'título del libro'));
   if (!flag('--sin-creditos')) {
-    const credits = await endCreditsSequence(work, facts, font);
+    const credits = await endCreditsSequence(work, facts, font, serieOf(film));
     for (const c of credits) parts.push(c.out);
     console.log(`  OK créditos finales: ${credits.length} tarjetas`);
   }
@@ -451,6 +502,13 @@ async function montar() {
   for (const span of spans) {
     let file: string | undefined;
     for (const ext of ['mp3', 'wav', 'm4a']) { const f = path.join(root, 'musica', `${span.label}.${ext}`); if (await exists(f)) { file = f; break; } }
+    if (!file && span.label === 'APERTURA') {
+      // Sin tema propio: la apertura usa la música de la primera secuencia que tenga.
+      for (const other of spans) for (const ext of ['mp3', 'wav', 'm4a']) {
+        const f = path.join(root, 'musica', `${other.label}.${ext}`);
+        if (!file && other.label !== 'APERTURA' && await exists(f)) file = f;
+      }
+    }
     if (file) tracks.push({ file, start: span.start, seconds: span.seconds });
   }
   if (!tracks.length && globalMusic) tracks.push({ file: globalMusic, start: 0, seconds: total });

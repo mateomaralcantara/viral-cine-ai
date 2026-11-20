@@ -13,7 +13,7 @@
  * Las fotos se suben copiándolas a <personaje>\fotos (jpg, png o webp; 1 a 3 fotos).
  */
 import { execFile, spawn } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import { promisify } from 'node:util';
 import { CONVIDADOS_REPARTO, CONVIDADOS_SERIE } from '../lib/v7/presets/convidados-reparto';
@@ -27,7 +27,7 @@ import { PRIMERA_PAGINA_ID } from '../lib/v7/presets/la-primera-pagina';
 import { readV7FilmBundle, v7FilmRoot } from '../lib/v7/storage/film-store';
 import {
   assertKey, characterDir, characterKeyFromId, hasMaster, listPhotos, listSheets, masterFromPhotosPrompt, masterPath,
-  newSheet, nextOrder, photosDir, savePhoto, readSheet, serieOf, writeSheet, type CharacterSheet
+  imageKind, newSheet, nextOrder, photosDir, savePhoto, readSheet, serieOf, writeSheet, type CharacterSheet
 } from '../lib/v7/production/character-identity';
 import { GeminiImageMaker, IMAGE_USD, imageRef } from '../lib/v7/production/gemini-image';
 import { importFromScript } from '../lib/v7/production/character-studio';
@@ -39,7 +39,7 @@ const [cmd, target, who] = process.argv.slice(2).filter((a, i, all) => !a.starts
 const args = process.argv.slice(2);
 const flag = (f: string) => args.includes(f);
 const option = (f: string) => { const i = args.indexOf(f); return i >= 0 ? args[i + 1] : undefined; };
-const USAGE = 'Uso: npm run personaje -- importar|reparto|lista|nuevo|carpeta|maestro|aprobar <película o serie> [personaje]';
+const USAGE = 'Uso: npm run personaje -- importar|reparto|autor|lista|nuevo|carpeta|maestro|aprobar <película o serie> [personaje]';
 
 async function resolveSerie(name: string | undefined) {
   if (!name) throw new Error(USAGE);
@@ -92,6 +92,21 @@ async function main() {
         }
       } finally { await rm(tmp, { recursive: true, force: true }); }
       console.log(`\n${CONVIDADOS_REPARTO.length} personajes listos. Ábrelos en el estudio, pestaña PERSONAJES · IDENTIDAD.`);
+      return;
+    }
+    case 'autor': {
+      // npm run personaje -- autor convidados "C:\\ruta\\foto.png"
+      const src = process.argv.slice(2).filter((a) => !a.startsWith('--'))[2];
+      if (!src) throw new Error('Indica la ruta de la foto del autor entre comillas.');
+      const bytes = await readFile(src);
+      const kind = imageKind(bytes);
+      if (!kind) throw new Error('La foto debe ser JPG, PNG o WEBP.');
+      const dir = path.dirname(characterDir(serie, 'martin'));
+      await mkdir(dir, { recursive: true });
+      for (const ext of ['jpg', 'jpeg', 'png', 'webp']) await rm(path.join(dir, 'autor.' + ext), { force: true });
+      await writeFile(path.join(dir, 'autor.' + kind), bytes);
+      console.log('Foto del autor guardada: ' + path.join(dir, 'autor.' + kind));
+      console.log('Saldrá en la apertura junto al retrato de Martin. Siguiente: npm run montar -- episodio1');
       return;
     }
     case 'lista': {
