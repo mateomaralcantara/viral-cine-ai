@@ -20,7 +20,7 @@ import { promisify } from 'node:util';
 import { GenerateVideosOperation, GoogleGenAI } from '@google/genai';
 import { activeLessons, applyLessons, readCounts } from '@/lib/v7/qa/lessons';
 import { isLocked } from '@/lib/v7/production/shot-lock';
-import { readV7FilmBundle, v7FilmRoot } from '@/lib/v7/storage/film-store';
+import { readV7FilmBundle, v7DataRoot, v7FilmRoot } from '@/lib/v7/storage/film-store';
 import { indexedScenes } from '@/lib/v7/production/scene-approval-board';
 import { veoSeconds } from '@/lib/v7/production/cinema-core-policy';
 import { DOS_TOQUES_SCENE_PROMPTS } from '@/lib/v7/presets/dos-toques-scene-prompts';
@@ -550,10 +550,11 @@ async function dispatchAuthorized(filmId: string, plan: Awaited<ReturnType<typeo
         if (authorized && authorized.promptHash === latest.promptHash) revisionId = latest.revisionId;
         else throw new Error('El texto de ' + shot.shotId + ' cambió después de autorizar la escena: autoriza esa toma por separado.');
       }
-      const r = await submitLocked(filmId, plan, shot, revisionId, item.estimatedUsd, cap);
+      const r = await submitLocked(filmId, plan, shot, revisionId, item.estimatedUsd, cap, false, true);
       results.push({ shotId: shot.shotId, status: r.status });
       inFlight++;
     } catch (error) {
+      if (error instanceof PaceWait) break; // aún no toca: la siguiente vuelta (30 s) lo envía
       results.push({ shotId: shot.shotId, status: 'stopped', error: safeError(error) });
       break; // Ante cualquier duda, no seguir gastando.
     }
@@ -582,9 +583,40 @@ export async function resumeWholeScene(filmId: string, sceneLabel: string) {
   return { sceneLabel, results, dispatched };
 }
 
+// ---------- ritmo de envío (cuota de Google por minuto) ----------
+/**
+ * Google limita los PEDIDOS de video por minuto y por modelo (cuentas nuevas: 1/min).
+ * Se espacian los envíos (compartido entre el estudio y los agentes vía un archivo):
+ * V7_VEO_SUBMITS_PER_MINUTE (por defecto 1). Varias tomas pueden procesarse a la vez.
+ */
+export function veoSubmitIntervalMs() {
+  const per = Number(process.env.V7_VEO_SUBMITS_PER_MINUTE || 1);
+  return Number.isFinite(per) && per > 0 ? Math.ceil(60000 / Math.min(per, 60)) + 5000 : 0;
+}
+const paceFile = () => path.join(v7DataRoot(), 'ritmo-veo.json');
+async function msUntilSubmitSlot() {
+  const interval = veoSubmitIntervalMs();
+  if (!interval) return 0;
+  try {
+    const last = Number(JSON.parse(await readFile(paceFile(), 'utf8')).ultimo) || 0;
+    return Math.max(0, last + interval - Date.now());
+  } catch { return 0; }
+}
+async function markSubmit() {
+  await mkdir(path.dirname(paceFile()), { recursive: true });
+  await writeFile(paceFile(), JSON.stringify({ ultimo: Date.now() }) + '\n');
+}
+export class PaceWait extends Error { constructor(public ms: number) { super('Esperando el turno de envío (límite por minuto de Google).'); } }
+
 async function submitLocked(filmId: string, plan: Awaited<ReturnType<typeof scenePlan>>, shot: ScenePlanShot,
-  revisionId: string, estimatedUsd: number, cap: number, redo = false) {
+  revisionId: string, estimatedUsd: number, cap: number, redo = false, noWait = false) {
   const shotId = shot.shotId;
+  // Turno de envío: la cola de escena no espera (lo intenta en la siguiente vuelta); un envío directo espera su turno.
+  const wait = await msUntilSubmitSlot();
+  if (wait > 0) {
+    if (noWait) throw new PaceWait(wait);
+    await new Promise((r) => setTimeout(r, Math.min(wait, 75000)));
+  }
   {
     const input = { revisionId };
     const revision = await latestPromptRevision(filmId, shotId);
@@ -658,6 +690,7 @@ async function submitLocked(filmId: string, plan: Awaited<ReturnType<typeof scen
       const lessons = applyLessons(revision.promptText, activeLessons(await readCounts()));
       record.lessons = lessons.applied;
       await writeRecord(filmId, record);
+      await markSubmit();
       const operation = await googleClient(record.platform).models.generateVideos({
         model: record.model,
         source: {

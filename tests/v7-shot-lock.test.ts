@@ -13,3 +13,13 @@ test('tomas fijadas: se fijan, se reconocen y solo el autor las suelta', async (
   await unlockShot(dir);
   assert.equal(await isLocked(dir), false);
 });
+
+test('ritmo de envío: 1 pedido por minuto por defecto (cuota de cuentas nuevas)', async () => {
+  const { veoSubmitIntervalMs } = await import('../lib/v7/production/scene-veo-engine');
+  const saved = process.env.V7_VEO_SUBMITS_PER_MINUTE;
+  delete process.env.V7_VEO_SUBMITS_PER_MINUTE;
+  assert.equal(veoSubmitIntervalMs(), 65000);
+  process.env.V7_VEO_SUBMITS_PER_MINUTE = '10';
+  assert.equal(veoSubmitIntervalMs(), 11000);
+  if (saved === undefined) delete process.env.V7_VEO_SUBMITS_PER_MINUTE; else process.env.V7_VEO_SUBMITS_PER_MINUTE = saved;
+});
