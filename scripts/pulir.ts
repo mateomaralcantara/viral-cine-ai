@@ -14,14 +14,16 @@
  *      con FFmpeg, comprobando que mejora.
  *   4. Si aún no está bien y el defecto solo se arregla regenerando (cara, movimiento…), el médico
  *      reescribe el texto y —solo con --hasta— se regenera. Luego vuelve al paso 1.
+ * PLAN B: si una toma con diálogo en cámara falla 2 veces pagadas (o 3 bloqueos), la frase pasa a voz en off
+ * (ElevenLabs) y la toma se regenera sin hablar en cámara. Otras tomas: máximo 3 versiones pagadas.
  * Nunca reintenta un resultado incierto (failed-unknown) y nunca pasa del tope que le das.
  */
 import { spawn } from 'node:child_process';
-import { access, mkdir, readFile, rename } from 'node:fs/promises';
+import { access, mkdir, readdir, readFile, rename } from 'node:fs/promises';
 import path from 'node:path';
 import nextEnv from '@next/env';
 import { FILM_KEYS } from '../lib/v7/presets/film-registry';
-import { readV7FilmBundle, v7FilmRoot } from '../lib/v7/storage/film-store';
+import { readV7FilmBundle, saveV7FilmBundle, v7FilmRoot } from '../lib/v7/storage/film-store';
 import { indexedScenes } from '../lib/v7/production/scene-approval-board';
 import {
   authorizationPhrase, estimateShotUsd, FILTERED_PATTERN, latestPromptRevision, readShotRecord, redoAuthorizationPhrase,
@@ -83,11 +85,34 @@ async function isGood(label: string) {
 async function blockedAttempts(label: string) {
   try {
     const dir = path.join(root, label.toLowerCase(), 'veo-attempts');
-    const files = (await (await import('node:fs/promises')).readdir(dir)).filter((f) => f.endsWith('.json'));
+    const files = (await readdir(dir)).filter((f) => f.endsWith('.json'));
     let n = 0;
     for (const f of files) { const r = JSON.parse(await readFile(path.join(dir, f), 'utf8')); if (r.status === 'failed-no-video') n++; }
     return n;
   } catch { return 0; }
+}
+
+/** Versiones de pago ya generadas (con video) de una toma, archivadas al rehacer. */
+async function paidVersions(label: string) {
+  let n = 0;
+  try {
+    const dir = path.join(root, label.toLowerCase(), 'veo-attempts');
+    for (const f of (await readdir(dir)).filter((x) => x.endsWith('.json'))) {
+      const r = JSON.parse(await readFile(path.join(dir, f), 'utf8'));
+      if (r.status === 'review-required') n++;
+    }
+  } catch { /* sin intentos archivados */ }
+  return n;
+}
+
+/** Plan B: el diálogo deja de decirse en cámara y pasa a voz en off (ElevenLabs, voz estable). */
+async function toVoiceOver(label: string) {
+  const stored = await readV7FilmBundle(filmId);
+  for (const scene of indexedScenes(stored.film)) for (const { shot, label: l } of scene.shots) {
+    if (l !== label) continue;
+    shot.metadata = { ...shot.metadata, onCameraDialogue: false, voiceOver: true, lipsyncStatus: 'not-needed', planB: 'voz-en-off' };
+  }
+  await saveV7FilmBundle({ ...stored, savedAt: undefined });
 }
 
 async function dropReference(label: string) {
@@ -123,13 +148,14 @@ async function main() {
       if (rec.status === 'failed-unknown') { note(label, 'INCIERTA', 'resultado dudoso: no se reintenta (revisa en el estudio con «Recuperar»)'); continue; }
       const blocked = rec.status === 'failed-no-video';
       if (!blocked && rec.status !== 'quota-rejected') continue;
-      const onCamera = shot.metadata?.onCameraDialogue === true;
+      let onCamera = shot.metadata?.onCameraDialogue === true;
       const revision = await latestPromptRevision(filmId, label).catch(() => null);
       const current = revision?.promptText ?? shot.visualPrompt;
       let revisionId = revision?.revisionId ?? '';
       if (blocked) {
         const attempt = (await blockedAttempts(label)) + 1;
         let extra = '';
+        if (onCamera && attempt >= 4) { await toVoiceOver(label); onCamera = false; extra += ' · PLAN B: la frase pasa a voz en off'; }
         if (attempt >= 3 && await dropReference(label)) extra = ' · sin foto de referencia';
         try {
           const fixed = await rewritePrompt({ prompt: current, kind: 'bloqueada', problem: rec.error ?? 'bloqueada', line: shot.spokenText ?? '', onCamera, attempt });
@@ -146,7 +172,7 @@ async function main() {
         await submitSceneShot(filmId, label, { revisionId, authorization: authorizationPhrase(label, est) });
         spent += est; pending.push(label);
         note(label, 'ENVIADA', `a Veo (US$${est.toFixed(2)} si sale el video)`);
-      } catch (e) { note(label, 'ERROR', (e as Error).message.slice(0, 160)); }
+      } catch (e) { const m = (e as Error).message; note(label, /Tope de la escena/.test(m) ? 'TOPE' : 'ERROR', m.slice(0, 160)); }
     }
 
     // espera a que terminen (gratis)
@@ -182,7 +208,13 @@ async function main() {
       const r = (await reportFor(label))!;
       const rec = await readShotRecord(filmId, label).catch(() => null);
       if (!rec || rec.status !== 'review-required') continue;
-      const onCamera = shot.metadata?.onCameraDialogue === true;
+      let onCamera = shot.metadata?.onCameraDialogue === true;
+      const versions = await paidVersions(label) + 1;
+      let planB = '';
+      if (versions >= 3) {
+        if (onCamera) { await toVoiceOver(label); onCamera = false; planB = ' · PLAN B: la frase pasa a voz en off'; }
+        else if (versions >= 4) { note(label, 'AGOTADA', `${r.puntuacion}/10 · ${versions - 1} versiones pagadas sin mejorar: se queda la actual (reparada si se pudo)`); continue; }
+      }
       const revision = await latestPromptRevision(filmId, label).catch(() => null);
       const problems = r.problemas.map((p) => `${p.tipo}: ${p.descripcion}`).join('; ') || r.motivo;
       try {
@@ -192,8 +224,8 @@ async function main() {
         if (!budget || spent + est > budget + 1e-9) { note(label, 'MEJORABLE', `${r.puntuacion}/10 · texto corregido guardado; para regenerarla: --hasta`); continue; }
         await submitSceneShot(filmId, label, { revisionId: rev.revisionId, authorization: redoAuthorizationPhrase(label, est), redo: true });
         spent += est;
-        note(label, 'REGENERANDO', `${r.puntuacion}/10 → nueva versión enviada (US$${est.toFixed(2)})`);
-      } catch (e) { note(label, 'MEJORABLE', (e as Error).message.slice(0, 160)); }
+        note(label, 'REGENERANDO', `${r.puntuacion}/10 → nueva versión enviada (US$${est.toFixed(2)})${planB}`);
+      } catch (e) { const m = (e as Error).message; note(label, /Tope de la escena/.test(m) ? 'TOPE' : 'MEJORABLE', m.slice(0, 160)); }
     }
     const waiting = [...log.values()].some((r) => ['ENVIADA', 'REGENERANDO'].includes(r.state));
     const unresolved = [...log.values()].filter((r) => r.state !== 'BIEN').length;

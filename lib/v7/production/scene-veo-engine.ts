@@ -127,6 +127,8 @@ function rejectedBeforeCreation(error: unknown) {
   return Number.isInteger(status) && status >= 400 && status < 500 && status !== 408 && status !== 429;
 }
 const INTERACTION_PREFIX = 'interaction:';
+/** Lo que nunca debe aparecer en una toma (se envía como prompt negativo a Veo). */
+export const VEO_NEGATIVE_PROMPT = 'subtítulos, subtitles, captions, texto en pantalla, letras, palabras escritas, rótulos, marca de agua, logotipo, números en pantallas, interfaz de usuario, manos deformes, dedos extra';
 const QUOTA_PATTERN = /"code":\s*429|\b429\b|RESOURCE_EXHAUSTED|Quota exceeded/i;
 /** Rechazo por cuota al crear: Google no creó ningún trabajo, así que no hay cobro posible. */
 function quotaRejected(error: unknown) {
@@ -635,6 +637,8 @@ async function submitLocked(filmId: string, plan: Awaited<ReturnType<typeof scen
         config: {
           aspectRatio: '16:9', numberOfVideos: 1, durationSeconds: shot.providerSeconds, resolution: '720p',
           personGeneration: reference || record.platform === 'vertex' ? 'allow_adult' : 'allow_all',
+          // Veo tiende a incrustar subtítulos cuando hay diálogo: se prohíben de forma explícita.
+          negativePrompt: VEO_NEGATIVE_PROMPT,
           // Vertex: audio nativo (ambiente y diálogos en cámara con labios sincronizados).
           // AI Studio no acepta este parámetro (genera audio por defecto en Veo 3.x).
           ...(record.platform === 'vertex' ? { generateAudio: true } : {})

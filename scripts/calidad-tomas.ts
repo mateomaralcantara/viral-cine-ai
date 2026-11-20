@@ -103,8 +103,17 @@ async function main() {
   results.sort((a, b) => a.label.localeCompare(b.label));
   const icon = { aprobar: 'OK     ', revisar: 'REVISAR', rehacer: 'REHACER' } as const;
   console.log('\n=== INFORME DE CALIDAD ===');
+  // Si la toma tiene una reparación aceptada de ESTE video, la película usa la reparada: se muestra su nota.
+  const repairedNote = async (r: Saved) => {
+    try {
+      const rec = JSON.parse(await readFile(path.join(root, r.label.toLowerCase(), 'reparacion', `${r.label}-reparada.json`), 'utf8')) as
+        { originalSha256?: string; after?: { puntuacion?: number; veredicto?: string } | null };
+      if (rec.originalSha256 === r.videoSha256 && rec.after?.puntuacion != null) return `  ->  REPARADA ${rec.after.puntuacion}/10 (${rec.after.veredicto}) · la película usa esta`;
+    } catch { /* sin reparación */ }
+    return '';
+  };
   for (const r of results) {
-    console.log(`  ${icon[r.veredicto]} ${r.label}  ${r.puntuacion}/10  guion ${r.coincideConGuion}/10  cara ${r.identidad ?? '-'}/10  ${r.motivo}`);
+    console.log(`  ${icon[r.veredicto]} ${r.label}  ${r.puntuacion}/10  guion ${r.coincideConGuion}/10  cara ${r.identidad ?? '-'}/10  ${r.motivo}${await repairedNote(r)}`);
     for (const p of r.problemas.filter((p) => p.gravedad !== 'leve')) console.log(`           - [${p.gravedad}] ${p.tipo}: ${p.descripcion}${p.segundo != null ? ` (seg. ${p.segundo})` : ''}`);
   }
   const count = (v: ShotReview['veredicto']) => results.filter((r) => r.veredicto === v).length;
