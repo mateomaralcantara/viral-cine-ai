@@ -18,6 +18,7 @@ import { mkdir, open, readdir, readFile, rename, stat, unlink, writeFile } from 
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { GenerateVideosOperation, GoogleGenAI } from '@google/genai';
+import { activeLessons, applyLessons, readCounts } from '@/lib/v7/qa/lessons';
 import { readV7FilmBundle, v7FilmRoot } from '@/lib/v7/storage/film-store';
 import { indexedScenes } from '@/lib/v7/production/scene-approval-board';
 import { veoSeconds } from '@/lib/v7/production/cinema-core-policy';
@@ -72,6 +73,8 @@ export type SceneVeoRecord = {
   operationName?: string;
   candidateName?: string;
   error?: string;
+  /** Lecciones aprendidas aplicadas al enviar esta toma. */
+  lessons?: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -628,17 +631,21 @@ async function submitLocked(filmId: string, plan: Awaited<ReturnType<typeof scen
         await writeRecord(filmId, record);
         return { shotId, status: record.status, estimatedUsd, noAutomaticRetries: true };
       }
+      // Lecciones aprendidas: se añaden al enviar (el texto guardado no cambia) y quedan anotadas.
+      const lessons = applyLessons(revision.promptText, activeLessons(await readCounts()));
+      record.lessons = lessons.applied;
+      await writeRecord(filmId, record);
       const operation = await googleClient(record.platform).models.generateVideos({
         model: record.model,
         source: {
-          prompt: revision.promptText,
+          prompt: lessons.text,
           ...(reference ? { image: { imageBytes: reference.bytes.toString('base64'), mimeType: 'image/jpeg' } } : {})
         },
         config: {
           aspectRatio: '16:9', numberOfVideos: 1, durationSeconds: shot.providerSeconds, resolution: '720p',
           personGeneration: reference || record.platform === 'vertex' ? 'allow_adult' : 'allow_all',
           // Veo tiende a incrustar subtítulos cuando hay diálogo: se prohíben de forma explícita.
-          negativePrompt: VEO_NEGATIVE_PROMPT,
+          negativePrompt: [VEO_NEGATIVE_PROMPT, ...lessons.negative].join(', '),
           // Vertex: audio nativo (ambiente y diálogos en cámara con labios sincronizados).
           // AI Studio no acepta este parámetro (genera audio por defecto en Veo 3.x).
           ...(record.platform === 'vertex' ? { generateAudio: true } : {})

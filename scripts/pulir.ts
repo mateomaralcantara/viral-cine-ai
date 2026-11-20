@@ -31,6 +31,7 @@ import {
 } from '../lib/v7/production/scene-veo-engine';
 import { fileSha256, originalShotVideo, repairRecordPath } from '../lib/v7/production/shot-current-video';
 import { rewritePrompt } from '../lib/v7/qa/prompt-doctor';
+import { activeLessons, learnFromDefects, readCounts } from '../lib/v7/qa/lessons';
 import type { ShotReview } from '../lib/v7/qa/shot-vision-review';
 
 // El motor solo genera en el estudio local (desarrollo): este agente es local.
@@ -203,6 +204,7 @@ async function main() {
     for (const scene of scenes) for (const { shot, label } of scene.shots) {
       const good = await isGood(label);
       if (good === null) continue;
+      { const rep = await reportFor(label); if (rep?.problemas.length) await learnFromDefects(rep.problemas.map((p) => `${p.tipo} ${p.descripcion}`), rep.videoSha256.slice(0, 16)); }
       if (good) { note(label, 'BIEN', 'aprobada'); continue; }
       open++;
       const r = (await reportFor(label))!;
@@ -233,6 +235,9 @@ async function main() {
     if (!waiting && !budget) { console.log('\nModo gratis: lo pendiente necesita generar video (usa --hasta o el estudio). Fin.'); break; }
   }
 
+  console.log('\n=== LECCIONES ACTIVAS (se aplican solas a cada toma nueva) ===');
+  const counts = await readCounts();
+  for (const l of activeLessons(counts)) console.log(`  ✓ ${l.title}${l.fixed ? ' (del piloto)' : ` (vista ${counts[l.id]} veces)`}`);
   console.log('\n=== RESUMEN ===');
   for (const r of [...log.values()].sort((a, b) => a.label.localeCompare(b.label))) console.log(`  ${r.label.padEnd(8)} ${r.state.padEnd(12)} ${r.note}`);
   console.log(`  Gasto en video de este agente: ~US$${Math.max(0, spent).toFixed(2)}${budget ? ` de US$${budget.toFixed(2)}` : ''}. Siguiente: npm run montar -- ${key}`);

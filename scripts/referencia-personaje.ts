@@ -28,6 +28,7 @@ import { fileSha256, originalShotVideo } from '../lib/v7/production/shot-current
 import { needsIdentityFix, shotShows, type IdentityReport } from '../lib/v7/production/character-reference';
 import { characterKeyFromId, listSheets, masterPath, multiKeyframePrompt, serieOf, type CharacterSheet } from '../lib/v7/production/character-identity';
 import { GeminiImageMaker, IMAGE_USD, imageRef } from '../lib/v7/production/gemini-image';
+import { activeLessons, applyLessons, readCounts } from '../lib/v7/qa/lessons';
 
 nextEnv.loadEnvConfig(process.cwd());
 const FILMS: Record<string, string> = FILM_KEYS;
@@ -100,7 +101,8 @@ async function main() {
     process.stdout.write(`  ${j.label}... `);
     try {
       const refs = await Promise.all(j.cast.map((c) => imageRef(masterPath(serie, c.key))));
-      await maker.make(refs, multiKeyframePrompt(j.cast.map((c) => ({ nombre: c.nombre, descripcion: c.descripcion })), j.prompt), shotReferencePath(filmId, j.label));
+      const lessonPrompt = applyLessons(j.prompt, activeLessons(await readCounts())).text;
+      await maker.make(refs, multiKeyframePrompt(j.cast.map((c) => ({ nombre: c.nombre, descripcion: c.descripcion })), lessonPrompt), shotReferencePath(filmId, j.label));
       await savePromptRevision(filmId, j.label, j.prompt);
       done.push(j.label);
       console.log('OK');
