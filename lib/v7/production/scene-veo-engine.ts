@@ -253,6 +253,14 @@ export async function savePromptRevision(filmId: string, shotId: string, promptT
   return revision;
 }
 
+async function readRevision(filmId: string, shotId: string, revisionId: string): Promise<PromptRevision | null> {
+  if (!REVISION_ID.test(revisionId)) return null;
+  try {
+    const r = JSON.parse(await readFile(path.join(promptsDir(filmId, shotId), revisionId + '.json'), 'utf8')) as PromptRevision;
+    return r.shotId === shotId && r.promptHash === sha(r.promptText) ? r : null;
+  } catch { return null; }
+}
+
 export async function latestPromptRevision(filmId: string, shotId: string): Promise<PromptRevision | null> {
   try {
     const pointer = JSON.parse(await readFile(path.join(promptsDir(filmId, shotId), 'latest.json'), 'utf8')) as { revisionId: string };
@@ -527,7 +535,16 @@ async function dispatchAuthorized(filmId: string, plan: Awaited<ReturnType<typeo
     if (current && current.status !== 'quota-rejected') continue;
     const shot = plan.shots.find((s) => s.shotId === item.shotId)!;
     try {
-      const r = await submitLocked(filmId, plan, shot, item.revisionId, item.estimatedUsd, cap);
+      // Si después de autorizar se guardó otra versión con EXACTAMENTE el mismo texto (p. ej. al crear
+      // los fotogramas), se envía esa: lo autorizado no cambió. Si el texto cambió, se detiene y se avisa.
+      let revisionId = item.revisionId;
+      const latest = await latestPromptRevision(filmId, shot.shotId);
+      if (latest && latest.revisionId !== revisionId) {
+        const authorized = await readRevision(filmId, shot.shotId, revisionId);
+        if (authorized && authorized.promptHash === latest.promptHash) revisionId = latest.revisionId;
+        else throw new Error('El texto de ' + shot.shotId + ' cambió después de autorizar la escena: autoriza esa toma por separado.');
+      }
+      const r = await submitLocked(filmId, plan, shot, revisionId, item.estimatedUsd, cap);
       results.push({ shotId: shot.shotId, status: r.status });
       inFlight++;
     } catch (error) {

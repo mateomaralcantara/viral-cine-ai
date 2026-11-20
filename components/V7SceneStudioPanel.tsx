@@ -56,9 +56,10 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
 
   /** Muestra los errores de recuperación en vez de ignorarlos (si no, una toma podría quedar «submitted» sin aviso). */
   function reportResume(data: unknown) {
-    const r = (data as { result?: { results?: Array<{ shotId: string; status: string; error?: string }> } } | null)?.result;
-    const failed = (r?.results ?? []).filter((x) => x.error || x.status === 'error');
-    if (failed.length) setMessage('Error al recuperar: ' + failed.map((x) => x.shotId + ': ' + (x.error || x.status)).join(' · '));
+    type Item = { shotId: string; status: string; error?: string };
+    const r = (data as { result?: { results?: Item[]; dispatched?: Item[] } } | null)?.result;
+    const failed = [...(r?.results ?? []), ...(r?.dispatched ?? [])].filter((x) => x.error || x.status === 'error' || x.status === 'stopped');
+    if (failed.length) setMessage('No se pudo continuar: ' + failed.map((x) => x.shotId + ': ' + (x.error || x.status)).join(' · '));
   }
 
   async function post(body: Record<string, unknown>, label: string) {
