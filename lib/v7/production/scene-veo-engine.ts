@@ -19,6 +19,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { GenerateVideosOperation, GoogleGenAI } from '@google/genai';
 import { activeLessons, applyLessons, readCounts } from '@/lib/v7/qa/lessons';
+import { isLocked } from '@/lib/v7/production/shot-lock';
 import { readV7FilmBundle, v7FilmRoot } from '@/lib/v7/storage/film-store';
 import { indexedScenes } from '@/lib/v7/production/scene-approval-board';
 import { veoSeconds } from '@/lib/v7/production/cinema-core-policy';
@@ -457,6 +458,9 @@ function paidPreconditions(legacy: boolean, sceneLabel: string, filmId: string) 
 
 export async function submitSceneShot(filmId: string, shotId: string, input: { revisionId: string; authorization: string; redo?: boolean }) {
   const { plan, shot } = await planShot(filmId, shotId);
+  if (await isLocked(shotDir(filmId, shotId))) {
+    throw new Error('La toma ' + shotId + ' está FIJADA (quedó bien): no se vuelve a generar. Si de verdad quieres cambiarla: npm run frase -- <película> --soltar ' + shotId);
+  }
   const { rate, cap } = paidPreconditions(plan.legacy, plan.sceneLabel, filmId);
   if (!REVISION_ID.test(input.revisionId)) throw new Error('Guarda primero una versión del prompt.');
   const estimatedUsd = estimateShotUsd(shot.editSeconds, rate);
@@ -467,8 +471,9 @@ export async function submitSceneShot(filmId: string, shotId: string, input: { r
 
 /** Máximo de trabajos de video simultáneos por escena (Google rechaza el exceso con «failed»). */
 export function sceneMaxInFlight() {
-  const value = Number(process.env.V7_SCENE_MAX_IN_FLIGHT || 4);
-  return Number.isInteger(value) && value >= 1 && value <= 9 ? value : 4;
+  // 3 a la vez por defecto: respeta mejor el límite por minuto de Google (sube con V7_SCENE_MAX_IN_FLIGHT si amplías la cuota).
+  const value = Number(process.env.V7_SCENE_MAX_IN_FLIGHT || 3);
+  return Number.isInteger(value) && value >= 1 && value <= 9 ? value : 3;
 }
 const IN_FLIGHT = new Set<SceneVeoStatus>(['reserved', 'submitted', 'processing']);
 
@@ -533,6 +538,7 @@ async function dispatchAuthorized(filmId: string, plan: Awaited<ReturnType<typeo
     if (inFlight >= sceneMaxInFlight()) break;
     const current = await readShotRecord(filmId, item.shotId);
     if (current && current.status !== 'quota-rejected') continue;
+    if (await isLocked(shotDir(filmId, item.shotId))) continue;
     const shot = plan.shots.find((s) => s.shotId === item.shotId)!;
     try {
       // Si después de autorizar se guardó otra versión con EXACTAMENTE el mismo texto (p. ej. al crear

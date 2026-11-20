@@ -145,14 +145,14 @@ test('Los modelos gemini-omni usan Interactions y los veo-* usan generateVideos'
   assert.equal(isOmniModel('veo-3.1-fast-generate-preview'), false);
 });
 
-test('El envío por tandas limita los trabajos simultáneos (por defecto 4)', () => {
+test('El envío por tandas limita los trabajos simultáneos (por defecto 3)', () => {
   const saved = process.env.V7_SCENE_MAX_IN_FLIGHT;
   delete process.env.V7_SCENE_MAX_IN_FLIGHT;
-  assert.equal(sceneMaxInFlight(), 4);
+  assert.equal(sceneMaxInFlight(), 3);
   process.env.V7_SCENE_MAX_IN_FLIGHT = '2';
   assert.equal(sceneMaxInFlight(), 2);
   process.env.V7_SCENE_MAX_IN_FLIGHT = '50';
-  assert.equal(sceneMaxInFlight(), 4);
+  assert.equal(sceneMaxInFlight(), 3);
   if (saved === undefined) delete process.env.V7_SCENE_MAX_IN_FLIGHT; else process.env.V7_SCENE_MAX_IN_FLIGHT = saved;
 });
 

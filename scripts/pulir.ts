@@ -31,7 +31,7 @@ import {
 } from '../lib/v7/production/scene-veo-engine';
 import { fileSha256, originalShotVideo, repairRecordPath } from '../lib/v7/production/shot-current-video';
 import { rewritePrompt } from '../lib/v7/qa/prompt-doctor';
-import { isLocked } from '../lib/v7/production/shot-lock';
+import { isLocked, lockShot } from '../lib/v7/production/shot-lock';
 import { activeLessons, learnFromDefects, readCounts } from '../lib/v7/qa/lessons';
 import type { ShotReview } from '../lib/v7/qa/shot-vision-review';
 
@@ -237,7 +237,7 @@ async function main() {
       const good = await isGood(label);
       if (good === null) continue;
       { const rep = await reportFor(label); if (rep?.problemas.length) await learnFromDefects(rep.problemas.map((p) => `${p.tipo} ${p.descripcion}`), rep.videoSha256.slice(0, 16)); }
-      if (good) { note(label, 'BIEN', 'aprobada'); continue; }
+      if (good) { await lockShot(path.join(root, label.toLowerCase()), 'aprobada por el revisor'); note(label, 'BIEN', 'aprobada · FIJADA (no se vuelve a tocar)'); continue; }
       open++;
       const r = (await reportFor(label))!;
       const rec = await readShotRecord(filmId, label).catch(() => null);

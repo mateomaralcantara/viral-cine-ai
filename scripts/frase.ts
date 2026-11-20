@@ -199,6 +199,18 @@ async function quitar(label: string) {
 async function main() {
   for (const label of list('--soltar')) { await unlockShot(path.join(root, label.toLowerCase())); console.log(`${label}: ya no está fijada.`); }
   for (const label of list('--fijar')) { await lockShot(path.join(root, label.toLowerCase()), 'aprobada por el autor'); console.log(`${label}: FIJADA (ningún agente la tocará).`); }
+  // --fijar-escena E02: fija todas las tomas de la escena que ya tienen video.
+  for (const sceneLabel of list('--fijar-escena')) {
+    const { film } = await readV7FilmBundle(filmId);
+    const sc = indexedScenes(film).find((x) => x.label === sceneLabel);
+    if (!sc) { console.log('No existe la escena ' + sceneLabel); continue; }
+    const done: string[] = [];
+    for (const { label } of sc.shots) {
+      const dir = path.join(root, label.toLowerCase());
+      if (await originalShotVideo(dir, label)) { await lockShot(dir, 'escena aprobada por el autor'); done.push(label); }
+    }
+    console.log(`${sceneLabel}: FIJADAS ${done.length} tomas (${done.join(', ')}). Ningún agente ni el estudio las vuelve a tocar.`);
+  }
   for (const l of list('--quitar')) await quitar(l);
   const label = list('--toma')[0];
   const keep = option('--conservar');
