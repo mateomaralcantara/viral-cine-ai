@@ -573,7 +573,8 @@ async function montar() {
     console.log(`  OK créditos finales: ${credits.length} tarjetas`);
   }
   // La portada del libro cierra la película (después de los créditos).
-  const finalCover = flag('--sin-portada') ? null : await bookCover(serieOf(film));
+  // Si la tarjeta de título ya mostró la portada, no se repite al final.
+  const finalCover = flag('--sin-portada') || (!endLines && cover) ? null : await bookCover(serieOf(film));
   if (finalCover) {
     parts.push((await coverCard(work, finalCover, 7)).out);
     endSeconds += 7;
