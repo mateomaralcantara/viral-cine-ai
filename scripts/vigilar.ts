@@ -9,7 +9,7 @@
  *      Si FALTA parte de la frase, la manda a regenerar.
  *   2. Agente Revisor + Reparador + Pulir (imagen): revisa, repara gratis y, solo si hace falta y
  *      queda presupuesto (--hasta), regenera. Lo que queda bien se FIJA.
- * Nunca toca otra escena ni una toma fijada. Para salir: Ctrl + C (o se para solo al terminar).
+ * Nunca toca otra escena ni una toma fijada. Se para solo al terminar, tras 90 min (--minutos) o con Ctrl + C.
  */
 import { spawn } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -52,7 +52,9 @@ async function main() {
   console.log(`FAMILIA DE AGENTES vigilando ${sceneLabel} · ${scene.scene.title}`);
   console.log(budget ? `Puede regenerar hasta US$${budget.toFixed(2)} en total.` : 'Sin presupuesto de regeneración: corrige gratis y avisa de lo que haya que regenerar (usa --hasta).');
   let idleRounds = 0;
-  for (let round = 0; round < 400; round++) {
+  const stuck = new Set<string>();
+  const deadline = Date.now() + Math.max(10, Number(option('--minutos') ?? 90)) * 60000; // nunca más de 90 min por defecto
+  for (let round = 0; round < 400 && Date.now() < deadline; round++) {
     let pendingInScene = 0;
     let worked = false;
     for (const { shot, label } of scene.shots) {
@@ -60,6 +62,10 @@ async function main() {
       if (await isLocked(dir)) continue;
       const rec = await readShotRecord(filmId, label).catch(() => null);
       if (!rec) continue; // aún no enviada (o en cola del estudio)
+      // Una toma «reservada» sin ID de Google desde hace más de 10 min nunca llegó a enviarse
+      // (p. ej. disco lleno): no se espera por ella, se avisa.
+      const stale = rec.status === 'reserved' && !rec.operationName && Date.now() - Date.parse(rec.updatedAt || rec.createdAt) > 10 * 60000;
+      if (stale) { if (!stuck.has(label)) { stuck.add(label); console.log(`  ${label}: quedó RESERVADA sin enviarse (posible disco lleno). Revísala en el estudio con «Recuperar misma tarea».`); } continue; }
       if (['reserved', 'submitted', 'processing'].includes(rec.status)) { pendingInScene++; continue; }
       if (rec.status !== 'review-required' && rec.status !== 'failed-no-video' && rec.status !== 'quota-rejected') continue;
       const video = await originalShotVideo(dir, label);
