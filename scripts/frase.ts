@@ -24,6 +24,7 @@ import { currentShotVideo, fileSha256, originalShotVideo, trimmedRecordPath, tri
 import { speakerKey, voiceSettings } from '../lib/v7/production/film-voice-mix';
 import { lockShot, unlockShot } from '../lib/v7/production/shot-lock';
 import { QA_MODELS } from '../lib/v7/qa/shot-vision-runner';
+import { extraneousSpan } from '../lib/v7/qa/listen-check';
 
 const run = promisify(execFile);
 nextEnv.loadEnvConfig(process.cwd());
@@ -102,7 +103,13 @@ async function quitar(label: string) {
   const duration = Number((await run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', original])).stdout.trim());
   let from: number, to: number;
   const manual = option('--tramo');
-  if (manual) {
+  const planFile = path.join(root, 'voces', 'frases', `${label}-plan.json`);
+  const sha = await fileSha256(original);
+  const saved = JSON.parse(await readFile(planFile, 'utf8').catch(() => 'null')) as { sha?: string; from?: number; to?: number } | null;
+  if (!manual && args.includes('--aplicar') && saved?.sha === sha && saved.from != null && saved.to != null) {
+    // Se aplica EXACTAMENTE el tramo que se mostró en el plan (no se vuelve a escuchar).
+    from = saved.from; to = saved.to;
+  } else if (manual) {
     [from, to] = manual.split('-').map(Number);
     if (!(from >= 0 && to > from && to <= duration + 0.01)) throw new Error('Tramo inválido. Ejemplo: --tramo 1.8-3.4');
   } else {
@@ -112,13 +119,26 @@ async function quitar(label: string) {
     await run('ffmpeg', ['-nostdin', '-v', 'error', '-y', '-i', original, '-vn', '-ac', '1', '-ar', '22050', audio]);
     const words = await wordsOf(audio);
     console.log('Se oye: ' + words.map((w) => (w.inteligible ? w.palabra : `[${w.palabra}]`) + `(${w.inicio.toFixed(1)})`).join(' '));
-    const bad = words.filter((w) => !w.inteligible);
-    if (!bad.length) { console.log(`${label}: todo se entiende; no hay nada que quitar.`); return; }
-    from = Math.max(0, bad[0].inicio - 0.05);
-    to = Math.min(duration, bad[bad.length - 1].fin + 0.05);
+    // Se compara con el GUION: lo que se oye entre palabras del guion y no está en él, se quita.
+    const { film } = await readV7FilmBundle(filmId);
+    const line = indexedScenes(film).flatMap((x) => x.shots).find((x) => x.label === label)?.shot.spokenText ?? '';
+    const span = extraneousSpan(line, words);
+    if (!span) { console.log(`${label}: lo que se oye coincide con el guion «${line}»; no hay nada que quitar.`); return; }
+    [from, to] = span;
+    to = Math.min(duration, to);
   }
   console.log(`${label}: se quitaría del segundo ${from.toFixed(2)} al ${to.toFixed(2)} (${(to - from).toFixed(2)} s), en video y audio.`);
-  if (!args.includes('--aplicar')) { console.log('No se cambió nada. Para aplicarlo, repite con --aplicar'); return; }
+  if (!args.includes('--aplicar')) {
+    await mkdir(path.dirname(planFile), { recursive: true });
+    await writeFile(planFile, JSON.stringify({ sha, from, to }, null, 2) + '\n');
+    const preview = path.join(root, 'voces', 'frases', `${label}-vista-previa.mp4`);
+    const keepPrev = `not(between(t,${from.toFixed(3)},${to.toFixed(3)}))`;
+    await run('ffmpeg', ['-nostdin', '-v', 'error', '-y', '-i', original, '-filter_complex',
+      `[0:v]select='${keepPrev}',setpts=N/FRAME_RATE/TB[v];[0:a]aselect='${keepPrev}',asetpts=N/SR/TB[a]`, '-map', '[v]', '-map', '[a]', '-c:v', 'libx264', '-crf', '20', '-c:a', 'aac', preview]);
+    console.log('Vista previa (escúchala antes de aplicar): ' + preview);
+    console.log('No se cambió nada. Si suena bien, repite con --aplicar (usará exactamente este tramo).');
+    return;
+  }
   const out = trimmedVideoPath(dir, label);
   const keep = `not(between(t,${from.toFixed(3)},${to.toFixed(3)}))`;
   await run('ffmpeg', ['-nostdin', '-v', 'error', '-y', '-i', original, '-filter_complex',
