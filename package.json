@@ -113,7 +113,8 @@
     "referencia": "node --import tsx scripts/referencia-personaje.ts",
     "personaje": "node --import tsx scripts/personaje.ts",
     "musica": "node --import tsx scripts/musica.ts",
-    "crear:episodio1": "node --import tsx scripts/crear-pelicula.ts episodio1"
+    "crear:episodio1": "node --import tsx scripts/crear-pelicula.ts episodio1",
+    "pulir": "node --import tsx scripts/pulir.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",

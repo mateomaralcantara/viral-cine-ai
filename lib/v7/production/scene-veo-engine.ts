@@ -268,20 +268,30 @@ export async function readShotRecord(filmId: string, shotId: string): Promise<Sc
     const record = JSON.parse(await readFile(recordPath(filmId, shotId), 'utf8')) as SceneVeoRecord;
     if (record.filmId !== filmId || record.shotId !== shotId) throw new Error('Registro de Veo no coincide con la toma.');
     // Normalización de solo lectura: un 429 sin ID de operación nunca creó un trabajo.
-    if (record.status === 'failed-unknown' && !record.operationName && QUOTA_PATTERN.test(record.error ?? '')) {
-      return { ...record, status: 'quota-rejected', estimatedUsd: 0 };
-    }
-    return record;
+    return normalizeRecord(record);
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null;
     throw e;
   }
 }
 
+/** Un bloqueo del filtro de Google («You will not be charged for blocked videos») no cuesta nada. */
+export const FILTERED_PATTERN = /filtered out|will not be charged|usage guidelines|raiMediaFiltered|support codes?:/i;
+
+/** Normalización de solo lectura: lo que Google confirma que no cobró, no cuenta en el tope. */
+function normalizeRecord(record: SceneVeoRecord): SceneVeoRecord {
+  // Un 429 sin ID de operación nunca creó un trabajo.
+  if (record.status === 'failed-unknown' && !record.operationName && QUOTA_PATTERN.test(record.error ?? '')) {
+    return { ...record, status: 'quota-rejected', estimatedUsd: 0 };
+  }
+  if (record.status === 'failed-no-video' && FILTERED_PATTERN.test(record.error ?? '')) return { ...record, estimatedUsd: 0 };
+  return record;
+}
+
 async function archivedRecords(filmId: string, shotId: string): Promise<SceneVeoRecord[]> {
   try {
     const names = (await readdir(attemptsDir(filmId, shotId))).filter((n) => n.endsWith('.json'));
-    return Promise.all(names.map(async (n) => JSON.parse(await readFile(path.join(attemptsDir(filmId, shotId), n), 'utf8')) as SceneVeoRecord));
+    return Promise.all(names.map(async (n) => normalizeRecord(JSON.parse(await readFile(path.join(attemptsDir(filmId, shotId), n), 'utf8')) as SceneVeoRecord)));
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === 'ENOENT') return [];
     throw e;
@@ -674,6 +684,7 @@ export async function resumeSceneShot(filmId: string, shotId: string) {
       const filtered = operation.response?.raiMediaFilteredReasons?.join('; ');
       record.status = operation.error || filtered ? 'failed-no-video' : 'failed-unknown';
       record.error = safeError(filtered || (operation.error ? JSON.stringify(operation.error) : 'La operación terminó sin video.'));
+      if (filtered) record.estimatedUsd = 0; // Google no cobra los videos bloqueados por su filtro.
       await writeRecord(filmId, record);
       return { shotId, status: record.status, videoReady: false, error: record.error };
     }
