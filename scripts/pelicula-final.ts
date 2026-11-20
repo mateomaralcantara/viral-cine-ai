@@ -5,6 +5,7 @@
  *   npm run voces -- convidados --generar   genera con ElevenLabs solo las voces que faltan
  *   npm run montar -- convidados            película final: video + voces + (música) + cierre. Gratis, local.
  *       --musica "C:\ruta\cancion.mp3"     música de fondo (o deja musica.mp3 en la carpeta de la película)
+ *       --voz-oficial-camara [--toma E01-P04]   (prueba) diálogos en cámara con la voz oficial del personaje
  *       --sin-portada                      sin la portada del libro al final
  *       --sin-apertura / --sin-creditos      sin la apertura (reparto y agentes) o sin los créditos finales
  *       --sin-ambiente                     quita el sonido original de Veo
@@ -176,7 +177,9 @@ async function voces() {
   const closing = typeof film.metadata?.closingCard === 'string' ? film.metadata.closingCard as string : '';
   if (closing) lines.push({ label: 'CIERRE', title: 'Pregunta final', text: closing, speaker: 'narrador' });
   // Conversión de voz en cámara: desactivada por defecto (solo con --voz-oficial-camara).
-  const camera = flag('--voz-oficial-camara') ? onCameraPlan(film) : [];
+  // Prueba controlada: --toma E01-P04 convierte solo esa toma (para escucharla antes de aplicarlo a todo).
+  const onlyShots = (option('--toma') ?? '').toUpperCase().split(',').map((x) => x.trim()).filter(Boolean);
+  const camera = flag('--voz-oficial-camara') ? onCameraPlan(film).filter((c) => !onlyShots.length || onlyShots.includes(c.label)) : [];
   const allSpeakers = [...new Set([...lines.map((l) => l.speaker), ...camera.map((c) => c.speaker)])];
   // Los alias (voz interior = la voz de Martin) no ocupan una voz propia.
   const speakers = [...new Set(allSpeakers.map((s) => VOICE_ALIASES[s] ?? s))];
