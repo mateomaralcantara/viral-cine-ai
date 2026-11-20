@@ -18,7 +18,7 @@ import { mkdir, open, readdir, readFile, rename, stat, unlink, writeFile } from 
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { GenerateVideosOperation, GoogleGenAI } from '@google/genai';
-import { activeLessons, applyLessons, readCounts } from '@/lib/v7/qa/lessons';
+import { activeLessons, applyLessons, readCounts, speakableDialogue } from '@/lib/v7/qa/lessons';
 import { isLocked } from '@/lib/v7/production/shot-lock';
 import { readV7FilmBundle, v7DataRoot, v7FilmRoot } from '@/lib/v7/storage/film-store';
 import { indexedScenes } from '@/lib/v7/production/scene-approval-board';
@@ -687,7 +687,8 @@ async function submitLocked(filmId: string, plan: Awaited<ReturnType<typeof scen
         return { shotId, status: record.status, estimatedUsd, noAutomaticRetries: true };
       }
       // Lecciones aprendidas: se añaden al enviar (el texto guardado no cambia) y quedan anotadas.
-      const lessons = applyLessons(revision.promptText, activeLessons(await readCounts()));
+      // Diálogo preparado para Veo (pausas «…» → coma, pronunciación de nombres) + lecciones aprendidas.
+      const lessons = applyLessons(speakableDialogue(revision.promptText), activeLessons(await readCounts()));
       record.lessons = lessons.applied;
       await writeRecord(filmId, record);
       await markSubmit();

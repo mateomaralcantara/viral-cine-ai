@@ -33,3 +33,13 @@ test('una lección nueva se activa cuando el defecto se repite (una vez por vide
   assert.ok(activeLessons(await readCounts()).some((l) => l.id === 'parpadeo'));
   assert.ok(LESSONS.length >= 8);
 });
+
+test('diálogo para Veo: «…» pasa a pausa con coma y se indica la pronunciación; el guion no cambia', async () => {
+  const { speakableDialogue } = await import('../lib/v7/qa/lessons');
+  const out = speakableDialogue('Martin dice en español: «Kant... los límites del conocimiento.». Sin subtítulos ni texto en pantalla.');
+  assert.match(out, /«Kant, los límites del conocimiento\.»/);
+  assert.match(out, /Pronunciación: Kant/);
+  assert.equal((out.match(/«/g) ?? []).length, 1, 'la pista de pronunciación no crea otro diálogo');
+  assert.ok(out.endsWith('Sin subtítulos ni texto en pantalla.'));
+  assert.equal(speakableDialogue('Un paisaje sin diálogo. Sin subtítulos ni texto en pantalla.'), 'Un paisaje sin diálogo. Sin subtítulos ni texto en pantalla.');
+});

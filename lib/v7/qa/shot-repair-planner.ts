@@ -35,7 +35,7 @@ const RE = {
   flicker: /parpade|flicker|inestab|ruido digital/,
   mouth: /boca|labio|silb|habla|sincronia labial/,
   anatomy: /mano|dedo|anatom|brazo|deform/,
-  identity: /identidad|no coincide|pelo corto|no se parece/,
+  identity: /identidad|no coincide con (la|su) descripci|pelo corto|no se parece/,
   walk: /desliz|camina|pisada|peso/,
   tear: /lagrima|fluido/
 };

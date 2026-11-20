@@ -95,3 +95,31 @@ export function applyLessons(prompt: string, lessons: Lesson[]) {
   const negative = apply.map((l) => l.negative).filter(Boolean) as string[];
   return { text, applied: apply.map((l) => l.id), negative };
 }
+
+/** Pronunciación de nombres extranjeros que Veo dice mal en español (se añade como pista). */
+export const PRONUNCIATION: Record<string, string> = {
+  Kant: 'Kant (se pronuncia "Kant", una sola sílaba, como en alemán)',
+  Leibniz: 'Leibniz (se pronuncia "Láibnits")',
+  Camus: 'Camus (se pronuncia "Camí", a la francesa)',
+  Nietzsche: 'Nietzsche (se pronuncia "Niche")',
+  Sartre: 'Sartre (se pronuncia "Sartr", a la francesa)',
+  Descartes: 'Descartes (se pronuncia "Decart", a la francesa)'
+};
+
+/**
+ * Prepara el diálogo «…» para Veo: los puntos suspensivos se vuelven una pausa con coma
+ * (Veo rellenaba esas pausas con palabras inventadas) y se añade cómo pronunciar los nombres
+ * extranjeros. El guion y los subtítulos NO cambian: solo lo que se envía a Veo.
+ */
+export function speakableDialogue(prompt: string) {
+  const names = new Set<string>();
+  const text = prompt.replace(/«([^»]*)»/g, (_m, line: string) => {
+    for (const n of Object.keys(PRONUNCIATION)) if (new RegExp('\\b' + n + '\\b').test(line)) names.add(n);
+    const spoken = line.replace(/\s*(\.\.\.|…)\s*/g, ', ').replace(/,\s*([¿¡]?[A-ZÁÉÍÓÚÑ])/g, (_x, c: string) => ', ' + c.toLowerCase()).replace(/,\s*$/, '').trim();
+    return '«' + spoken + '»';
+  });
+  if (!names.size) return text;
+  const hint = 'Pronunciación: ' + [...names].map((n) => PRONUNCIATION[n]).join('; ') + '. Dice la frase de corrido, con una pausa breve en la coma, sin añadir ninguna otra palabra.';
+  const marker = 'Sin subtítulos ni texto en pantalla.';
+  return text.includes(marker) ? text.replace(marker, hint + ' ' + marker) : text + ' ' + hint;
+}
