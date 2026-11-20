@@ -255,10 +255,15 @@ async function shotPart(work: string, index: number, label: string, video: strin
   if (opts.cameraVoice && t.freeze > 0) t.total = videoSeconds + t.freeze;
   const out = path.join(work, String(index).padStart(3, '0') + '-' + label + '.mp4');
   const input = ['-i', video];
-  const vf = VF + (t.freeze > 0 ? `,tpad=stop_mode=clone:stop_duration=${fmt(t.freeze)}` : '');
+  // Voz en off más larga que el video: en vez de congelar la imagen, cámara lenta suave (hasta 70 %);
+  // solo si no alcanza se congela el último instante. Los diálogos en cámara nunca se ralentizan.
+  const slow = t.freeze > 0 && !opts.onCamera && !opts.cameraVoice ? Math.max(0.7, videoSeconds / t.total) : 1;
+  const stillFreeze = Math.max(0, Math.round((t.total - videoSeconds / slow) * 1000) / 1000);
+  const vf = (slow < 1 ? `setpts=PTS/${slow.toFixed(4)},` : '') + VF +
+    (slow < 1 ? (stillFreeze > 0.05 ? `,tpad=stop_mode=clone:stop_duration=${fmt(stillFreeze)}` : '') : (t.freeze > 0 ? `,tpad=stop_mode=clone:stop_duration=${fmt(t.freeze)}` : ''));
   // Con la voz oficial convertida, el audio original de Veo (con la voz inventada) no se usa.
   const amb = !opts.cameraVoice && !opts.muteVideo && (ambient || opts.onCamera) && await hasAudio(video)
-    ? `[0:a]aresample=48000,volume=${opts.onCamera ? 1.0 : voice ? 0.3 : 0.8},apad[amb]`
+    ? `[0:a]${slow < 1 ? `atempo=${Math.max(0.5, slow).toFixed(4)},` : ''}aresample=48000,volume=${opts.onCamera ? 1.0 : voice ? 0.3 : 0.8},apad[amb]`
     : `anullsrc=r=48000:cl=stereo[amb]`;
   let filter = `[0:v]${vf}[v];${amb}`;
   if (voice) {
@@ -268,7 +273,7 @@ async function shotPart(work: string, index: number, label: string, video: strin
     filter += `;[1:a]${fx}aresample=48000,aformat=channel_layouts=stereo,adelay=${ms}|${ms},volume=${opts.cameraVoice ? 1.3 : 1.6},apad[vo];[amb][vo]amix=inputs=2:duration=longest:normalize=0[a]`;
   } else filter += ';[amb]anull[a]';
   await ffmpeg([...input, '-filter_complex', filter, '-map', '[v]', '-map', '[a]', '-t', fmt(t.total), ...ENC, out]);
-  return { out, seconds: t.total, freeze: t.freeze, voiceSeconds };
+  return { out, seconds: t.total, freeze: slow < 1 ? stillFreeze : t.freeze, slow, voiceSeconds };
 }
 
 async function cardPart(work: string, name: string, lines: string[], seconds: number, voice: string | null, cover: string | null, font: boolean) {
@@ -566,7 +571,7 @@ async function montar() {
       if (line && voice && p.voiceSeconds && !camVoice) cues.push(...cuesForLine(line, cursor + VOICE_START_SECONDS, cursor + VOICE_START_SECONDS + p.voiceSeconds));
       else if (line && onCamera) cues.push(...cuesForLine(line, cursor + 0.3, Math.min(cursor + p.seconds - 0.15, cursor + 0.3 + speechSeconds(line) + 0.6)));
       cursor += p.seconds;
-      console.log(`  OK ${label}${current?.repaired ? ' (reparada)' : ''}  ${p.seconds.toFixed(1)} s${onCamera ? '  diálogo en cámara' : ''}${muteVideo ? '  (voces del video silenciadas)' : ''}${p.freeze ? ` (alargada ${p.freeze.toFixed(1)} s para la voz)` : ''}${voice ? '' : hasLine ? '  SIN VOZ' : ''}`);
+      console.log(`  OK ${label}${current?.repaired ? ' (reparada)' : ''}  ${p.seconds.toFixed(1)} s${onCamera ? '  diálogo en cámara' : ''}${muteVideo ? '  (voces del video silenciadas)' : ''}${p.slow < 1 ? ` (cámara lenta ${Math.round(p.slow * 100)} % para la voz)` : ''}${p.freeze ? ` (alargada ${p.freeze.toFixed(1)} s para la voz)` : ''}${voice ? '' : hasLine ? '  SIN VOZ' : ''}`);
     }
     if (cursor > sceneStart) spans.push({ label: scene.label, start: sceneStart, seconds: cursor - sceneStart });
   }
