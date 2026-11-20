@@ -41,7 +41,9 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
     void refresh().catch((e) => setMessage(String(e instanceof Error ? e.message : e)));
   }, [refresh]);
 
-  const waiting = board?.shots.some((s) => s.status === 'submitted' || s.status === 'processing') ?? false;
+  // Mientras haya tomas en proceso, EN COLA o rechazadas por cuota, la página sigue trabajando sola
+  // (cada 30 s recupera las terminadas y envía las que esperan en cola).
+  const waiting = board?.shots.some((s) => ['submitted', 'processing', 'queued', 'quota-rejected'].includes(s.status)) ?? false;
   useEffect(() => {
     if (!waiting) return;
     const timer = setInterval(() => {
