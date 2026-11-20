@@ -175,7 +175,8 @@ async function voces() {
   const lines = voicePlan(film);
   const closing = typeof film.metadata?.closingCard === 'string' ? film.metadata.closingCard as string : '';
   if (closing) lines.push({ label: 'CIERRE', title: 'Pregunta final', text: closing, speaker: 'narrador' });
-  const camera = onCameraPlan(film);
+  // Conversión de voz en cámara: desactivada por defecto (solo con --voz-oficial-camara).
+  const camera = flag('--voz-oficial-camara') ? onCameraPlan(film) : [];
   const allSpeakers = [...new Set([...lines.map((l) => l.speaker), ...camera.map((c) => c.speaker)])];
   // Los alias (voz interior = la voz de Martin) no ocupan una voz propia.
   const speakers = [...new Set(allSpeakers.map((s) => VOICE_ALIASES[s] ?? s))];
@@ -536,10 +537,9 @@ async function montar() {
       const onCamera = isOnCamera(shot);
       const speaker = speakerKey(film.id, shot.speakerId);
       const hasLine = !onCamera && (shot.spokenText ?? '').trim().length > 0;
-      const camVoice = onCamera ? await cameraVoiceFor(label, src) : null;
+      const camVoice = onCamera && flag('--voz-oficial-camara') ? await cameraVoiceFor(label, src) : null;
       const voice = camVoice ?? (hasLine && await exists(voiceFile(label)) ? voiceFile(label) : null);
       if (hasLine && !voice) missingVoice.push(label);
-      if (onCamera && !camVoice && (shot.spokenText ?? '').trim()) missingVoice.push(label + ' (voz oficial en cámara)');
       const p = await shotPart(work, ++i, label, src, voice, ambient, { onCamera, cameraVoice: !!camVoice, treatment: camVoice ? null : voiceTreatment(speaker) });
       parts.push(p.out);
       const line = (shot.spokenText ?? '').trim();

@@ -45,14 +45,12 @@ export const VOICE_PREFERENCES: Record<string, string[]> = {
 };
 
 /** Personajes que no tienen voz propia: usan la voz de otro con tratamiento sonoro. */
-/** El narrador y la voz interior usan la voz oficial de Martin (con su tratamiento sonoro). */
-export const VOICE_ALIASES: Record<string, string> = { 'voz-interior': 'martin', narrador: 'martin' };
+/** La voz interior usa la voz de Martin (con su tratamiento sonoro). El narrador tiene su propia voz. */
+export const VOICE_ALIASES: Record<string, string> = { 'voz-interior': 'martin' };
 
 /** Tratamiento sonoro por personaje (filtro de audio de FFmpeg), o null. */
 export function voiceTreatment(speaker: string): string | null {
   switch (speaker) {
-    // Narrador: la voz de Martin dos tonos más grave, con cuerpo en los graves (super grave, cinematográfica).
-    case 'narrador': return 'asetrate=44100*0.87,aresample=44100,atempo=1.07,bass=g=5:f=110,acompressor=threshold=0.2:ratio=3,volume=1.15';
     case 'voz-interior': return 'highpass=f=140,lowpass=f=6500,aecho=0.8:0.55:45:0.22,volume=0.95';
     case 'voz-desconocida': return 'asetrate=44100*0.8,aresample=48000,lowpass=f=3800,aecho=0.8:0.8:180|360:0.45|0.3,volume=1.3';
     default: return null;
