@@ -5,6 +5,7 @@
  *   npm run voces -- convidados --generar   genera con ElevenLabs solo las voces que faltan
  *   npm run montar -- convidados            película final: video + voces + (música) + cierre. Gratis, local.
  *       --musica "C:\ruta\cancion.mp3"     música de fondo (o deja musica.mp3 en la carpeta de la película)
+ *       --sin-portada                      sin la portada del libro al final
  *       --sin-apertura / --sin-creditos      sin la apertura (reparto y agentes) o sin los créditos finales
  *       --sin-ambiente                     quita el sonido original de Veo
  *       --ingles                           añade subtítulos en inglés (traducción con Gemini, céntimos)
@@ -296,6 +297,31 @@ async function dualPhotoCard(work: string, left: string, right: string, items: C
   return { out, seconds };
 }
 
+/** Portada del libro: la de la película o, si no tiene, la de la serie. */
+async function bookCover(serie: string) {
+  for (const dir of [root, path.join(v7DataRootDir(), 'personajes', serie)]) {
+    for (const ext of ['jpg', 'jpeg', 'png', 'webp']) {
+      const f = path.join(dir, 'portada.' + ext);
+      if (await exists(f)) return f;
+    }
+  }
+  return null;
+}
+
+/** Portada a pantalla completa: la portada nítida al centro sobre ella misma desenfocada, con un leve acercamiento. */
+async function coverCard(work: string, cover: string, seconds: number) {
+  const name = 'credito-' + String(++cardCount).padStart(3, '0');
+  const out = path.join(work, name + '.mp4');
+  const fade = `fade=t=in:st=0:d=1,fade=t=out:st=${fmt(seconds - 1.2)}:d=1.2`;
+  const filter = `[0:v]split=2[a][b];` +
+    `[a]scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,boxblur=24:2,eq=brightness=-0.18[bg];` +
+    `[b]scale=-2:690,setsar=1[fg];[bg][fg]overlay=x=(W-w)/2:y=15,` +
+    `zoompan=z='min(zoom+0.0005,1.05)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1280x720:fps=24,format=yuv420p,${fade}[v];[1:a]anull[a]`;
+  await ffmpeg(['-loop', '1', '-t', fmt(seconds), '-i', cover, '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo',
+    '-filter_complex', filter, '-map', '[v]', '-map', '[a]', '-t', fmt(seconds), ...ENC, out], work);
+  return { out, seconds };
+}
+
 /** Foto del autor de la serie: autor.jpg/png/webp en la carpeta de personajes de la serie. */
 async function authorPhoto(serie: string) {
   for (const ext of ['jpg', 'jpeg', 'png', 'webp']) {
@@ -483,10 +509,18 @@ async function montar() {
   const endLines = Array.isArray(film.metadata?.endCardLines) ? (film.metadata.endCardLines as unknown[]).map(String) : null;
   parts.push(await cardPart(work, 'cierre-titulo', endLines ?? [book[0].trim().toUpperCase(), ...(book[1] ? [book[1].trim()] : []), ...(author ? [author] : [])], 6, null, endLines ? null : cover, font));
   console.log('  OK cierre: ' + (cover ? 'portada del libro' : 'título del libro'));
+  let endSeconds = 0;
   if (!flag('--sin-creditos')) {
     const credits = await endCreditsSequence(work, facts, font, serieOf(film));
-    for (const c of credits) parts.push(c.out);
+    for (const c of credits) { parts.push(c.out); endSeconds += c.seconds; }
     console.log(`  OK créditos finales: ${credits.length} tarjetas`);
+  }
+  // La portada del libro cierra la película (después de los créditos).
+  const finalCover = flag('--sin-portada') ? null : await bookCover(serieOf(film));
+  if (finalCover) {
+    parts.push((await coverCard(work, finalCover, 7)).out);
+    endSeconds += 7;
+    console.log('  OK portada del libro al final');
   }
 
   const list = path.join(work, 'lista.txt');
@@ -512,6 +546,15 @@ async function montar() {
     if (file) tracks.push({ file, start: span.start, seconds: span.seconds });
   }
   if (!tracks.length && globalMusic) tracks.push({ file: globalMusic, start: 0, seconds: total });
+  // Créditos finales y portada: suena el tema de la apertura (o la primera música disponible).
+  if (endSeconds > 0) {
+    let endFile: string | undefined;
+    for (const label of ['APERTURA', ...spans.map((x) => x.label)]) for (const ext of ['mp3', 'wav', 'm4a']) {
+      const f = path.join(root, 'musica', `${label}.${ext}`);
+      if (!endFile && await exists(f)) endFile = f;
+    }
+    if (endFile) tracks.push({ file: endFile, start: Math.max(0, total - endSeconds), seconds: endSeconds });
+  }
   const safeTitle = film.title.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase().slice(0, 80);
   const final = path.join(finalDir, `${safeTitle}-${stamp}.mp4`);
   const master = 'loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000';

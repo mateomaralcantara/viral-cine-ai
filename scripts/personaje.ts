@@ -39,7 +39,7 @@ const [cmd, target, who] = process.argv.slice(2).filter((a, i, all) => !a.starts
 const args = process.argv.slice(2);
 const flag = (f: string) => args.includes(f);
 const option = (f: string) => { const i = args.indexOf(f); return i >= 0 ? args[i + 1] : undefined; };
-const USAGE = 'Uso: npm run personaje -- importar|reparto|autor|lista|nuevo|carpeta|maestro|aprobar <película o serie> [personaje]';
+const USAGE = 'Uso: npm run personaje -- importar|reparto|autor|portada|lista|nuevo|carpeta|maestro|aprobar <película o serie> [personaje]';
 
 async function resolveSerie(name: string | undefined) {
   if (!name) throw new Error(USAGE);
@@ -92,6 +92,21 @@ async function main() {
         }
       } finally { await rm(tmp, { recursive: true, force: true }); }
       console.log(`\n${CONVIDADOS_REPARTO.length} personajes listos. Ábrelos en el estudio, pestaña PERSONAJES · IDENTIDAD.`);
+      return;
+    }
+    case 'portada': {
+      // npm run personaje -- portada convidados "C:\\ruta\\portada.png"  (para toda la serie)
+      const src = process.argv.slice(2).filter((a) => !a.startsWith('--'))[2];
+      if (!src) throw new Error('Indica la ruta de la portada entre comillas.');
+      const bytes = await readFile(src);
+      const kind = imageKind(bytes);
+      if (!kind) throw new Error('La portada debe ser JPG, PNG o WEBP.');
+      const dir = path.dirname(characterDir(serie, 'martin'));
+      await mkdir(dir, { recursive: true });
+      for (const ext of ['jpg', 'jpeg', 'png', 'webp']) await rm(path.join(dir, 'portada.' + ext), { force: true });
+      await writeFile(path.join(dir, 'portada.' + kind), bytes);
+      console.log('Portada guardada para toda la serie: ' + path.join(dir, 'portada.' + kind));
+      console.log('Cerrará cada película después de los créditos. Siguiente: npm run montar -- episodio1');
       return;
     }
     case 'autor': {
