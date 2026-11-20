@@ -65,7 +65,7 @@ async function main() {
         const line = (shot.spokenText ?? '').trim();
         if (!line) continue;
         const onCamera = shot.metadata?.onCameraDialogue === true;
-        const current = await currentShotVideo(path.join(root, label.toLowerCase()), label);
+        const current = await currentShotVideo(path.join(root, label.toLowerCase()), label, { dialogue: onCamera });
         console.log(`\n${label} · ${onCamera ? 'diálogo en cámara' : 'voz en off'} · guion: «${line}»`);
         if (current) {
           const a = path.join(tmp, label + '-video.mp3');

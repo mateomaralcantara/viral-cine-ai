@@ -26,14 +26,16 @@ export async function originalShotVideo(dir: string, label: string) {
 export const repairedVideoPath = (dir: string, label: string) => path.join(dir, label + '-reparada.mp4');
 export const repairRecordPath = (dir: string, label: string) => path.join(dir, 'reparacion', label + '-reparada.json');
 
-export async function currentShotVideo(dir: string, label: string): Promise<{ file: string; repaired: boolean } | null> {
+export async function currentShotVideo(dir: string, label: string, opts: { dialogue?: boolean } = {}): Promise<{ file: string; repaired: boolean } | null> {
   const original = await originalShotVideo(dir, label);
   if (!original) return null;
   const repaired = repairedVideoPath(dir, label);
   if (await exists(repaired)) {
     try {
-      const rec = JSON.parse(await readFile(repairRecordPath(dir, label), 'utf8')) as { originalSha256?: string };
-      if (rec.originalSha256 && rec.originalSha256 === await fileSha256(original)) return { file: repaired, repaired: true };
+      const rec = JSON.parse(await readFile(repairRecordPath(dir, label), 'utf8')) as { originalSha256?: string; plan?: { window?: unknown; speed?: number } };
+      // Un diálogo nunca usa una reparación que recortó o ralentizó el video: la frase quedaría incompleta.
+      const cutsDialogue = opts.dialogue && (rec.plan?.window != null || (rec.plan?.speed ?? 1) < 1);
+      if (!cutsDialogue && rec.originalSha256 && rec.originalSha256 === await fileSha256(original)) return { file: repaired, repaired: true };
     } catch { /* sin registro válido: se usa el original */ }
   }
   return { file: original, repaired: false };

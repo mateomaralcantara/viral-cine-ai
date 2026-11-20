@@ -525,7 +525,7 @@ async function montar() {
   const missingVoice: string[] = [];
   // Videos de cada toma (una sola lectura) y datos reales de producción para los créditos.
   const shotVideos = new Map<string, { file: string; repaired: boolean } | null>();
-  for (const scene of indexedScenes(film)) for (const { label } of scene.shots) shotVideos.set(label, await currentShotVideo(path.join(root, label.toLowerCase()), label));
+  for (const scene of indexedScenes(film)) for (const { shot, label } of scene.shots) shotVideos.set(label, await currentShotVideo(path.join(root, label.toLowerCase()), label, { dialogue: isOnCamera(shot) }));
   const facts = await productionFacts(film, shotVideos);
   let i = 0;
   let cursor = 0;

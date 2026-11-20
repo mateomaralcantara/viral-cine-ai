@@ -53,3 +53,8 @@ test('diálogo en cámara: nunca se silencia el audio', () => {
   const p = planRepair(review({ bocasHablando: true, problemas: [{ tipo: 'bocas', gravedad: 'medio', descripcion: 'mueve los labios' }] }), 8, 1, { onCamera: true });
   assert.ok(!p.muteOriginal);
 });
+
+test('diálogo en cámara: nunca se recorta ni se ralentiza (la frase quedaría incompleta)', () => {
+  const p = planRepair(review({ problemas: [{ tipo: 'Artefacto visual', gravedad: 'critico', descripcion: 'glitch', segundo: 6 }] }), 8, 2, { onCamera: true });
+  assert.equal(p.window, null); assert.equal(p.speed, 1);
+});

@@ -68,7 +68,8 @@ export function planRepair(review: ShotReview, duration: number, attempt = 1, op
     plan.actions.push('Recorte para sacar el texto/logo del encuadre');
   }
   const bad = issues.filter((p) => p.segundo != null && (has(p.all, RE.glitch) || has(p.all, RE.tear) || strong)).map((p) => p.segundo!);
-  const win = cleanWindow(duration, bad, strong ? 0.9 : 0.6);
+  // En un diálogo en cámara NUNCA se recorta ni se ralentiza: se cortarían o deformarían palabras.
+  const win = opts.onCamera ? null : cleanWindow(duration, bad, strong ? 0.9 : 0.6);
   if (win && win.end - win.start < duration - 0.2) {
     plan.window = win;
     plan.speed = Math.max(0.75, Math.min(1, (win.end - win.start) / Math.min(duration, 6)));
