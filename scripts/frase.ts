@@ -25,7 +25,7 @@ import { currentShotVideo, fileSha256, originalShotVideo, trimmedRecordPath, tri
 import { speakerKey, voiceSettings } from '../lib/v7/production/film-voice-mix';
 import { lockShot, unlockShot } from '../lib/v7/production/shot-lock';
 import { QA_MODELS } from '../lib/v7/qa/shot-vision-runner';
-import { extraneousSpan } from '../lib/v7/qa/listen-check';
+import { extraneousSpan, wordMatch } from '../lib/v7/qa/listen-check';
 
 const run = promisify(execFile);
 nextEnv.loadEnvConfig(process.cwd());
@@ -168,11 +168,21 @@ async function quitar(label: string) {
     }
     console.log(`${label} · guion: «${line}»`);
     for (const g of segments) console.log(`  trozo ${g.n}: ${g.start.toFixed(2)}–${g.end.toFixed(2)} s  «${g.text}»  ${g.inGuion >= 0.6 ? '(del guion)' : '<- NO está en el guion'}`);
+    // Trozos ajenos al guion (nunca el primero: la frase empieza ahí; el último sí, si sobra al final).
     const chosen = pick.length ? segments.filter((g) => pick.includes(g.n))
-      : segments.filter((g, i) => g.inGuion < 0.6 && i > 0 && i < segments.length - 1);
+      : segments.filter((g, i) => g.inGuion < 0.6 && i > 0);
+    // SALVAGUARDA: lo que queda debe contener la frase completa del guion; si no, cortar no sirve.
+    const keptText = segments.filter((g) => !chosen.includes(g)).map((g) => g.text).join(' ');
+    const coverage = wordMatch(line, keptText.replace(/\[[^\]]*\]/g, ' '));
+    if (!pick.length && coverage < 0.85) {
+      await writeFile(planFile, JSON.stringify({ sha, segments }, null, 2) + '\n');
+      console.log(`${label}: FALTA PARTE DE LA FRASE (se oye el ${Math.round(coverage * 100)} % del guion). Cortar no basta: hay que REGENERAR esta toma.`);
+      process.exitCode = 3;
+      return;
+    }
     if (!chosen.length) {
       await writeFile(planFile, JSON.stringify({ sha, segments }, null, 2) + '\n');
-      console.log('No hay trozos que quitar automáticamente. Puedes elegirlos: --segmento 2   (o un tramo: --tramo 1.1-2.5)');
+      console.log(`${label}: se entiende la frase completa; no hay nada que quitar.`);
       return;
     }
     ranges = chosen.map((g) => [Math.max(0, g.start - 0.04), Math.min(duration, g.end + 0.04)] as [number, number]);
