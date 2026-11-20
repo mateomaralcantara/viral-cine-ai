@@ -14,8 +14,8 @@
  *      con FFmpeg, comprobando que mejora.
  *   4. Si aún no está bien y el defecto solo se arregla regenerando (cara, movimiento…), el médico
  *      reescribe el texto y —solo con --hasta— se regenera. Luego vuelve al paso 1.
- * PLAN B: si una toma con diálogo en cámara falla 2 veces pagadas (o 3 bloqueos), la frase pasa a voz en off
- * (ElevenLabs) y la toma se regenera sin hablar en cámara. Otras tomas: máximo 3 versiones pagadas.
+ * Nunca cambia la voz de un diálogo. Tras 3 versiones pagadas sin mejorar, se detiene y avisa.
+ *   --dialogo E01-P10,E01-P16   devuelve esas tomas a diálogo en cámara y las regenera (con --hasta)
  * Nunca reintenta un resultado incierto (failed-unknown) y nunca pasa del tope que le das.
  */
 import { spawn } from 'node:child_process';
@@ -42,10 +42,11 @@ const args = process.argv.slice(2);
 const key = args.find((a) => FILM_KEYS[a]) ?? '';
 const filmId = FILM_KEYS[key];
 const option = (f: string) => { const i = args.indexOf(f); return i >= 0 ? args[i + 1] : undefined; };
-if (!filmId) { console.log('Uso: npm run pulir -- ' + Object.keys(FILM_KEYS).join('|') + ' [--escena E01] [--hasta 6] [--rondas 3]'); process.exit(1); }
+if (!filmId) { console.log('Uso: npm run pulir -- ' + Object.keys(FILM_KEYS).join('|') + ' [--escena E01] [--hasta 6] [--rondas 3] [--dialogo E01-P10,E01-P16]'); process.exit(1); }
 const onlyScene = option('--escena')?.toUpperCase();
 const budget = Math.max(0, Number(option('--hasta') ?? 0) || 0);
 const rounds = Math.max(1, Math.min(5, Number(option('--rondas') ?? 3) || 3));
+const restoreList = (option('--dialogo') ?? '').toUpperCase().split(',').map((x) => x.trim()).filter(Boolean);
 const root = v7FilmRoot(filmId);
 const exists = (f: string) => access(f).then(() => true, () => false);
 const sleep = (s: number) => new Promise((r) => setTimeout(r, s * 1000));
@@ -106,14 +107,19 @@ async function paidVersions(label: string) {
   return n;
 }
 
-/** Plan B: el diálogo deja de decirse en cámara y pasa a voz en off (ElevenLabs, voz estable). */
-async function toVoiceOver(label: string) {
+/** Devuelve una toma a diálogo en cámara (deshace un plan B anterior de voz en off). */
+async function toOnCamera(label: string) {
   const stored = await readV7FilmBundle(filmId);
+  let prompt = '';
   for (const scene of indexedScenes(stored.film)) for (const { shot, label: l } of scene.shots) {
     if (l !== label) continue;
-    shot.metadata = { ...shot.metadata, onCameraDialogue: false, voiceOver: true, lipsyncStatus: 'not-needed', planB: 'voz-en-off' };
+    const { planB: _drop, ...rest } = (shot.metadata ?? {}) as Record<string, unknown>;
+    shot.metadata = { ...rest, onCameraDialogue: true, voiceOver: false, lipsyncStatus: 'native-veo' };
+    prompt = shot.visualPrompt;
   }
+  if (!prompt) throw new Error('No encuentro la toma ' + label);
   await saveV7FilmBundle({ ...stored, savedAt: undefined });
+  return prompt;
 }
 
 async function dropReference(label: string) {
@@ -133,9 +139,26 @@ async function main() {
   console.log(`AGENTE PULIR — ${film.title}${onlyScene ? ' · ' + onlyScene : ''}`);
   console.log(budget ? `Puede regenerar con Veo hasta US$${budget.toFixed(2)} (los bloqueos no cuestan).` : 'Modo gratis: diagnostica, repara y corrige textos; no regenera video (usa --hasta para permitirlo).');
 
+  // Diálogos que vuelven a decirse en cámara, con el texto original del guion + lecciones.
+  const restored: string[] = [];
+  for (const label of restoreList) {
+    try {
+      const prompt = await toOnCamera(label);
+      const rev = await savePromptRevision(filmId, label, prompt);
+      const shot = scenes.flatMap((x) => x.shots).find((x) => x.label === label)?.shot;
+      const est = rate && shot ? estimateShotUsd(shot.durationSeconds, rate) : 0;
+      if (!budget || spent + est > budget + 1e-9) { note(label, 'DIALOGO', 'vuelve a diálogo en cámara; para regenerarla: --hasta'); continue; }
+      const rec = await readShotRecord(filmId, label).catch(() => null);
+      const redo = rec?.status === 'review-required';
+      await submitSceneShot(filmId, label, { revisionId: rev.revisionId, authorization: redo ? redoAuthorizationPhrase(label, est) : authorizationPhrase(label, est), redo });
+      spent += est; restored.push(label);
+      note(label, 'REGENERANDO', `vuelve a diálogo en cámara con su voz en la toma (US$${est.toFixed(2)})`);
+    } catch (e) { note(label, 'ERROR', (e as Error).message.slice(0, 160)); }
+  }
+
   for (let round = 1; round <= rounds; round++) {
     console.log(`\n=== RONDA ${round} de ${rounds} ===`);
-    const pending: string[] = [];
+    const pending: string[] = round === 1 ? [...restored] : [];
     // 1-2: en proceso, bloqueadas y cuota
     for (const scene of scenes) for (const { shot, label } of scene.shots) {
       let rec = await readShotRecord(filmId, label).catch((e: Error) => { note(label, 'ERROR', e.message); return null; });
@@ -149,14 +172,13 @@ async function main() {
       if (rec.status === 'failed-unknown') { note(label, 'INCIERTA', 'resultado dudoso: no se reintenta (revisa en el estudio con «Recuperar»)'); continue; }
       const blocked = rec.status === 'failed-no-video';
       if (!blocked && rec.status !== 'quota-rejected') continue;
-      let onCamera = shot.metadata?.onCameraDialogue === true;
+      const onCamera = shot.metadata?.onCameraDialogue === true;
       const revision = await latestPromptRevision(filmId, label).catch(() => null);
       const current = revision?.promptText ?? shot.visualPrompt;
       let revisionId = revision?.revisionId ?? '';
       if (blocked) {
         const attempt = (await blockedAttempts(label)) + 1;
         let extra = '';
-        if (onCamera && attempt >= 4) { await toVoiceOver(label); onCamera = false; extra += ' · PLAN B: la frase pasa a voz en off'; }
         if (attempt >= 3 && await dropReference(label)) extra = ' · sin foto de referencia';
         try {
           const fixed = await rewritePrompt({ prompt: current, kind: 'bloqueada', problem: rec.error ?? 'bloqueada', line: shot.spokenText ?? '', onCamera, attempt });
@@ -210,13 +232,11 @@ async function main() {
       const r = (await reportFor(label))!;
       const rec = await readShotRecord(filmId, label).catch(() => null);
       if (!rec || rec.status !== 'review-required') continue;
-      let onCamera = shot.metadata?.onCameraDialogue === true;
+      const onCamera = shot.metadata?.onCameraDialogue === true;
       const versions = await paidVersions(label) + 1;
-      let planB = '';
-      if (versions >= 3) {
-        if (onCamera) { await toVoiceOver(label); onCamera = false; planB = ' · PLAN B: la frase pasa a voz en off'; }
-        else if (versions >= 4) { note(label, 'AGOTADA', `${r.puntuacion}/10 · ${versions - 1} versiones pagadas sin mejorar: se queda la actual (reparada si se pudo)`); continue; }
-      }
+      const planB = '';
+      // Nunca se cambia la voz de un diálogo: tras 3 versiones pagadas sin mejorar, se detiene y avisa.
+      if (versions >= 4 && !restoreList.includes(label)) { note(label, 'AGOTADA', `${r.puntuacion}/10 · ${versions - 1} versiones pagadas sin mejorar: se queda la actual (reparada si se pudo). Decide tú si se rehace.`); continue; }
       const revision = await latestPromptRevision(filmId, label).catch(() => null);
       const problems = r.problemas.map((p) => `${p.tipo}: ${p.descripcion}`).join('; ') || r.motivo;
       try {
