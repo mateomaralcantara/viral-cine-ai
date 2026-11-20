@@ -114,7 +114,8 @@
     "personaje": "node --import tsx scripts/personaje.ts",
     "musica": "node --import tsx scripts/musica.ts",
     "crear:episodio1": "node --import tsx scripts/crear-pelicula.ts episodio1",
-    "pulir": "node --import tsx scripts/pulir.ts"
+    "pulir": "node --import tsx scripts/pulir.ts",
+    "escuchar": "node --import tsx scripts/escuchar.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",

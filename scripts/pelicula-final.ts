@@ -164,6 +164,15 @@ async function convertCamera(c: CameraLine, casting: Casting) {
   } finally { await rm(tmp, { force: true }); }
 }
 
+/** ¿El video de esta toma se generó con un diálogo (frase entre «»)? Entonces su audio tiene voces. */
+async function videoHasSpeech(label: string) {
+  const dir = path.join(root, label.toLowerCase());
+  const rec = await readJson<{ revisionId?: string } | null>(path.join(dir, 'provider-operation.json'), null);
+  if (!rec?.revisionId) return false;
+  const rev = await readJson<{ promptText?: string } | null>(path.join(dir, 'veo-prompts', rec.revisionId + '.json'), null);
+  return (rev?.promptText ?? '').includes('«');
+}
+
 /** La voz oficial convertida de esta toma, si corresponde al video que usa la película. */
 async function cameraVoiceFor(label: string, videoFile: string) {
   const rec = await readJson<{ sha?: string } | null>(cameraRecord(label), null);
@@ -235,7 +244,7 @@ async function findFont(work: string) {
   return false;
 }
 
-async function shotPart(work: string, index: number, label: string, video: string, voice: string | null, ambient: boolean, opts: { onCamera?: boolean; treatment?: string | null; cameraVoice?: boolean } = {}) {
+async function shotPart(work: string, index: number, label: string, video: string, voice: string | null, ambient: boolean, opts: { onCamera?: boolean; treatment?: string | null; cameraVoice?: boolean; muteVideo?: boolean } = {}) {
   const videoSeconds = await probe(video);
   const voiceSeconds = voice ? await probe(voice) : null;
   // La voz oficial en cámara dura lo mismo que el video (mismo ritmo): sin margen ni congelado.
@@ -247,7 +256,7 @@ async function shotPart(work: string, index: number, label: string, video: strin
   const input = ['-i', video];
   const vf = VF + (t.freeze > 0 ? `,tpad=stop_mode=clone:stop_duration=${fmt(t.freeze)}` : '');
   // Con la voz oficial convertida, el audio original de Veo (con la voz inventada) no se usa.
-  const amb = !opts.cameraVoice && (ambient || opts.onCamera) && await hasAudio(video)
+  const amb = !opts.cameraVoice && !opts.muteVideo && (ambient || opts.onCamera) && await hasAudio(video)
     ? `[0:a]aresample=48000,volume=${opts.onCamera ? 1.0 : voice ? 0.3 : 0.8},apad[amb]`
     : `anullsrc=r=48000:cl=stereo[amb]`;
   let filter = `[0:v]${vf}[v];${amb}`;
@@ -543,13 +552,15 @@ async function montar() {
       const camVoice = onCamera && flag('--voz-oficial-camara') ? await cameraVoiceFor(label, src) : null;
       const voice = camVoice ?? (hasLine && await exists(voiceFile(label)) ? voiceFile(label) : null);
       if (hasLine && !voice) missingVoice.push(label);
-      const p = await shotPart(work, ++i, label, src, voice, ambient, { onCamera, cameraVoice: !!camVoice, treatment: camVoice ? null : voiceTreatment(speaker) });
+      // Voz en off sobre un video que se generó hablando: se silencia el video para que no tape la voz.
+      const muteVideo = !onCamera && !!voice && await videoHasSpeech(label);
+      const p = await shotPart(work, ++i, label, src, voice, ambient, { onCamera, cameraVoice: !!camVoice, muteVideo, treatment: camVoice ? null : voiceTreatment(speaker) });
       parts.push(p.out);
       const line = (shot.spokenText ?? '').trim();
       if (line && voice && p.voiceSeconds && !camVoice) cues.push(...cuesForLine(line, cursor + VOICE_START_SECONDS, cursor + VOICE_START_SECONDS + p.voiceSeconds));
       else if (line && onCamera) cues.push(...cuesForLine(line, cursor + 0.3, Math.min(cursor + p.seconds - 0.15, cursor + 0.3 + speechSeconds(line) + 0.6)));
       cursor += p.seconds;
-      console.log(`  OK ${label}${current?.repaired ? ' (reparada)' : ''}  ${p.seconds.toFixed(1)} s${onCamera ? '  diálogo en cámara' : ''}${p.freeze ? ` (alargada ${p.freeze.toFixed(1)} s para la voz)` : ''}${voice ? '' : hasLine ? '  SIN VOZ' : ''}`);
+      console.log(`  OK ${label}${current?.repaired ? ' (reparada)' : ''}  ${p.seconds.toFixed(1)} s${onCamera ? '  diálogo en cámara' : ''}${muteVideo ? '  (voces del video silenciadas)' : ''}${p.freeze ? ` (alargada ${p.freeze.toFixed(1)} s para la voz)` : ''}${voice ? '' : hasLine ? '  SIN VOZ' : ''}`);
     }
     if (cursor > sceneStart) spans.push({ label: scene.label, start: sceneStart, seconds: cursor - sceneStart });
   }
