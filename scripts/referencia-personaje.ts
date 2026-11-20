@@ -25,6 +25,7 @@ import { readV7FilmBundle, v7FilmRoot } from '../lib/v7/storage/film-store';
 import { indexedScenes } from '../lib/v7/production/scene-approval-board';
 import { latestPromptRevision, savePromptRevision, shotReferencePath } from '../lib/v7/production/scene-veo-engine';
 import { fileSha256, originalShotVideo } from '../lib/v7/production/shot-current-video';
+import { isLocked } from '../lib/v7/production/shot-lock';
 import { needsIdentityFix, shotShows, type IdentityReport } from '../lib/v7/production/character-reference';
 import { characterKeyFromId, listSheets, masterPath, multiKeyframePrompt, serieOf, type CharacterSheet } from '../lib/v7/production/character-identity';
 import { GeminiImageMaker, IMAGE_USD, imageRef } from '../lib/v7/production/gemini-image';
@@ -62,6 +63,7 @@ async function main() {
   const skipped: string[] = [];
   for (const scene of indexedScenes(film)) for (const { shot, label } of scene.shots) {
     if (wanted && !wanted.includes(label)) continue;
+    if (await isLocked(path.join(root, label.toLowerCase()))) continue;
     if (onlyScene && !label.startsWith(onlyScene + '-')) continue;
     const revision = await latestPromptRevision(filmId, label).catch(() => null);
     const current = revision?.promptText ?? shot.visualPrompt;

@@ -31,6 +31,7 @@ import {
 } from '../lib/v7/production/scene-veo-engine';
 import { fileSha256, originalShotVideo, repairRecordPath } from '../lib/v7/production/shot-current-video';
 import { rewritePrompt } from '../lib/v7/qa/prompt-doctor';
+import { isLocked } from '../lib/v7/production/shot-lock';
 import { activeLessons, learnFromDefects, readCounts } from '../lib/v7/qa/lessons';
 import type { ShotReview } from '../lib/v7/qa/shot-vision-review';
 
@@ -136,8 +137,13 @@ async function main() {
   const rate = veoSceneRate();
   // --toma E01-P01: el agente trabaja SOLO sobre esas tomas (no toca ninguna otra).
   const onlyShots = (option('--toma') ?? '').toUpperCase().split(',').map((x) => x.trim()).filter(Boolean);
+  // Tomas fijadas por el autor: ningún agente las toca.
+  const lockedSet = new Set<string>();
+  for (const sc of indexedScenes(film)) for (const { label } of sc.shots) if (await isLocked(path.join(root, label.toLowerCase()))) lockedSet.add(label);
+  if (lockedSet.size) console.log('Fijadas (no se tocan): ' + [...lockedSet].join(', '));
   const scenes = indexedScenes(film).filter((s) => !onlyScene || s.label === onlyScene)
     .map((s) => ({ ...s, shots: s.shots.filter((x) => !onlyShots.length || onlyShots.includes(x.label)) }))
+    .map((s) => ({ ...s, shots: s.shots.filter((x) => !lockedSet.has(x.label)) }))
     .filter((s) => s.shots.length);
   if (!scenes.length) throw new Error('No encuentro la escena ' + onlyScene);
   console.log(`AGENTE PULIR — ${film.title}${onlyScene ? ' · ' + onlyScene : ''}`);

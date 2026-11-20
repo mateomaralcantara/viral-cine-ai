@@ -52,6 +52,7 @@ if (!(await v7FilmBundleExists(film.id))) {
   const changed: string[] = [];
   for (const scene of indexedScenes(stored.film)) for (const { shot, label } of scene.shots) {
     if (!wanted.includes(label)) continue;
+    if (await exists(path.join(v7FilmRoot(film.id), label.toLowerCase(), 'fijada.json'))) { console.log(label + ': fijada por el autor, no se cambia'); continue; }
     const next = freshShots.get(shot.id);
     if (!next) continue;
     shot.title = next.title; shot.camera = next.camera; shot.visualPrompt = next.visualPrompt;

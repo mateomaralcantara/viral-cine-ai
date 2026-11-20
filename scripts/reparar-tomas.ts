@@ -26,6 +26,7 @@ import { indexedScenes } from '../lib/v7/production/scene-approval-board';
 import { googleClient, latestPromptRevision, videoPlatform } from '../lib/v7/production/scene-veo-engine';
 import { speakerKey } from '../lib/v7/production/film-voice-mix';
 import { fileSha256, originalShotVideo, repairedVideoPath, repairRecordPath } from '../lib/v7/production/shot-current-video';
+import { isLocked } from '../lib/v7/production/shot-lock';
 import { acceptRepair, planRepair, repairAudioFilter, repairVideoFilter, type RepairPlan } from '../lib/v7/qa/shot-repair-planner';
 import { VisionReviewer } from '../lib/v7/qa/shot-vision-runner';
 import type { ShotReview } from '../lib/v7/qa/shot-vision-review';
@@ -87,6 +88,7 @@ async function main() {
   for (const scene of indexedScenes(film)) for (const { shot, label } of scene.shots) {
     if (onlyShot && label !== onlyShot) continue;
     const dir = path.join(root, label.toLowerCase());
+    if (await isLocked(dir)) { console.log(`  ${label}: fijada por el autor, no se toca`); continue; }
     const original = await originalShotVideo(dir, label);
     if (!original) continue;
     const sha = await fileSha256(original);
