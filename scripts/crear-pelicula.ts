@@ -5,6 +5,7 @@
  *
  *   npm run crear:pelicula -- primera|convidados
  *   npm run crear:pelicula -- convidados --actualizar-textos
+ *   npm run crear:pelicula -- episodio1 --toma E01-P01   (cambio puntual de una toma, aunque tenga video)
  *
  * --actualizar-textos: copia los textos nuevos del guion SOLO a las tomas que aún
  * no tienen video, intento ni versión guardada. Las tomas ya producidas no se tocan.
@@ -42,6 +43,24 @@ const stats = film.stats();
 if (!(await v7FilmBundleExists(film.id))) {
   await saveV7FilmBundle(film.create());
   console.log('Creada: ' + v7FilmBundlePath(film.id));
+} else if (process.argv.includes('--toma')) {
+  // Cambio puntual: solo las tomas indicadas reciben el texto nuevo del guion (aunque ya tengan video).
+  const wanted = (process.argv[process.argv.indexOf('--toma') + 1] ?? '').toUpperCase().split(',').map((x) => x.trim()).filter(Boolean);
+  const stored = await readV7FilmBundle(film.id);
+  const fresh = film.create().film;
+  const freshShots = new Map(fresh.acts.flatMap((a) => a.sequences.flatMap((q) => q.scenes.flatMap((s) => s.shots))).map((s) => [s.id, s]));
+  const changed: string[] = [];
+  for (const scene of indexedScenes(stored.film)) for (const { shot, label } of scene.shots) {
+    if (!wanted.includes(label)) continue;
+    const next = freshShots.get(shot.id);
+    if (!next) continue;
+    shot.title = next.title; shot.camera = next.camera; shot.visualPrompt = next.visualPrompt;
+    shot.spokenText = next.spokenText; shot.durationSeconds = next.durationSeconds; shot.speakerId = next.speakerId;
+    shot.metadata = { ...shot.metadata, ...next.metadata };
+    changed.push(label);
+  }
+  if (changed.length) await saveV7FilmBundle({ ...stored, savedAt: undefined });
+  console.log('Texto nuevo aplicado a: ' + (changed.join(', ') || 'ninguna (revisa la etiqueta)'));
 } else if (process.argv.includes('--actualizar-textos')) {
   const stored = await readV7FilmBundle(film.id);
   const fresh = film.create().film;

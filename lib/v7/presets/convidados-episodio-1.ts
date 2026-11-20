@@ -77,8 +77,9 @@ export const EPISODIO_1_SPEC: ShortFilmSpec = {
       music: 'M01 «El último latido»: piano solitario de notas separadas, pulso grave como un corazón; entra un violonchelo poco a poco.',
       musicPrompt: 'Original cinematic film score, intimate and tragic: a lonely solo piano playing sparse separated notes over a low pulse like a slow heartbeat; a cello enters gradually. Slow tempo, minor key, no vocals, no drums.',
       beats: [
-        V('Pantalla casi negra', 'Plano fijo casi a oscuras', 'Una cortina de hospital en penumbra; solo un leve reflejo verde de un monitor se mueve en la oscuridad.', 'martin',
-          'Si pudieras elegir entre haber existido y no haber nacido nunca... ¿qué elegirías?'),
+        D('Camino a la habitación', 'Travelling de seguimiento lento, plano medio de frente',
+          `De noche, por un pasillo de hospital en penumbra iluminado por luces frías, ${M_CASA} camina despacio hacia la puerta entreabierta de una habitación de la que sale un resplandor verdoso; mientras avanza, con la mirada perdida, habla para sí mismo.`,
+          'martin', 'Si pudieras elegir entre haber existido y no haber nacido nunca... ¿qué elegirías?'),
         S('La habitación', 'Plano general lento', `${HOSPITAL} ${M_CASA} está sentado junto a la cama y sostiene la mano de ${E_CAMA}.`),
         D('¿Por qué me miras así?', 'Primer plano de ella', `${HOSPITAL} ${E_CAMA}, mira a Martin con ternura.`, 'esposa', '¿Por qué me miras así?', FRIO, 6),
         D('Miedo de olvidar', 'Primer plano de Martin', `${HOSPITAL} ${M_CASA} la mira fijamente, con los ojos húmedos.`, 'martin', 'Porque tengo miedo de olvidar tu rostro.', FRIO, 6),

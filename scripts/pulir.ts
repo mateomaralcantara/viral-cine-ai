@@ -42,7 +42,7 @@ const args = process.argv.slice(2);
 const key = args.find((a) => FILM_KEYS[a]) ?? '';
 const filmId = FILM_KEYS[key];
 const option = (f: string) => { const i = args.indexOf(f); return i >= 0 ? args[i + 1] : undefined; };
-if (!filmId) { console.log('Uso: npm run pulir -- ' + Object.keys(FILM_KEYS).join('|') + ' [--escena E01] [--hasta 6] [--rondas 3] [--dialogo E01-P10,E01-P16]'); process.exit(1); }
+if (!filmId) { console.log('Uso: npm run pulir -- ' + Object.keys(FILM_KEYS).join('|') + ' [--escena E01] [--toma E01-P01] [--hasta 6] [--rondas 3] [--dialogo E01-P10,E01-P16]'); process.exit(1); }
 const onlyScene = option('--escena')?.toUpperCase();
 const budget = Math.max(0, Number(option('--hasta') ?? 0) || 0);
 const rounds = Math.max(1, Math.min(5, Number(option('--rondas') ?? 3) || 3));
@@ -134,7 +134,11 @@ async function dropReference(label: string) {
 async function main() {
   const { film } = await readV7FilmBundle(filmId);
   const rate = veoSceneRate();
-  const scenes = indexedScenes(film).filter((s) => !onlyScene || s.label === onlyScene);
+  // --toma E01-P01: el agente trabaja SOLO sobre esas tomas (no toca ninguna otra).
+  const onlyShots = (option('--toma') ?? '').toUpperCase().split(',').map((x) => x.trim()).filter(Boolean);
+  const scenes = indexedScenes(film).filter((s) => !onlyScene || s.label === onlyScene)
+    .map((s) => ({ ...s, shots: s.shots.filter((x) => !onlyShots.length || onlyShots.includes(x.label)) }))
+    .filter((s) => s.shots.length);
   if (!scenes.length) throw new Error('No encuentro la escena ' + onlyScene);
   console.log(`AGENTE PULIR — ${film.title}${onlyScene ? ' · ' + onlyScene : ''}`);
   console.log(budget ? `Puede regenerar con Veo hasta US$${budget.toFixed(2)} (los bloqueos no cuestan).` : 'Modo gratis: diagnostica, repara y corrige textos; no regenera video (usa --hasta para permitirlo).');
@@ -215,7 +219,7 @@ async function main() {
     }
 
     // 3: revisar y reparar gratis
-    const sceneArgs = onlyScene ? ['--escena', onlyScene] : [];
+    const sceneArgs = onlyShots.length === 1 ? ['--toma', onlyShots[0]] : onlyScene ? ['--escena', onlyScene] : [];
     await runScript('calidad-tomas.ts', ['--revisar', ...sceneArgs]);
     for (const scene of scenes) for (const { label } of scene.shots) {
       if ((await isGood(label)) === false) await runScript('reparar-tomas.ts', ['--reparar', '--toma', label]);
