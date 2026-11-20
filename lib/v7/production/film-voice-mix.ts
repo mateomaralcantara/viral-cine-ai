@@ -45,11 +45,14 @@ export const VOICE_PREFERENCES: Record<string, string[]> = {
 };
 
 /** Personajes que no tienen voz propia: usan la voz de otro con tratamiento sonoro. */
-export const VOICE_ALIASES: Record<string, string> = { 'voz-interior': 'martin' };
+/** El narrador y la voz interior usan la voz oficial de Martin (con su tratamiento sonoro). */
+export const VOICE_ALIASES: Record<string, string> = { 'voz-interior': 'martin', narrador: 'martin' };
 
 /** Tratamiento sonoro por personaje (filtro de audio de FFmpeg), o null. */
 export function voiceTreatment(speaker: string): string | null {
   switch (speaker) {
+    // Narrador: la voz de Martin dos tonos más grave, con cuerpo en los graves (super grave, cinematográfica).
+    case 'narrador': return 'asetrate=44100*0.87,aresample=44100,atempo=1.07,bass=g=5:f=110,acompressor=threshold=0.2:ratio=3,volume=1.15';
     case 'voz-interior': return 'highpass=f=140,lowpass=f=6500,aecho=0.8:0.55:45:0.22,volume=0.95';
     case 'voz-desconocida': return 'asetrate=44100*0.8,aresample=48000,lowpass=f=3800,aecho=0.8:0.8:180|360:0.45|0.3,volume=1.3';
     default: return null;
@@ -150,4 +153,11 @@ const srtTime = (s: number) => {
 export function buildSrt(cues: SubtitleCue[]) {
   return cues.filter((c) => c.text.trim() && c.end > c.start)
     .map((c, i) => `${i + 1}\n${srtTime(c.start)} --> ${srtTime(c.end)}\n${c.text}\n`).join('\n');
+}
+
+/** Diálogos dichos en cámara (los convierte el Agente de Voz a la voz oficial del personaje). */
+export function onCameraPlan(film: FilmV7) {
+  return indexedScenes(film).flatMap((scene) => scene.shots
+    .filter(({ shot }) => shot.metadata?.onCameraDialogue === true && (shot.spokenText ?? '').trim())
+    .map(({ shot, label }) => ({ label, text: shot.spokenText!.trim(), speaker: speakerKey(film.id, shot.speakerId) })));
 }

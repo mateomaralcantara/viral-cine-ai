@@ -24,14 +24,15 @@ import { CONVIDADOS_ID } from '../lib/v7/presets/los-convidados-al-agape';
 import { PRIMERA_PAGINA_ID } from '../lib/v7/presets/la-primera-pagina';
 import { readV7FilmBundle, v7DataRoot as v7DataRootDir, v7FilmRoot } from '../lib/v7/storage/film-store';
 import { indexedScenes } from '../lib/v7/production/scene-approval-board';
-import { currentShotVideo } from '../lib/v7/production/shot-current-video';
+import { currentShotVideo, fileSha256 } from '../lib/v7/production/shot-current-video';
 import { listPhotos, listSheets, masterPath, serieOf } from '../lib/v7/production/character-identity';
 import { agentCredits, chunk, endCredits, type ProductionFacts } from '../lib/v7/production/film-credits';
 import { SERIES_CREDITS } from '../lib/v7/presets/series-credits';
 import { speakerKey } from '../lib/v7/production/film-voice-mix';
 import { translateToEnglish } from '../lib/v7/production/subtitle-translate';
+import { convertSpeech, STS_CREDITS_PER_SECOND } from '../lib/v7/production/voice-conversion';
 import {
-  buildSrt, cuesForLine, isOnCamera, pickCasting, speechSeconds, type SubtitleCue, planCharacters, shotTiming, voicePlan, voiceSettings, voiceTreatment, VOICE_ALIASES, VOICE_START_SECONDS,
+  buildSrt, cuesForLine, isOnCamera, onCameraPlan, pickCasting, speechSeconds, type SubtitleCue, planCharacters, shotTiming, voicePlan, voiceSettings, voiceTreatment, VOICE_ALIASES, VOICE_START_SECONDS,
   type AvailableVoice, type Casting, type VoiceLine
 } from '../lib/v7/production/film-voice-mix';
 
@@ -128,12 +129,54 @@ async function speak(line: VoiceLine, casting: Casting) {
   await writeFile(recordFile(line.label), JSON.stringify(rec, null, 2) + '\n');
 }
 
+// Voz oficial en los diálogos en cámara: <toma>.camara.mp3, ligado al video exacto que usa la película.
+type CameraLine = { label: string; text: string; speaker: string; video: string; sha: string; seconds: number };
+const cameraFile = (label: string) => path.join(voiceDir, label + '.camara.mp3');
+const cameraRecord = (label: string) => path.join(voiceDir, label + '.camara.json');
+
+async function pendingCamera(camera: Array<{ label: string; text: string; speaker: string }>, casting: Casting) {
+  const out: CameraLine[] = [];
+  for (const c of camera) {
+    const current = await currentShotVideo(path.join(root, c.label.toLowerCase()), c.label);
+    if (!current || !(await hasAudio(current.file))) continue;
+    const sha = (await fileSha256(current.file)).slice(0, 16);
+    const rec = await readJson<{ sha?: string; voiceId?: string } | null>(cameraRecord(c.label), null);
+    if (rec?.sha === sha && rec.voiceId === casting[c.speaker]?.voiceId && await exists(cameraFile(c.label))) continue;
+    out.push({ ...c, video: current.file, sha, seconds: await probe(current.file) });
+  }
+  return out;
+}
+
+async function convertCamera(c: CameraLine, casting: Casting) {
+  const voiceId = casting[c.speaker]?.voiceId;
+  if (!voiceId) throw new Error('El personaje ' + c.speaker + ' no tiene voz oficial (elígela en PERSONAJES).');
+  const tmp = path.join(voiceDir, `.${c.label}-original.mp3`);
+  await ffmpeg(['-i', c.video, '-vn', '-ac', '1', '-ar', '44100', '-c:a', 'libmp3lame', '-q:a', '2', tmp]);
+  try {
+    const audio = await convertSpeech(apiKey(), voiceId, tmp, voiceSettings(c.speaker));
+    if (await exists(cameraFile(c.label))) {
+      await mkdir(path.join(voiceDir, 'archivo'), { recursive: true });
+      await rename(cameraFile(c.label), path.join(voiceDir, 'archivo', `${c.label}.camara-${Date.now()}.mp3`));
+    }
+    await writeFile(cameraFile(c.label), audio);
+    await writeFile(cameraRecord(c.label), JSON.stringify({ label: c.label, sha: c.sha, voiceId, text: c.text, createdAt: new Date().toISOString() }, null, 2) + '\n');
+  } finally { await rm(tmp, { force: true }); }
+}
+
+/** La voz oficial convertida de esta toma, si corresponde al video que usa la película. */
+async function cameraVoiceFor(label: string, videoFile: string) {
+  const rec = await readJson<{ sha?: string } | null>(cameraRecord(label), null);
+  if (!rec?.sha || !(await exists(cameraFile(label)))) return null;
+  return rec.sha === (await fileSha256(videoFile)).slice(0, 16) ? cameraFile(label) : null;
+}
+
 async function voces() {
   const { film } = await readV7FilmBundle(filmId);
   const lines = voicePlan(film);
   const closing = typeof film.metadata?.closingCard === 'string' ? film.metadata.closingCard as string : '';
   if (closing) lines.push({ label: 'CIERRE', title: 'Pregunta final', text: closing, speaker: 'narrador' });
-  const allSpeakers = [...new Set(lines.map((l) => l.speaker))];
+  const camera = onCameraPlan(film);
+  const allSpeakers = [...new Set([...lines.map((l) => l.speaker), ...camera.map((c) => c.speaker)])];
   // Los alias (voz interior = la voz de Martin) no ocupan una voz propia.
   const speakers = [...new Set(allSpeakers.map((s) => VOICE_ALIASES[s] ?? s))];
   await mkdir(voiceDir, { recursive: true });
@@ -148,14 +191,16 @@ async function voces() {
 
   console.log('\nCASTING (puedes cambiarlo en ' + castingFile + '):');
   for (const s of allSpeakers) console.log(`  ${s.padEnd(15)} -> ${casting[s].name}${VOICE_ALIASES[s] ? ' (con tratamiento sonoro)' : ''}  (${lines.filter((l) => l.speaker === s).length} frases)`);
-  const onCam = film.acts.flatMap((a) => a.sequences.flatMap((q) => q.scenes.flatMap((sc) => sc.shots))).filter(isOnCamera).length;
-  if (onCam) console.log(`  (${onCam} diálogos en cámara: la voz la pone Veo con los labios sincronizados)`);
   const todo = await pending(lines, casting);
+  const camTodo = await pendingCamera(camera, casting);
+  const camSeconds = camTodo.reduce((n, c) => n + c.seconds, 0);
+  if (camera.length) console.log(`  Diálogos en cámara: ${camera.length - camTodo.length} con la voz oficial, ${camTodo.length} por convertir (~${Math.round(camSeconds)} s de audio).`);
   const chars = planCharacters(todo);
   console.log(`\nVoces: ${lines.length - todo.length} listas, ${todo.length} por generar (${chars} caracteres; total guion ${planCharacters(lines)}).`);
   const left = await remainingCharacters();
-  if (!todo.length) { console.log('Todas las voces están listas. Siguiente: npm run montar -- ' + key); return; }
-  if (left != null && chars > left) throw new Error(`No alcanza: necesitas ${chars} caracteres y quedan ${left}.`);
+  if (!todo.length && !camTodo.length) { console.log('Todas las voces están listas. Siguiente: npm run montar -- ' + key); return; }
+  const need = chars + Math.ceil(camSeconds * STS_CREDITS_PER_SECOND);
+  if (left != null && need > left) throw new Error(`No alcanza: necesitas ~${need} créditos de voz y quedan ${left}.`);
   if (!flag('--generar')) {
     console.log('\nNo se generó nada. Para generarlas: npm run voces -- ' + key + ' --generar');
     return;
@@ -164,6 +209,11 @@ async function voces() {
     process.stdout.write(`  ${l.label} (${l.speaker})... `);
     await speak(l, casting);
     console.log('OK ' + (await probe(voiceFile(l.label))).toFixed(1) + ' s');
+  }
+  for (const c of camTodo) {
+    process.stdout.write(`  ${c.label} en cámara (${c.speaker})... `);
+    try { await convertCamera(c, casting); console.log('OK voz oficial'); }
+    catch (e) { console.log('ERROR: ' + (e as Error).message.slice(0, 200)); }
   }
   console.log('\nVoces listas. Escúchalas en ' + voiceDir + '\nSiguiente: npm run montar -- ' + key);
 }
@@ -181,22 +231,27 @@ async function findFont(work: string) {
   return false;
 }
 
-async function shotPart(work: string, index: number, label: string, video: string, voice: string | null, ambient: boolean, opts: { onCamera?: boolean; treatment?: string | null } = {}) {
+async function shotPart(work: string, index: number, label: string, video: string, voice: string | null, ambient: boolean, opts: { onCamera?: boolean; treatment?: string | null; cameraVoice?: boolean } = {}) {
   const videoSeconds = await probe(video);
   const voiceSeconds = voice ? await probe(voice) : null;
-  const t = shotTiming(videoSeconds, voiceSeconds);
+  // La voz oficial en cámara dura lo mismo que el video (mismo ritmo): sin margen ni congelado.
+  const t = opts.cameraVoice
+    ? { total: videoSeconds, freeze: Math.max(0, Math.round(((voiceSeconds ?? 0) - videoSeconds - 0.3) * 1000) / 1000) }
+    : shotTiming(videoSeconds, voiceSeconds);
+  if (opts.cameraVoice && t.freeze > 0) t.total = videoSeconds + t.freeze;
   const out = path.join(work, String(index).padStart(3, '0') + '-' + label + '.mp4');
   const input = ['-i', video];
   const vf = VF + (t.freeze > 0 ? `,tpad=stop_mode=clone:stop_duration=${fmt(t.freeze)}` : '');
-  const amb = (ambient || opts.onCamera) && await hasAudio(video)
+  // Con la voz oficial convertida, el audio original de Veo (con la voz inventada) no se usa.
+  const amb = !opts.cameraVoice && (ambient || opts.onCamera) && await hasAudio(video)
     ? `[0:a]aresample=48000,volume=${opts.onCamera ? 1.0 : voice ? 0.3 : 0.8},apad[amb]`
     : `anullsrc=r=48000:cl=stereo[amb]`;
   let filter = `[0:v]${vf}[v];${amb}`;
   if (voice) {
     input.push('-i', voice);
-    const ms = Math.round(VOICE_START_SECONDS * 1000);
+    const ms = opts.cameraVoice ? 0 : Math.round(VOICE_START_SECONDS * 1000);
     const fx = opts.treatment ? opts.treatment + ',' : '';
-    filter += `;[1:a]${fx}aresample=48000,aformat=channel_layouts=stereo,adelay=${ms}|${ms},volume=1.6,apad[vo];[amb][vo]amix=inputs=2:duration=longest:normalize=0[a]`;
+    filter += `;[1:a]${fx}aresample=48000,aformat=channel_layouts=stereo,adelay=${ms}|${ms},volume=${opts.cameraVoice ? 1.3 : 1.6},apad[vo];[amb][vo]amix=inputs=2:duration=longest:normalize=0[a]`;
   } else filter += ';[amb]anull[a]';
   await ffmpeg([...input, '-filter_complex', filter, '-map', '[v]', '-map', '[a]', '-t', fmt(t.total), ...ENC, out]);
   return { out, seconds: t.total, freeze: t.freeze, voiceSeconds };
@@ -351,7 +406,7 @@ async function productionFacts(film: Awaited<ReturnType<typeof readV7FilmBundle>
   for (const c of film.characters) {
     const k = speakerKey(film.id, c.id);
     const v = casting[VOICE_ALIASES[k] ?? k];
-    if (keys.has(k) && v && await exists(voiceDir)) voiceCast.push({ character: c.name, voice: v.name.split(' - ')[0] + ' (ElevenLabs)' + (VOICE_ALIASES[k] ? ' · tratamiento interior' : '') });
+    if (keys.has(k) && v && await exists(voiceDir)) voiceCast.push({ character: c.name, voice: 'Agente de Voz · ViralCine' });
   }
   let music = false;
   try { music = (await readdir(path.join(root, 'musica'))).some((f) => /\.(wav|mp3|m4a)$/i.test(f)); } catch { /* sin música */ }
@@ -401,7 +456,7 @@ async function openingSequence(work: string, film: Awaited<ReturnType<typeof rea
   }
   const voiceOnly = film.characters.filter((c) => /sin imagen/i.test(c.appearance)).map((c) => facts.voiceCast.find((v) => v.character === c.name)).filter(Boolean) as ProductionFacts['voiceCast'];
   if (voiceOnly.length) {
-    cards.push(await creditCard(work, [{ text: 'VOCES', size: 24, color: grey }, ...voiceOnly.map((v, k) => ({ text: `${v.character}  ·  ${v.voice.replace(' (ElevenLabs)', '')}`, size: 32, gap: k ? 4 : 14 }))], 4.5, font));
+    cards.push(await creditCard(work, [{ text: 'VOCES', size: 24, color: grey }, ...voiceOnly.map((v, k) => ({ text: v.character, size: 32, gap: k ? 4 : 14 })), { text: 'Agente de Voz · ViralCine', size: 26, color: grey, gap: 18 }], 4.5, font));
   }
   const authorName = custom?.author ?? facts.author;
   const photo = custom ? await authorPhoto(serie) : null;
@@ -481,12 +536,14 @@ async function montar() {
       const onCamera = isOnCamera(shot);
       const speaker = speakerKey(film.id, shot.speakerId);
       const hasLine = !onCamera && (shot.spokenText ?? '').trim().length > 0;
-      const voice = hasLine && await exists(voiceFile(label)) ? voiceFile(label) : null;
+      const camVoice = onCamera ? await cameraVoiceFor(label, src) : null;
+      const voice = camVoice ?? (hasLine && await exists(voiceFile(label)) ? voiceFile(label) : null);
       if (hasLine && !voice) missingVoice.push(label);
-      const p = await shotPart(work, ++i, label, src, voice, ambient, { onCamera, treatment: voiceTreatment(speaker) });
+      if (onCamera && !camVoice && (shot.spokenText ?? '').trim()) missingVoice.push(label + ' (voz oficial en cámara)');
+      const p = await shotPart(work, ++i, label, src, voice, ambient, { onCamera, cameraVoice: !!camVoice, treatment: camVoice ? null : voiceTreatment(speaker) });
       parts.push(p.out);
       const line = (shot.spokenText ?? '').trim();
-      if (line && voice && p.voiceSeconds) cues.push(...cuesForLine(line, cursor + VOICE_START_SECONDS, cursor + VOICE_START_SECONDS + p.voiceSeconds));
+      if (line && voice && p.voiceSeconds && !camVoice) cues.push(...cuesForLine(line, cursor + VOICE_START_SECONDS, cursor + VOICE_START_SECONDS + p.voiceSeconds));
       else if (line && onCamera) cues.push(...cuesForLine(line, cursor + 0.3, Math.min(cursor + p.seconds - 0.15, cursor + 0.3 + speechSeconds(line) + 0.6)));
       cursor += p.seconds;
       console.log(`  OK ${label}${current?.repaired ? ' (reparada)' : ''}  ${p.seconds.toFixed(1)} s${onCamera ? '  diálogo en cámara' : ''}${p.freeze ? ` (alargada ${p.freeze.toFixed(1)} s para la voz)` : ''}${voice ? '' : hasLine ? '  SIN VOZ' : ''}`);

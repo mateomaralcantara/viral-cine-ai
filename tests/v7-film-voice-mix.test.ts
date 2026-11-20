@@ -46,3 +46,13 @@ test('subtítulos: líneas de 42 caracteres, máx. 2 por bloque y formato SRT', 
   assert.equal(cues[0].start, 10); assert.ok(Math.abs(cues.at(-1)!.end - 20) < 1e-9);
   assert.match(buildSrt([{ start: 3723.5, end: 3725, text: 'Hola' }]), /^1\n01:02:03,500 --> 01:02:05,000\nHola\n/);
 });
+
+test('identidad vocal: narrador y voz interior usan la voz de Martin; el narrador es más grave', async () => {
+  const { VOICE_ALIASES, voiceTreatment, onCameraPlan } = await import('../lib/v7/production/film-voice-mix');
+  const { createEpisodio1Bundle } = await import('../lib/v7/presets/convidados-episodio-1');
+  assert.equal(VOICE_ALIASES.narrador, 'martin');
+  assert.equal(VOICE_ALIASES['voz-interior'], 'martin');
+  assert.match(voiceTreatment('narrador')!, /asetrate=44100\*0\.8\d/);
+  const cam = onCameraPlan(createEpisodio1Bundle().film);
+  assert.ok(cam.length > 60 && cam.every((c) => c.speaker === 'martin' || c.speaker === 'esposa'));
+});

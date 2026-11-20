@@ -14,12 +14,13 @@ test('prettyVideoModel', () => {
   assert.equal(prettyVideoModel('veo-3.1-generate-001'), 'Google Veo 3.1');
 });
 
-test('agentes: solo se acredita lo que se usó', () => {
+test('agentes: solo se acredita lo que se usó y nunca nombres de proveedores', () => {
   const all = agentCredits(facts).map((c) => c.name).join(' | ');
-  for (const s of ['Agente Director', 'Gemini Image', 'Veo 3.1 Fast (Vertex AI)', 'ElevenLabs', 'Lyria', 'Agente Revisor', 'Agente Reparador', 'Agente Traductor', 'Agente Montador']) assert.ok(all.includes(s), s);
+  for (const s of ['Agente Director', 'Agente de Casting', 'Agente de Cinematografía', 'Agente de Voz', 'Agente Compositor', 'Agente Revisor', 'Agente Reparador', 'Agente Traductor', 'Agente Montador']) assert.ok(all.includes(s), s);
+  assert.ok(!/ElevenLabs|Google|Gemini|Veo|Lyria|FFmpeg|Runway/i.test(all), 'sin proveedores: ' + all);
   const bare = agentCredits({ ...facts, voiceCast: [], originalMusic: false, qualityReviewed: false, repairedShots: 0, characterIdentities: 0, englishSubtitles: false, dialogueOnCamera: false })
     .map((c) => c.name).join(' | ');
-  for (const s of ['ElevenLabs', 'Lyria', 'Revisor', 'Reparador', 'Casting', 'Traductor']) assert.ok(!bare.includes(s), s);
+  for (const s of ['Agente de Voz', 'Compositor', 'Revisor', 'Reparador', 'Casting', 'Traductor']) assert.ok(!bare.includes(s), s);
 });
 
 test('créditos finales incluyen autoría, voces y agentes; chunk agrupa', () => {

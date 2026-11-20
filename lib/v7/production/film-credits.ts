@@ -33,21 +33,20 @@ export function prettyVideoModel(model: string) {
 
 /** Los agentes del software que hicieron cada parte, en orden de producción. */
 export function agentCredits(f: ProductionFacts): CreditLine[] {
-  const video = [...new Set(f.videoModels.map(prettyVideoModel))].join(' · ') || 'Google Veo';
-  const platform = f.videoPlatform === 'vertex' ? ' (Vertex AI)' : '';
+  // Solo agentes y ViralCine: nunca nombres de proveedores externos.
   const out: CreditLine[] = [
     { role: 'Dirección de producción', name: 'Agente Director · ViralCine' },
     { role: 'Guion de producción y planos', name: 'Agente de Guion · ViralCine' }
   ];
-  if (f.characterIdentities) out.push({ role: 'Casting e identidad de personajes', name: 'Agente de Casting · Gemini Image' });
-  out.push({ role: 'Cinematografía', name: video + platform });
-  if (f.dialogueOnCamera) out.push({ role: 'Diálogos en cámara', name: video + ' · audio nativo' });
-  if (f.voiceCast.length) out.push({ role: 'Voces', name: 'Agente de Voz · ElevenLabs' });
-  if (f.originalMusic) out.push({ role: 'Música original', name: 'Agente Compositor · Google Lyria' });
-  if (f.qualityReviewed) out.push({ role: 'Supervisión de calidad', name: 'Agente Revisor · Gemini' });
-  if (f.repairedShots) out.push({ role: 'Posproducción y reparación', name: 'Agente Reparador · FFmpeg' });
+  if (f.characterIdentities) out.push({ role: 'Casting e identidad de personajes', name: 'Agente de Casting · ViralCine' });
+  if (f.videoModels.length) out.push({ role: 'Cinematografía', name: 'Agente de Cinematografía · ViralCine' });
+  if (f.dialogueOnCamera) out.push({ role: 'Diálogos en cámara', name: 'Agente de Cinematografía · ViralCine' });
+  if (f.voiceCast.length) out.push({ role: 'Voces', name: 'Agente de Voz · ViralCine' });
+  if (f.originalMusic) out.push({ role: 'Música original', name: 'Agente Compositor · ViralCine' });
+  if (f.qualityReviewed) out.push({ role: 'Supervisión de calidad', name: 'Agente Revisor · ViralCine' });
+  if (f.repairedShots) out.push({ role: 'Posproducción y reparación', name: 'Agente Reparador · ViralCine' });
   if (f.spanishSubtitles || f.englishSubtitles) {
-    out.push({ role: 'Subtítulos', name: f.englishSubtitles ? 'Agente Traductor · Gemini (español · inglés)' : 'Agente de Subtítulos · ViralCine' });
+    out.push({ role: 'Subtítulos', name: f.englishSubtitles ? 'Agente Traductor · ViralCine (español · inglés)' : 'Agente de Subtítulos · ViralCine' });
   }
   out.push({ role: 'Montaje y mezcla', name: 'Agente Montador · ViralCine' });
   return out;
