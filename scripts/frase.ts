@@ -1,9 +1,10 @@
 /**
  * QUITAR LO QUE NO SE ENTIENDE de una toma, conservando la voz ORIGINAL del personaje, y FIJARLA.
  *
- *   npm run frase -- episodio1 --quitar E01-P10                 plan: qué trozo se quitaría (céntimos, no cambia nada)
- *   npm run frase -- episodio1 --quitar E01-P10 --aplicar       lo quita
- *   npm run frase -- episodio1 --quitar E01-P10 --tramo 1.8-3.4 --aplicar   quitar un tramo exacto (segundos)
+ *   npm run frase -- episodio1 --quitar E01-P10                       lista los trozos de voz (con lo que dice cada uno) y una vista previa
+ *   npm run frase -- episodio1 --quitar E01-P10 --segmento 2          vista previa quitando el trozo 2
+ *   npm run frase -- episodio1 --quitar E01-P10 --segmento 2 --aplicar   lo aplica
+ *   npm run frase -- episodio1 --quitar E01-P10 --tramo 1.1-2.5 [--aplicar]   tramo exacto en segundos
  *
  * Se recorta ese trozo del VIDEO y del AUDIO a la vez: la voz es la original y los labios siguen
  * sincronizados. No se añade ninguna voz. El original nunca se borra. La toma queda fijada.
@@ -96,59 +97,103 @@ async function wordsOf(audio: string): Promise<Word[]> {
   throw new Error('No pude escuchar la toma.');
 }
 
+type Segment = { n: number; start: number; end: number; text: string; inGuion: number };
+
+/** Trozos de voz separados por pausas reales del audio. */
+async function speechSegments(file: string, duration: number) {
+  const { stderr } = await run('ffmpeg', ['-nostdin', '-i', file, '-af', 'silencedetect=noise=-34dB:d=0.12', '-f', 'null', '-'], { maxBuffer: 1 << 24 }).catch((e) => e as { stderr: string });
+  const starts = [...String(stderr).matchAll(/silence_start: ([\d.]+)/g)].map((m) => Number(m[1]));
+  const ends = [...String(stderr).matchAll(/silence_end: ([\d.]+)/g)].map((m) => Number(m[1]));
+  const silences = starts.map((st, i) => [st, ends[i] ?? duration] as [number, number]);
+  const out: Array<[number, number]> = [];
+  let cursor = 0;
+  for (const [st, en] of silences) { if (st - cursor > 0.15) out.push([cursor, st]); cursor = en; }
+  if (duration - cursor > 0.15) out.push([cursor, duration]);
+  return out;
+}
+
+async function transcribe(file: string) {
+  const platform = videoPlatform();
+  const ai = googleClient(platform, platform === 'vertex' ? (process.env.V7_QA_LOCATION?.trim() || 'global') : undefined);
+  const data = (await readFile(file)).toString('base64');
+  for (const model of QA_MODELS) {
+    try {
+      const res = await ai.models.generateContent({ model, contents: [{ role: 'user', parts: [{ inlineData: { mimeType: 'audio/mp3', data } },
+        { text: 'Transcribe literalmente en español lo que se dice. Si no se entiende, escribe cómo suena entre corchetes. Solo la transcripción.' }] }], config: { temperature: 0 } });
+      return (res.text ?? '').trim();
+    } catch (e) { if (!/404|NOT_FOUND|not found|is not supported/i.test(String((e as Error)?.message))) throw e; }
+  }
+  return '';
+}
+
+const norm = (w: string) => w.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-zñ0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+
 async function quitar(label: string) {
   const dir = path.join(root, label.toLowerCase());
   const original = await originalShotVideo(dir, label);
   if (!original) throw new Error('La toma ' + label + ' no tiene video.');
   const duration = Number((await run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', original])).stdout.trim());
-  let from: number, to: number;
-  const manual = option('--tramo');
-  const planFile = path.join(root, 'voces', 'frases', `${label}-plan.json`);
+  const work = path.join(root, 'voces', 'frases');
+  await mkdir(work, { recursive: true });
+  const planFile = path.join(work, `${label}-plan.json`);
   const sha = await fileSha256(original);
-  const saved = JSON.parse(await readFile(planFile, 'utf8').catch(() => 'null')) as { sha?: string; from?: number; to?: number } | null;
-  if (!manual && args.includes('--aplicar') && saved?.sha === sha && saved.from != null && saved.to != null) {
-    // Se aplica EXACTAMENTE el tramo que se mostró en el plan (no se vuelve a escuchar).
-    from = saved.from; to = saved.to;
-  } else if (manual) {
-    [from, to] = manual.split('-').map(Number);
-    if (!(from >= 0 && to > from && to <= duration + 0.01)) throw new Error('Tramo inválido. Ejemplo: --tramo 1.8-3.4');
+  const { film } = await readV7FilmBundle(filmId);
+  const line = indexedScenes(film).flatMap((x) => x.shots).find((x) => x.label === label)?.shot.spokenText ?? '';
+  const guion = new Set(norm(line));
+
+  let ranges: Array<[number, number]>;
+  const manual = option('--tramo');
+  const pick = (option('--segmento') ?? '').split(',').map(Number).filter((n) => n > 0);
+  const saved = JSON.parse(await readFile(planFile, 'utf8').catch(() => 'null')) as { sha?: string; segments?: Segment[]; ranges?: Array<[number, number]> } | null;
+
+  if (manual) {
+    const [f, t] = manual.split('-').map(Number);
+    if (!(f >= 0 && t > f && t <= duration + 0.01)) throw new Error('Tramo inválido. Ejemplo: --tramo 1.1-2.5');
+    ranges = [[f, t]];
   } else {
-    const work = path.join(root, 'voces', 'frases');
-    await mkdir(work, { recursive: true });
-    const audio = path.join(work, `${label}-escucha.mp3`);
-    await run('ffmpeg', ['-nostdin', '-v', 'error', '-y', '-i', original, '-vn', '-ac', '1', '-ar', '22050', audio]);
-    const words = await wordsOf(audio);
-    console.log('Se oye: ' + words.map((w) => (w.inteligible ? w.palabra : `[${w.palabra}]`) + `(${w.inicio.toFixed(1)})`).join(' '));
-    // Se compara con el GUION: lo que se oye entre palabras del guion y no está en él, se quita.
-    const { film } = await readV7FilmBundle(filmId);
-    const line = indexedScenes(film).flatMap((x) => x.shots).find((x) => x.label === label)?.shot.spokenText ?? '';
-    const span = extraneousSpan(line, words);
-    if (!span) { console.log(`${label}: lo que se oye coincide con el guion «${line}»; no hay nada que quitar.`); return; }
-    [from, to] = span;
-    to = Math.min(duration, to);
+    let segments = saved?.sha === sha ? saved.segments ?? [] : [];
+    if (!segments.length) {
+      // Escucha: cada trozo de voz se transcribe por separado (más fiable que los tiempos por palabra).
+      const audio = path.join(work, `${label}-escucha.mp3`);
+      await run('ffmpeg', ['-nostdin', '-v', 'error', '-y', '-i', original, '-vn', '-ac', '1', '-ar', '22050', audio]);
+      const spans = await speechSegments(audio, duration);
+      for (const [i, [st, en]] of spans.entries()) {
+        const piece = path.join(work, `${label}-trozo-${i + 1}.mp3`);
+        await run('ffmpeg', ['-nostdin', '-v', 'error', '-y', '-ss', st.toFixed(3), '-to', en.toFixed(3), '-i', audio, piece]);
+        const text = await transcribe(piece);
+        const words = norm(text.replace(/\[[^\]]*\]/g, ' x '));
+        const inGuion = words.length ? words.filter((w) => guion.has(w)).length / words.length : 0;
+        segments.push({ n: i + 1, start: st, end: en, text, inGuion });
+      }
+    }
+    console.log(`${label} · guion: «${line}»`);
+    for (const g of segments) console.log(`  trozo ${g.n}: ${g.start.toFixed(2)}–${g.end.toFixed(2)} s  «${g.text}»  ${g.inGuion >= 0.6 ? '(del guion)' : '<- NO está en el guion'}`);
+    const chosen = pick.length ? segments.filter((g) => pick.includes(g.n))
+      : segments.filter((g, i) => g.inGuion < 0.6 && i > 0 && i < segments.length - 1);
+    if (!chosen.length) {
+      await writeFile(planFile, JSON.stringify({ sha, segments }, null, 2) + '\n');
+      console.log('No hay trozos que quitar automáticamente. Puedes elegirlos: --segmento 2   (o un tramo: --tramo 1.1-2.5)');
+      return;
+    }
+    ranges = chosen.map((g) => [Math.max(0, g.start - 0.04), Math.min(duration, g.end + 0.04)] as [number, number]);
+    await writeFile(planFile, JSON.stringify({ sha, segments, ranges }, null, 2) + '\n');
   }
-  console.log(`${label}: se quitaría del segundo ${from.toFixed(2)} al ${to.toFixed(2)} (${(to - from).toFixed(2)} s), en video y audio.`);
+
+  const keep = ranges.map(([f, t]) => `not(between(t,${f.toFixed(3)},${t.toFixed(3)}))`).join('*');
+  console.log(`${label}: se quitaría ${ranges.map(([f, t]) => `${f.toFixed(2)}–${t.toFixed(2)} s`).join(' y ')} (video y audio a la vez).`);
+  const target = args.includes('--aplicar') ? trimmedVideoPath(dir, label) : path.join(work, `${label}-vista-previa.mp4`);
+  await run('ffmpeg', ['-nostdin', '-v', 'error', '-y', '-i', original, '-filter_complex',
+    `[0:v]select='${keep}',setpts=N/FRAME_RATE/TB[v];[0:a]aselect='${keep}',asetpts=N/SR/TB[a]`,
+    '-map', '[v]', '-map', '[a]', '-c:v', 'libx264', '-crf', '18', '-preset', 'medium', '-c:a', 'aac', '-ar', '48000', target]);
   if (!args.includes('--aplicar')) {
-    await mkdir(path.dirname(planFile), { recursive: true });
-    await writeFile(planFile, JSON.stringify({ sha, from, to }, null, 2) + '\n');
-    const preview = path.join(root, 'voces', 'frases', `${label}-vista-previa.mp4`);
-    const keepPrev = `not(between(t,${from.toFixed(3)},${to.toFixed(3)}))`;
-    await run('ffmpeg', ['-nostdin', '-v', 'error', '-y', '-i', original, '-filter_complex',
-      `[0:v]select='${keepPrev}',setpts=N/FRAME_RATE/TB[v];[0:a]aselect='${keepPrev}',asetpts=N/SR/TB[a]`, '-map', '[v]', '-map', '[a]', '-c:v', 'libx264', '-crf', '20', '-c:a', 'aac', preview]);
-    console.log('Vista previa (escúchala antes de aplicar): ' + preview);
-    console.log('No se cambió nada. Si suena bien, repite con --aplicar (usará exactamente este tramo).');
+    console.log('Vista previa (escúchala): ' + target);
+    console.log('No se cambió nada. Si suena bien, repite el MISMO comando añadiendo --aplicar.');
     return;
   }
-  const out = trimmedVideoPath(dir, label);
-  const keep = `not(between(t,${from.toFixed(3)},${to.toFixed(3)}))`;
-  await run('ffmpeg', ['-nostdin', '-v', 'error', '-y', '-i', original, '-filter_complex',
-    `[0:v]select='${keep}',setpts=N/FRAME_RATE/TB[v];[0:a]aselect='${keep}',asetpts=N/SR/TB,afade=t=in:st=${from.toFixed(3)}:d=0.04[a]`,
-    '-map', '[v]', '-map', '[a]', '-c:v', 'libx264', '-crf', '18', '-preset', 'medium', '-c:a', 'aac', '-ar', '48000', out]);
-  await writeFile(trimmedRecordPath(dir, label), JSON.stringify({ label, originalSha256: await fileSha256(original), from, to, createdAt: new Date().toISOString() }, null, 2) + '\n');
-  // Cualquier frase añadida antes con otra voz queda desactivada.
+  await writeFile(trimmedRecordPath(dir, label), JSON.stringify({ label, originalSha256: sha, ranges, createdAt: new Date().toISOString() }, null, 2) + '\n');
   for (const f of [`${label}.editada.mp3`, `${label}.editada.json`]) await rm(path.join(root, 'voces', f), { force: true });
-  await lockShot(dir, `se quitó lo que no se entendía (${from.toFixed(2)}–${to.toFixed(2)} s)`);
-  console.log(`${label}: listo. Voz original de Martin, sin el trozo ininteligible. FIJADA. Siguiente: npm run montar -- ${key}`);
+  await lockShot(dir, 'se quitó lo que no se entendía: ' + ranges.map(([f, t]) => `${f.toFixed(2)}–${t.toFixed(2)} s`).join(', '));
+  console.log(`${label}: listo. Voz original, sin lo que no se entendía. FIJADA. Siguiente: npm run montar -- ${key}`);
 }
 
 async function main() {

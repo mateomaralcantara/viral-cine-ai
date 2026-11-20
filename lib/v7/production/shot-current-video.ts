@@ -43,9 +43,9 @@ export async function currentShotVideo(dir: string, label: string, opts: { dialo
   const repaired = repairedVideoPath(dir, label);
   if (await exists(repaired)) {
     try {
-      const rec = JSON.parse(await readFile(repairRecordPath(dir, label), 'utf8')) as { originalSha256?: string; plan?: { window?: unknown; speed?: number } };
-      // Un diálogo nunca usa una reparación que recortó o ralentizó el video: la frase quedaría incompleta.
-      const cutsDialogue = opts.dialogue && (rec.plan?.window != null || (rec.plan?.speed ?? 1) < 1);
+      const rec = JSON.parse(await readFile(repairRecordPath(dir, label), 'utf8')) as { originalSha256?: string; plan?: { window?: unknown; speed?: number; muteOriginal?: boolean } };
+      // Un diálogo nunca usa una reparación que recortó, ralentizó o SILENCIÓ el video (frase incompleta o muda).
+      const cutsDialogue = opts.dialogue && (rec.plan?.window != null || (rec.plan?.speed ?? 1) < 1 || rec.plan?.muteOriginal === true);
       if (!cutsDialogue && rec.originalSha256 && rec.originalSha256 === await fileSha256(original)) return { file: repaired, repaired: true };
     } catch { /* sin registro válido: se usa el original */ }
   }
