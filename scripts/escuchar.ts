@@ -23,6 +23,7 @@ import { googleClient, videoPlatform } from '../lib/v7/production/scene-veo-engi
 import { currentShotVideo } from '../lib/v7/production/shot-current-video';
 import { QA_MODELS } from '../lib/v7/qa/shot-vision-runner';
 import { listenVerdict, TRANSCRIBE_PROMPT, wordMatch } from '../lib/v7/qa/listen-check';
+import { speakerKey, voiceTreatment } from '../lib/v7/production/film-voice-mix';
 
 const run = promisify(execFile);
 nextEnv.loadEnvConfig(process.cwd());
@@ -80,9 +81,13 @@ async function main() {
         }
         const vo = path.join(root, 'voces', label + '.mp3');
         if (!onCamera && await exists(vo)) {
-          const heard = await transcribe(vo);
+          // Se escucha la voz CON su tratamiento sonoro (eco, tono), tal como suena en la película.
+          const fx = voiceTreatment(speakerKey(filmId, shot.speakerId));
+          let heardFile = vo;
+          if (fx) { heardFile = path.join(tmp, label + '-voz.mp3'); await run('ffmpeg', ['-nostdin', '-v', 'error', '-y', '-i', vo, '-af', fx, heardFile]); }
+          const heard = await transcribe(heardFile);
           const score = wordMatch(line, heard);
-          console.log(`  VOZ EN OFF: «${heard}»  ->  ${listenVerdict(score)} (${Math.round(score * 100)} %)`);
+          console.log(`  VOZ EN OFF${fx ? ' (con efecto)' : ''}: «${heard}»  ->  ${listenVerdict(score)} (${Math.round(score * 100)} %)`);
         }
       }
     }

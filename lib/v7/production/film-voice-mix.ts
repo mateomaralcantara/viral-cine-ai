@@ -52,7 +52,8 @@ export const VOICE_ALIASES: Record<string, string> = { 'voz-interior': 'martin' 
 export function voiceTreatment(speaker: string): string | null {
   switch (speaker) {
     case 'voz-interior': return 'highpass=f=140,lowpass=f=6500,aecho=0.8:0.55:45:0.22,volume=0.95';
-    case 'voz-desconocida': return 'asetrate=44100*0.8,aresample=48000,lowpass=f=3800,aecho=0.8:0.8:180|360:0.45|0.3,volume=1.3';
+    // Grave y con eco corto, pero se ENTIENDE: sin cortar consonantes ni ecos largos que tapan sílabas.
+    case 'voz-desconocida': return 'asetrate=44100*0.89,aresample=44100,atempo=1.12,highpass=f=90,lowpass=f=7000,aecho=0.8:0.5:60|120:0.22|0.12,volume=1.25';
     default: return null;
   }
 }
