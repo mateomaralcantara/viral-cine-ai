@@ -31,7 +31,7 @@ import { listPhotos, listSheets, masterPath, serieOf } from '../lib/v7/productio
 import { agentCredits, chunk, endCredits, type ProductionFacts } from '../lib/v7/production/film-credits';
 import { SERIES_CREDITS } from '../lib/v7/presets/series-credits';
 import { speakerKey } from '../lib/v7/production/film-voice-mix';
-import { isRemoved } from '../lib/v7/production/shot-lock';
+import { isLocked, isRemoved } from '../lib/v7/production/shot-lock';
 import { translateToEnglish } from '../lib/v7/production/subtitle-translate';
 import { convertSpeech, STS_CREDITS_PER_SECOND } from '../lib/v7/production/voice-conversion';
 import {
@@ -182,6 +182,9 @@ async function cameraVoiceFor(label: string, videoFile: string) {
   return rec.sha === (await fileSha256(videoFile)).slice(0, 16) ? cameraFile(label) : null;
 }
 
+/** Compara solo las palabras (sin puntuación ni mayúsculas). */
+const sameWords = (t: string) => t.normalize('NFC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+
 async function voces() {
   const { film } = await readV7FilmBundle(filmId);
   const lines = voicePlan(film);
@@ -206,7 +209,15 @@ async function voces() {
 
   console.log('\nCASTING (puedes cambiarlo en ' + castingFile + '):');
   for (const s of allSpeakers) console.log(`  ${s.padEnd(15)} -> ${casting[s].name}${VOICE_ALIASES[s] ? ' (con tratamiento sonoro)' : ''}  (${lines.filter((l) => l.speaker === s).length} frases)`);
-  const todo = await pending(lines, casting);
+  // Con --toma solo se rehacen esas voces. Sin --toma, las tomas FIJADAS conservan su voz (lo aprobado no se toca).
+  const kept: string[] = [];
+  const todo: VoiceLine[] = [];
+  for (const l of await pending(lines, casting)) {
+    if (onlyShots.length) { if (onlyShots.includes(l.label)) todo.push(l); continue; }
+    if (l.label !== 'CIERRE' && await isLocked(path.join(root, l.label.toLowerCase()))) { kept.push(l.label); continue; }
+    todo.push(l);
+  }
+  if (kept.length) console.log('  Tomas fijadas: se conserva su voz aprobada (' + kept.join(', ') + '). Para rehacer una: --toma ' + kept[0] + ' --generar');
   const camTodo = await pendingCamera(camera, casting);
   const camSeconds = camTodo.reduce((n, c) => n + c.seconds, 0);
   if (camera.length) console.log(`  Diálogos en cámara: ${camera.length - camTodo.length} con la voz oficial, ${camTodo.length} por convertir (~${Math.round(camSeconds)} s de audio).`);
@@ -217,7 +228,7 @@ async function voces() {
   const need = chars + Math.ceil(camSeconds * STS_CREDITS_PER_SECOND);
   if (left != null && need > left) throw new Error(`No alcanza: necesitas ~${need} créditos de voz y quedan ${left}.`);
   if (!flag('--generar')) {
-    console.log('\nNo se generó nada. Para generarlas: npm run voces -- ' + key + ' --generar');
+    console.log('\nNO SE GENERÓ NADA (esto era solo el plan). Para grabarlas: npm run voces -- ' + key + (onlyShots.length ? ' --toma ' + onlyShots.join(',') : '') + ' --generar');
     return;
   }
   for (const l of todo) {
@@ -529,6 +540,7 @@ async function montar() {
   const ambient = !flag('--sin-ambiente');
   const parts: string[] = [];
   const missingVideo: string[] = [];
+  const staleVoice: string[] = [];
   const missingVoice: string[] = [];
   // Videos de cada toma (una sola lectura) y datos reales de producción para los créditos.
   const shotVideos = new Map<string, { file: string; repaired: boolean } | null>();
@@ -562,6 +574,10 @@ async function montar() {
       const camVoice = onCamera && flag('--voz-oficial-camara') ? await cameraVoiceFor(label, src) : null;
       const voice = camVoice ?? (hasLine && await exists(voiceFile(label)) ? voiceFile(label) : null);
       if (hasLine && !voice) missingVoice.push(label);
+      if (hasLine && voice && !camVoice) {
+        const rec = await readJson<VoiceRecord | null>(recordFile(label), null);
+        if (rec && sameWords(rec.text) !== sameWords(shot.spokenText ?? '')) staleVoice.push(label);
+      }
       // Voz en off sobre un video que se generó hablando: se silencia el video para que no tape la voz.
       // Si la toma nació como diálogo (frase «» en el guion, plan B anterior o video generado hablando),
       // su video trae voces: con voz en off se silencia por completo.
@@ -699,6 +715,7 @@ async function montar() {
   console.log('Archivo: ' + final);
   if (cues.length) console.log(`Subtítulos en español: ${cues.length} (${flag('--ingles') ? 'español + inglés' : 'español'}: pistas seleccionables en el MP4 y archivos .srt)` + (burned ? `\nVersión con subtítulos grabados: ${burned}` : '  ·  grabados en la imagen: --subtitulos-fijos' + (flag('--ingles') ? '' : '  ·  inglés: --ingles')));
   if (missingVideo.length) console.log('Sin video todavía: ' + missingVideo.join(', '));
+  if (staleVoice.length) console.log('AVISO: la voz grabada NO coincide con el guion en ' + staleVoice.join(', ') + '. Ejecuta: npm run voces -- ' + key + ' y vuelve a montar.');
   if (missingVoice.length) console.log('Sin voz todavía: ' + missingVoice.join(', ') + '  ->  npm run voces -- ' + key + ' --generar');
 }
 

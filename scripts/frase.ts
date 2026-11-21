@@ -214,7 +214,10 @@ async function main() {
   const textShot = list('--texto')[0];
   if (textShot) {
     const i = args.indexOf('--texto');
-    const text = (args[i + 2] ?? '').trim();
+    // Todas las palabras tras la toma, hasta la siguiente opción (--...): funciona con o sin comillas en PowerShell.
+    const words: string[] = [];
+    for (const a of args.slice(i + 2)) { if (a.startsWith('--')) break; words.push(a); }
+    const text = words.join(' ').replace(/\s+/g, ' ').trim();
     if (!text) throw new Error('Escribe el texto entre comillas: --texto ' + textShot + ' "nueva frase"');
     const bundle = await readV7FilmBundle(filmId);
     const entry = indexedScenes(bundle.film).flatMap((x) => x.shots).find((x) => x.label === textShot);
