@@ -535,6 +535,10 @@ async function montar() {
   const stamp = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
   const finalDir = path.join(root, 'final');
   const work = path.join(finalDir, 'trabajo-' + stamp);
+  // Carpetas de trabajo de montajes anteriores que fallaron (p. ej. disco lleno): ocupan mucho y no sirven.
+  for (const old of await readdir(finalDir).catch(() => [] as string[])) {
+    if (old.startsWith('trabajo-')) { await rm(path.join(finalDir, old), { recursive: true, force: true }); console.log('  Limpieza: borrada la carpeta de trabajo antigua ' + old); }
+  }
   await mkdir(work, { recursive: true });
   const font = await findFont(work);
   const ambient = !flag('--sin-ambiente');
