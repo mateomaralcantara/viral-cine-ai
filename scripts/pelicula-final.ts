@@ -34,7 +34,7 @@ import { speakerKey } from '../lib/v7/production/film-voice-mix';
 import { translateToEnglish } from '../lib/v7/production/subtitle-translate';
 import { convertSpeech, STS_CREDITS_PER_SECOND } from '../lib/v7/production/voice-conversion';
 import {
-  buildSrt, cuesForLine, isOnCamera, onCameraPlan, pickCasting, speechSeconds, type SubtitleCue, planCharacters, shotTiming, voicePlan, voiceSettings, voiceTreatment, VOICE_ALIASES, VOICE_START_SECONDS,
+  buildSrt, cuesForLine, isOnCamera, onCameraPlan, pickCasting, speechSeconds, type SubtitleCue, planCharacters, shotTiming, voicePlan, voiceSettings, voiceTreatment, ttsText, muteVideoUnder, VOICE_ALIASES, VOICE_START_SECONDS,
   type AvailableVoice, type Casting, type VoiceLine
 } from '../lib/v7/production/film-voice-mix';
 
@@ -96,7 +96,7 @@ async function remainingCharacters(): Promise<number | null> {
     return s.character_limit - s.character_count;
   } catch { return null; }
 }
-type VoiceRecord = { text: string; voiceId: string; model: string; characters: number; createdAt: string };
+type VoiceRecord = { text: string; voiceId: string; model: string; characters: number; speed?: number; createdAt: string };
 const voiceFile = (label: string) => path.join(voiceDir, label + '.mp3');
 const recordFile = (label: string) => path.join(voiceDir, label + '.json');
 
@@ -104,7 +104,7 @@ async function pending(lines: VoiceLine[], casting: Casting) {
   const out: VoiceLine[] = [];
   for (const l of lines) {
     const rec = await readJson<VoiceRecord | null>(recordFile(l.label), null);
-    if (await exists(voiceFile(l.label)) && rec && rec.text === l.text && rec.voiceId === casting[l.speaker]?.voiceId) continue;
+    if (await exists(voiceFile(l.label)) && rec && rec.text === ttsText(l.speaker, l.text) && rec.voiceId === casting[l.speaker]?.voiceId && (!muteVideoUnder(l.speaker) || rec.speed === voiceSettings(l.speaker).speed)) continue;
     out.push(l);
   }
   return out;
@@ -115,7 +115,7 @@ async function speak(line: VoiceLine, casting: Casting) {
   const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`, {
     method: 'POST',
     headers: { 'xi-api-key': apiKey(), 'content-type': 'application/json' },
-    body: JSON.stringify({ text: line.text, model_id: MODEL, voice_settings: voiceSettings(line.speaker) })
+    body: JSON.stringify({ text: ttsText(line.speaker, line.text), model_id: MODEL, voice_settings: voiceSettings(line.speaker) })
   });
   if (!res.ok) throw new Error(line.label + ': ElevenLabs rechazó la voz (' + res.status + '): ' + (await res.text()).slice(0, 300));
   const audio = Buffer.from(await res.arrayBuffer());
@@ -127,7 +127,7 @@ async function speak(line: VoiceLine, casting: Casting) {
     await rename(voiceFile(line.label), path.join(archive, line.label + '-' + stamp + '.mp3'));
   }
   await writeFile(voiceFile(line.label), audio);
-  const rec: VoiceRecord = { text: line.text, voiceId, model: MODEL, characters: line.text.length, createdAt: new Date().toISOString() };
+  const rec: VoiceRecord = { text: ttsText(line.speaker, line.text), voiceId, model: MODEL, characters: line.text.length, speed: voiceSettings(line.speaker).speed, createdAt: new Date().toISOString() };
   await writeFile(recordFile(line.label), JSON.stringify(rec, null, 2) + '\n');
 }
 
@@ -564,7 +564,7 @@ async function montar() {
       // Si la toma nació como diálogo (frase «» en el guion, plan B anterior o video generado hablando),
       // su video trae voces: con voz en off se silencia por completo.
       const bornAsDialogue = (shot.visualPrompt ?? '').includes('«') || shot.metadata?.planB != null;
-      const muteVideo = !onCamera && !!voice && (bornAsDialogue || await videoHasSpeech(label));
+      const muteVideo = !onCamera && !!voice && (muteVideoUnder(speaker) || bornAsDialogue || await videoHasSpeech(label));
       const p = await shotPart(work, ++i, label, src, voice, ambient, { onCamera, cameraVoice: !!camVoice, muteVideo, treatment: camVoice ? null : voiceTreatment(speaker) });
       parts.push(p.out);
       const line = (shot.spokenText ?? '').trim();

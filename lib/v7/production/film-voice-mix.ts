@@ -48,6 +48,18 @@ export const VOICE_PREFERENCES: Record<string, string[]> = {
 /** La voz interior usa la voz de Martin (con su tratamiento sonoro). El narrador tiene su propia voz. */
 export const VOICE_ALIASES: Record<string, string> = { 'voz-interior': 'martin' };
 
+/** Personajes con frases de una o dos palabras: los «...» hacen que la voz sintética invente sonidos. */
+const PLAIN_TTS = new Set(['voz-desconocida']);
+
+/** Texto que se envía al Agente de Voz (para la voz desconocida, sin puntos suspensivos). */
+export function ttsText(speaker: string, text: string): string {
+  if (!PLAIN_TTS.has(speaker)) return text;
+  return text.replace(/\s*(\.{3}|…)+/g, '.').replace(/\.{2,}/g, '.').trim();
+}
+
+/** ¿El sonido propio del video (Veo) se quita bajo esta voz en off? */
+export function muteVideoUnder(speaker: string) { return PLAIN_TTS.has(speaker); }
+
 /** Tratamiento sonoro por personaje (filtro de audio de FFmpeg), o null. */
 export function voiceTreatment(speaker: string): string | null {
   switch (speaker) {
@@ -92,7 +104,7 @@ export function voiceSettings(speaker: string) {
     case 'heraldo': return { stability: 0.65, similarity_boost: 0.8, style: 0.15, speed: 0.88, use_speaker_boost: true };
     case 'fiscal': return { stability: 0.45, similarity_boost: 0.8, style: 0.4, speed: 0.95, use_speaker_boost: true };
     case 'voz-interior': return { stability: 0.6, similarity_boost: 0.8, style: 0.2, speed: 0.95, use_speaker_boost: true };
-    case 'voz-desconocida': return { stability: 0.85, similarity_boost: 0.7, style: 0.05, speed: 0.75, use_speaker_boost: true };
+    case 'voz-desconocida': return { stability: 0.7, similarity_boost: 0.75, style: 0, speed: 0.9, use_speaker_boost: true };
     case 'esposa': return { stability: 0.5, similarity_boost: 0.8, style: 0.3, speed: 0.92, use_speaker_boost: true };
     default: return { stability: 0.5, similarity_boost: 0.8, style: 0.25, speed: 1, use_speaker_boost: true };
   }
