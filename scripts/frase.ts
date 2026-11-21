@@ -11,6 +11,7 @@
  *
  *   npm run frase -- episodio1 --fijar E01-P01,E01-P02     solo fijar tomas
  *   npm run frase -- episodio1 --soltar E01-P10            quitar la fijación
+ *   npm run frase -- episodio1 --quitar-toma E09-P05       sacar la toma entera del montaje (--devolver-toma la vuelve a poner)
  */
 import { execFile } from 'node:child_process';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -23,7 +24,7 @@ import { indexedScenes } from '../lib/v7/production/scene-approval-board';
 import { googleClient, videoPlatform } from '../lib/v7/production/scene-veo-engine';
 import { currentShotVideo, fileSha256, originalShotVideo, trimmedRecordPath, trimmedVideoPath } from '../lib/v7/production/shot-current-video';
 import { speakerKey, voiceSettings } from '../lib/v7/production/film-voice-mix';
-import { lockShot, unlockShot } from '../lib/v7/production/shot-lock';
+import { lockShot, removeShot, restoreShot, unlockShot } from '../lib/v7/production/shot-lock';
 import { QA_MODELS } from '../lib/v7/qa/shot-vision-runner';
 import { extraneousSpan, wordMatch } from '../lib/v7/qa/listen-check';
 
@@ -208,6 +209,8 @@ async function quitar(label: string) {
 
 async function main() {
   for (const label of list('--soltar')) { await unlockShot(path.join(root, label.toLowerCase())); console.log(`${label}: ya no está fijada.`); }
+  for (const label of list('--quitar-toma')) { await removeShot(path.join(root, label.toLowerCase()), 'el autor la quitó'); console.log(`${label}: QUITADA del montaje (el video se conserva; para devolverla: --devolver-toma ${label}).`); }
+  for (const label of list('--devolver-toma')) { await restoreShot(path.join(root, label.toLowerCase())); console.log(`${label}: vuelve al montaje.`); }
   for (const label of list('--fijar')) { await lockShot(path.join(root, label.toLowerCase()), 'aprobada por el autor'); console.log(`${label}: FIJADA (ningún agente la tocará).`); }
   // --fijar-escena E02: fija todas las tomas de la escena que ya tienen video.
   for (const sceneLabel of list('--fijar-escena')) {

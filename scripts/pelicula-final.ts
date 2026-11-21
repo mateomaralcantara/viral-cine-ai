@@ -31,6 +31,7 @@ import { listPhotos, listSheets, masterPath, serieOf } from '../lib/v7/productio
 import { agentCredits, chunk, endCredits, type ProductionFacts } from '../lib/v7/production/film-credits';
 import { SERIES_CREDITS } from '../lib/v7/presets/series-credits';
 import { speakerKey } from '../lib/v7/production/film-voice-mix';
+import { isRemoved } from '../lib/v7/production/shot-lock';
 import { translateToEnglish } from '../lib/v7/production/subtitle-translate';
 import { convertSpeech, STS_CREDITS_PER_SECOND } from '../lib/v7/production/voice-conversion';
 import {
@@ -551,6 +552,7 @@ async function montar() {
     const sceneStart = cursor;
     for (const { shot, label } of scene.shots) {
       const dir = path.join(root, label.toLowerCase());
+      if (await isRemoved(dir)) { console.log(`  ${label}: quitada por el autor (no entra en el montaje).`); continue; }
       const current = shotVideos.get(label) ?? null;
       const src = current?.file;
       if (!src) { missingVideo.push(label); continue; }
