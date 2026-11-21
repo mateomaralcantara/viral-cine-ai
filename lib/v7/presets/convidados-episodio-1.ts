@@ -173,7 +173,7 @@ export const EPISODIO_1_SPEC: ShortFilmSpec = {
         D('Un lugar donde buscar', 'Primer plano', `En el apartamento, ${M_MONTE} guarda la fotografía en la mochila.`, 'martin', 'Ni siquiera sé si existe un lugar donde buscar.', FRIO, 6),
         S('Las llaves en el buzón', 'Plano detalle', `En el portal de un edificio, la mano enguantada de Martin deja caer unas llaves en un buzón metálico.`, FRIO, 4),
         V('El autobús', 'Plano general', 'Un autobús se aleja de la ciudad por una carretera hacia montañas nevadas al amanecer.', 'narrador',
-          'No llevaba una respuesta. Llevaba una acusación. Y una decisión peligrosa: permanecer en la montaña aunque el frío acabara con sus fuerzas.')
+          'No llevaba una pregunta. Llevaba una acusación. Y una decisión peligrosa: permanecer en la montaña aunque el frío acabara con sus fuerzas.')
       ]
     },
     {

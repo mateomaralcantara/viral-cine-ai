@@ -11,6 +11,7 @@
  *
  *   npm run frase -- episodio1 --fijar E01-P01,E01-P02     solo fijar tomas
  *   npm run frase -- episodio1 --soltar E01-P10            quitar la fijación
+ *   npm run frase -- episodio1 --texto E04-P07 "nueva frase"   cambia la frase de una voz en off
  *   npm run frase -- episodio1 --quitar-toma E09-P05       sacar la toma entera del montaje (--devolver-toma la vuelve a poner)
  */
 import { execFile } from 'node:child_process';
@@ -19,7 +20,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import nextEnv from '@next/env';
 import { FILM_KEYS } from '../lib/v7/presets/film-registry';
-import { readV7FilmBundle, v7FilmRoot } from '../lib/v7/storage/film-store';
+import { readV7FilmBundle, saveV7FilmBundle, v7FilmRoot } from '../lib/v7/storage/film-store';
 import { indexedScenes } from '../lib/v7/production/scene-approval-board';
 import { googleClient, videoPlatform } from '../lib/v7/production/scene-veo-engine';
 import { currentShotVideo, fileSha256, originalShotVideo, trimmedRecordPath, trimmedVideoPath } from '../lib/v7/production/shot-current-video';
@@ -209,6 +210,21 @@ async function quitar(label: string) {
 
 async function main() {
   for (const label of list('--soltar')) { await unlockShot(path.join(root, label.toLowerCase())); console.log(`${label}: ya no está fijada.`); }
+  // --texto E04-P07 "nuevo texto": cambia la frase de una VOZ EN OFF (no toca el video). Luego: npm run voces.
+  const textShot = list('--texto')[0];
+  if (textShot) {
+    const i = args.indexOf('--texto');
+    const text = (args[i + 2] ?? '').trim();
+    if (!text) throw new Error('Escribe el texto entre comillas: --texto ' + textShot + ' "nueva frase"');
+    const bundle = await readV7FilmBundle(filmId);
+    const entry = indexedScenes(bundle.film).flatMap((x) => x.shots).find((x) => x.label === textShot);
+    if (!entry) throw new Error('No encuentro la toma ' + textShot);
+    if (entry.shot.metadata?.onCameraDialogue === true) throw new Error(textShot + ' es diálogo en cámara: cambiar el texto no cambia lo que dice en el video.');
+    const before = entry.shot.spokenText ?? '';
+    entry.shot.spokenText = text;
+    await saveV7FilmBundle(bundle);
+    console.log(`${textShot}: «${before}»\n  ->  «${text}»\nSiguiente: npm run voces -- ${key}  (solo rehace esta voz)`);
+  }
   for (const label of list('--quitar-toma')) { await removeShot(path.join(root, label.toLowerCase()), 'el autor la quitó'); console.log(`${label}: QUITADA del montaje (el video se conserva; para devolverla: --devolver-toma ${label}).`); }
   for (const label of list('--devolver-toma')) { await restoreShot(path.join(root, label.toLowerCase())); console.log(`${label}: vuelve al montaje.`); }
   for (const label of list('--fijar')) { await lockShot(path.join(root, label.toLowerCase()), 'aprobada por el autor'); console.log(`${label}: FIJADA (ningún agente la tocará).`); }
