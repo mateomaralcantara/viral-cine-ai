@@ -53,16 +53,24 @@ export async function extractAnchorFrame(video: string, out: string) {
   return out;
 }
 
-/** Instrucción para la foto de partida: caras de los retratos, continuidad del fotograma aprobado. */
-export function continuityKeyframePrompt(cast: Array<{ nombre: string; descripcion: string }>, shotPrompt: string, opts: { anchorLabel?: string; costume?: string } = {}) {
-  const who = cast.map((c, i) => `Imagen ${i + 1}: retrato oficial de ${c.nombre}${c.descripcion ? ` (${c.descripcion})` : ''}.`).join('\n');
+/**
+ * Instrucción para la foto de partida. Orden de las imágenes adjuntas:
+ * retratos de los personajes (1..n) · plano maestro del decorado (si hay) · fotograma de la toma anterior aprobada (si hay).
+ */
+export function continuityKeyframePrompt(cast: Array<{ nombre: string; descripcion: string }>, shotPrompt: string,
+  opts: { anchorLabel?: string; costume?: string; set?: { nombre: string; descripcion: string } } = {}) {
+  let n = 0;
+  const who = cast.map((c) => `Imagen ${++n}: retrato oficial de ${c.nombre}${c.descripcion ? ` (${c.descripcion})` : ''}.`).join('\n');
+  const setImage = opts.set ? ++n : 0;
+  const anchorImage = opts.anchorLabel ? ++n : 0;
   return [
     'Crea el PRIMER FOTOGRAMA de una toma de cine (16:9, fotografía hiperrealista, iluminación cinematográfica).',
-    'CARAS: las primeras imágenes son los retratos oficiales. En la escena deben ser EXACTAMENTE esas mismas personas:',
-    'misma cara, mismos rasgos, misma edad, mismo pelo y misma barba. No las rejuvenezcas ni las cambies.',
+    cast.length ? 'CARAS: los retratos oficiales adjuntos. En la escena deben ser EXACTAMENTE esas mismas personas: misma cara, mismos rasgos, misma edad, mismo pelo y misma barba. No las rejuvenezcas ni las cambies.' : '',
     who,
+    cast.length ? `CADA PERSONA APARECE UNA SOLA VEZ: ${cast.map((c) => c.nombre).join(', ')}${cast.length === 1 ? ' es la única persona de la imagen' : ' y nadie más'}. Nada de dobles, clones, reflejos con otra postura ni la misma persona repetida.` : '',
+    opts.set ? `DECORADO (imagen ${setImage}): es el plano maestro aprobado de «${opts.set.nombre}». Mantén EXACTAMENTE la misma mesa (forma, longitud, material, copas, sillas), las mismas columnas, el mismo suelo y la misma luz. Puedes mostrar solo la parte que pida el encuadre, pero nunca otra mesa ni otra arquitectura.` : '',
     opts.anchorLabel
-      ? `CONTINUIDAD: la última imagen es un fotograma de la toma anterior ya aprobada (${opts.anchorLabel}). Mantén igual la ropa, el peinado, la barba, el estado (cansancio, frío, heridas) y el tono de luz. NO copies su encuadre: usa el encuadre que pide la toma.`
+      ? `CONTINUIDAD (imagen ${anchorImage}): fotograma de la toma anterior ya aprobada (${opts.anchorLabel}). Mantén igual la ropa, el peinado, la barba, el estado (cansancio, frío, heridas) y el tono de luz. NO copies su encuadre: usa el encuadre que pide la toma.`
       : '',
     opts.costume ? `VESTUARIO FIJO DE LA ESCENA: ${opts.costume}.` : '',
     `TOMA: ${shotPrompt.replace(/\s+/g, ' ').trim()}`,

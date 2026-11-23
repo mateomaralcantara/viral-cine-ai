@@ -597,8 +597,9 @@ async function montar() {
       const line = (shot.spokenText ?? '').trim();
       if (line && voice && p.voiceSeconds && !camVoice) cues.push(...cuesForLine(line, cursor + VOICE_START_SECONDS, cursor + VOICE_START_SECONDS + p.voiceSeconds));
       else if (line && onCamera) cues.push(...cuesForLine(line, cursor + 0.3, Math.min(cursor + p.seconds - 0.15, cursor + 0.3 + speechSeconds(line) + 0.6)));
+      const at = `${Math.floor(cursor / 60)}:${String(Math.floor(cursor % 60)).padStart(2, '0')}`;
       cursor += p.seconds;
-      console.log(`  OK ${label}${current?.repaired ? ' (reparada)' : ''}  ${p.seconds.toFixed(1)} s${onCamera ? '  diálogo en cámara' : ''}${muteVideo ? '  (voces del video silenciadas)' : ''}${p.slow < 1 ? ` (cámara lenta ${Math.round(p.slow * 100)} % para la voz)` : ''}${p.freeze ? ` (alargada ${p.freeze.toFixed(1)} s para la voz)` : ''}${voice ? '' : hasLine ? '  SIN VOZ' : ''}`);
+      console.log(`  [${at}] OK ${label}${current?.repaired ? ' (reparada)' : ''}  ${p.seconds.toFixed(1)} s${onCamera ? '  diálogo en cámara' : ''}${muteVideo ? '  (voces del video silenciadas)' : ''}${p.slow < 1 ? ` (cámara lenta ${Math.round(p.slow * 100)} % para la voz)` : ''}${p.freeze ? ` (alargada ${p.freeze.toFixed(1)} s para la voz)` : ''}${voice ? '' : hasLine ? '  SIN VOZ' : ''}`);
     }
     if (cursor > sceneStart) spans.push({ label: scene.label, start: sceneStart, seconds: cursor - sceneStart });
   }

@@ -62,3 +62,16 @@ export const CONVIDADOS_REPARTO: CastMember[] = [
   { key: 'sartre', nombre: 'Sartre', rol: 'Filósofo francés. Sostiene la libertad radical y la responsabilidad existencial.',
     descripcion: 'hombre de unos sesenta años con gafas redondas de pasta gruesa, pelo gris peinado hacia atrás, pipa en la boca, chaqueta de tweed', box: R3(8) }
 ];
+
+/** Decorados fijos de la serie (plano maestro con «npm run decorado»): misma geometría en todas las tomas. */
+export const CONVIDADOS_DECORADOS = [
+  {
+    key: 'salon-del-agape', nombre: 'Salón del Ágape',
+    descripcion: 'Salón monumental con dos filas de columnas gigantescas de piedra caliza clara y bóvedas altísimas que se pierden en la sombra. ' +
+      'Suelo de mármol negro pulido como un espejo. Luz dorada cálida que no sale de ninguna lámpara visible. ' +
+      'En el centro, UNA SOLA mesa ceremonial: rectangular, larguísima y estrecha, de madera oscura pulida, sin mantel, recorre el salón de delante hacia el fondo; ' +
+      'sobre ella, copas de cristal vacías alineadas a intervalos regulares. A ambos lados, sillas de madera oscura de respaldo alto, todas iguales. ' +
+      'En la cabecera más cercana, separada de la mesa, la silla del Moderador, más alta, con un mazo de madera y una campana de bronce. ' +
+      'Al fondo del salón, dos portones monumentales de roble oscuro.'
+  }
+];

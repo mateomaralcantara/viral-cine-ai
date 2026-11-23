@@ -34,6 +34,8 @@ export const REVIEW_RULES = [
   'Nadie debe mover los labios como si hablara: las voces se añaden después en off.',
   'No debe haber texto, letras, subtítulos, logotipos ni marcas de agua en pantalla.',
   'Anatomía correcta: manos, dedos, caras y cuerpos sin deformaciones ni fusiones.',
+  'Cada personaje aparece UNA sola vez en el plano: nadie duplicado, clonado ni repetido (un doble es un fallo crítico).',
+  'El decorado coincide con su descripción (misma mesa, mismas columnas, misma luz); otra mesa u otra arquitectura es un fallo de continuidad.',
   'Movimiento natural: sin saltos, parpadeos de imagen, objetos que aparecen o desaparecen.',
   'Sin rostros de niños ni violencia explícita. Las figuras divinas, religiosas o sobrenaturales están permitidas si el guion las pide.'
 ];

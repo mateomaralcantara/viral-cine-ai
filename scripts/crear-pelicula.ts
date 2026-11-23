@@ -62,7 +62,12 @@ if (!(await v7FilmBundleExists(film.id))) {
     shot.metadata = { ...shot.metadata, ...next.metadata };
     changed.push(label);
   }
-  if (changed.length) await saveV7FilmBundle({ ...stored, savedAt: undefined });
+  // Ajustes de producción del guion (decorado, harness, créditos): se copian siempre; no tocan ninguna toma.
+  const metaBefore = JSON.stringify(stored.film.metadata ?? {});
+  stored.film.metadata = { ...(stored.film.metadata ?? {}), ...(fresh.metadata ?? {}) };
+  const metaChanged = JSON.stringify(stored.film.metadata) !== metaBefore;
+  if (metaChanged) console.log('Ajustes de producción actualizados (decorado, harness, créditos).');
+  if (changed.length || metaChanged) await saveV7FilmBundle({ ...stored, savedAt: undefined });
   console.log('Texto nuevo aplicado a: ' + (changed.join(', ') || 'ninguna (revisa la etiqueta)'));
 } else if (process.argv.includes('--actualizar-textos')) {
   const stored = await readV7FilmBundle(film.id);
@@ -84,9 +89,14 @@ if (!(await v7FilmBundleExists(film.id))) {
       changed.push(label);
     }
   }
-  if (changed.length) await saveV7FilmBundle({ ...stored, savedAt: undefined });
-  console.log('Textos actualizados: ' + (changed.join(', ') || 'ninguno'));
-  if (kept.length) console.log('No tocadas (ya tienen video o versión guardada): ' + kept.join(', '));
+  // Ajustes de producción del guion (decorado, harness, créditos): se copian siempre; no tocan ninguna toma.
+  const metaBefore = JSON.stringify(stored.film.metadata ?? {});
+  stored.film.metadata = { ...(stored.film.metadata ?? {}), ...(fresh.metadata ?? {}) };
+  const metaChanged = JSON.stringify(stored.film.metadata) !== metaBefore;
+  if (metaChanged) console.log('Ajustes de producción actualizados (decorado, harness, créditos).');
+  if (changed.length || metaChanged) await saveV7FilmBundle({ ...stored, savedAt: undefined });
+  console.log('Textos actualizados: ' + (changed.length ? changed.length + ' tomas sin video' : 'ninguno'));
+  if (kept.length) console.log('No tocadas (ya tienen video o versión guardada): ' + kept.length + ' tomas');
 } else {
   console.log('Ya existe. No se modifica: ' + v7FilmBundlePath(film.id));
   console.log('Para pasar textos nuevos a las tomas sin video: npm run crear:pelicula -- ' + key + ' --actualizar-textos');

@@ -19,7 +19,7 @@ export type GateInput = {
 export type GateResult = { pass: boolean; reasons: string[] };
 
 /** Defectos «medios» que igualmente impiden pasar: rompen la continuidad o el diálogo. */
-const BLOCKING_MEDIUM = /identidad|vestuario|continuidad|texto|subt[ií]tulo|logo|marca|sincron|di[aá]logo|labios|audio|cara|barba|pelo|edad/i;
+const BLOCKING_MEDIUM = /identidad|vestuario|continuidad|decorado|mesa|duplic|clon|doble|repetid|texto|subt[ií]tulo|logo|marca|sincron|di[aá]logo|labios|audio|cara|barba|pelo|edad/i;
 
 export function qualityGate(input: GateInput): GateResult {
   const r = input.review;

@@ -21,12 +21,13 @@ async function main() {
   const scene = option('--escena')?.toUpperCase();
   const shots = option('--tomas')?.toUpperCase().split(',').map((s) => s.trim()).filter(Boolean);
   const plan = await planContinuity(filmId, { scene, shots, repeat: args.includes('--repetir') });
-  if (!plan.approved.length) { console.log('No hay personajes con retrato aprobado. Apruébalos en PERSONAJES · IDENTIDAD.'); return; }
+  if (!plan.approved.length && !plan.set) { console.log('No hay personajes con retrato aprobado. Apruébalos en PERSONAJES · IDENTIDAD.'); return; }
   console.log(`HARNESS DE CONTINUIDAD · personajes oficiales: ${plan.approved.map((s) => s.nombre).join(', ')}`);
   if (plan.skipped.length) console.log('Ya tienen foto (no se repiten): ' + plan.skipped.join(', '));
   if (!plan.jobs.length) { console.log('No hay tomas que preparar.'); return; }
   console.log(`Fotos a crear: ${plan.jobs.length} · ~US$${plan.costUsd.toFixed(2)}`);
-  for (const j of plan.jobs) console.log(`  ${j.label}  ${j.cast.map((c) => c.nombre).join(' + ')}  ${j.anchor ? '· continúa de ' + j.anchor : '· sin toma aprobada antes: solo retratos'}`);
+  console.log(plan.set ? `Decorado: ${plan.set.nombre} (plano maestro aprobado)` : 'Sin plano maestro de decorado (npm run decorado).');
+  for (const j of plan.jobs) console.log(`  ${j.label}  ${j.cast.map((c) => c.nombre).join(' + ') || '(sin personajes)'}${j.set ? ' · decorado' : ''}  ${j.anchor ? '· continúa de ' + j.anchor : j.cast.length ? '· sin toma aprobada antes: solo retratos' : ''}`);
   if (!args.includes('--generar')) { console.log('\nNO SE GENERÓ NADA (esto era el plan). Para crearlas añade --generar'); return; }
   const r = await makeContinuity(filmId, plan.serie, plan.jobs);
   console.log(`\nListas ${r.done.length} de ${plan.jobs.length}.${r.failed.length ? ' Fallaron: ' + r.failed.map((f) => f.label).join(', ') : ''}`);

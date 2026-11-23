@@ -121,7 +121,9 @@
     "vigilar": "node --import tsx scripts/vigilar.ts",
     "cola": "node --import tsx scripts/cola.ts",
     "continuidad": "node --import tsx scripts/continuidad.ts",
-    "crear:episodio2": "node --import tsx scripts/crear-pelicula.ts episodio2"
+    "crear:episodio2": "node --import tsx scripts/crear-pelicula.ts episodio2",
+    "decorado": "node --import tsx scripts/decorado.ts",
+    "rehacer": "node --import tsx scripts/rehacer.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",

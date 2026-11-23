@@ -30,8 +30,8 @@ const PLATON = 'Platón, ' + cast('platon') + ', alto e imponente';
 const ARISTOTELES = 'Aristóteles, ' + cast('aristoteles');
 const FISCAL = 'el Fiscal, ' + cast('fiscal');
 
-const SALON = 'En el salón monumental del Ágape, con columnas gigantescas de piedra caliza, suelo de mármol negro pulido como un espejo, bóvedas imposibles, luz dorada sin fuentes visibles y una mesa ceremonial larguísima con copas de cristal vacías,';
-const MESA = 'En la mesa ceremonial del salón del Ágape, de columnas de piedra caliza y mármol negro, bajo una luz dorada sin fuentes visibles, junto a la silla del Moderador con un mazo de madera y una campana de bronce,';
+const SALON = 'En el salón monumental del Ágape, con columnas gigantescas de piedra caliza, suelo de mármol negro pulido como un espejo, bóvedas imposibles, luz dorada sin fuentes visibles y una única mesa ceremonial rectangular, larguísima y estrecha, de madera oscura pulida, sin mantel, con copas de cristal vacías alineadas,';
+const MESA = 'Junto a la única mesa ceremonial del salón del Ágape (rectangular, larguísima y estrecha, de madera oscura pulida, sin mantel, con copas de cristal vacías alineadas y sillas de respaldo alto iguales), entre columnas de piedra caliza y mármol negro, bajo una luz dorada sin fuentes visibles, cerca de la silla del Moderador en la cabecera con un mazo de madera y una campana de bronce,';
 const PORTONES = 'Ante dos portones monumentales de roble oscuro al fondo del salón del Ágape, entre columnas de piedra caliza y suelo de mármol negro, con luz dorada sin fuentes visibles,';
 
 const DORADO = 'Cine histórico-fantástico de alto presupuesto, fotorrealista, formato 16:9. Luz dorada cálida sin fuentes visibles y sombras profundas.';
@@ -139,7 +139,9 @@ export const EPISODIO_2_SPEC: ShortFilmSpec = {
     book: 'Los convidados al Ágape — El banquete de los filósofos',
     endCardLines: ['LOS CONVIDADOS AL ÁGAPE', 'EPISODIO 2 — FIN', 'Próximo episodio: LA SOMBRA ELEGANTE'],
     // Harness: activos (los valores por defecto ya lo están; se dejan explícitos para esta producción).
-    puertaDeCalidad: true, continuidadObligatoria: true
+    puertaDeCalidad: true, continuidadObligatoria: true,
+    // Plano maestro del decorado (npm run decorado): misma mesa y misma arquitectura en todas las tomas.
+    decorado: 'salon-del-agape'
   },
   characters: [
     { key: 'martin', name: 'Martin', age: 42, role: 'Protagonista, el Convocante y Moderador', appearance: cast('martin'), voice: 'Voz masculina grave, expresiva y natural.' },

@@ -128,3 +128,18 @@ test('análisis inicial: «pantalla en negro» no es una pantalla con letras, y 
   assert.ok(m.problemas.some((p) => p.tipo === 'logotipos' && p.nivel === 'aviso'));
   assert.equal(m.semaforo, 'verde');
 });
+
+test('continuidad: con decorado, la foto exige la misma mesa y que cada persona salga una sola vez', () => {
+  const t = continuityKeyframePrompt([{ nombre: 'Martin', descripcion: 'barba' }], 'Plano medio de Martin junto a la mesa.', { set: { nombre: 'Salón del Ágape', descripcion: 'mesa larga' }, anchorLabel: 'E01-P04' });
+  assert.match(t, /UNA SOLA VEZ: Martin es la única persona/);
+  assert.match(t, /DECORADO \(imagen 2\).*misma mesa/);
+  assert.match(t, /CONTINUIDAD \(imagen 3\)/);
+  const solo = continuityKeyframePrompt([], 'Plano general del salón.', { set: { nombre: 'Salón del Ágape', descripcion: 'mesa larga' } });
+  assert.match(solo, /DECORADO \(imagen 1\)/);
+  assert.doesNotMatch(solo, /CARAS/);
+});
+
+test('puerta: un personaje duplicado o una mesa distinta no pasan', () => {
+  assert.equal(qualityGate({ review: { ...good, problemas: [{ tipo: 'personaje duplicado', gravedad: 'medio', descripcion: 'Martin aparece dos veces' }] }, onCamera: false, showsCharacter: true }).pass, false);
+  assert.equal(qualityGate({ review: { ...good, problemas: [{ tipo: 'decorado', gravedad: 'medio', descripcion: 'la mesa es redonda' }] }, onCamera: false, showsCharacter: true }).pass, false);
+});
