@@ -31,7 +31,7 @@ import {
 } from '../lib/v7/production/scene-veo-engine';
 import { currentShotVideo, fileSha256, originalShotVideo, repairRecordPath } from '../lib/v7/production/shot-current-video';
 import { gateEnabled, qualityGate, type GateResult } from '../lib/v7/qa/quality-gate';
-import { approvedSheets, castInShot } from '../lib/v7/production/continuity-chain';
+import { approvedSheets, castInShot, continuityRequired } from '../lib/v7/production/continuity-chain';
 import { serieOf } from '../lib/v7/production/character-identity';
 import { rewritePrompt } from '../lib/v7/qa/prompt-doctor';
 import { isLocked, lockShot } from '../lib/v7/production/shot-lock';
@@ -225,7 +225,10 @@ async function main() {
       if (blocked) {
         const attempt = (await blockedAttempts(label)) + 1;
         let extra = '';
-        if (attempt >= 3 && await dropReference(label)) extra = ' · sin foto de referencia';
+        // La foto de partida también puede disparar el filtro. Con continuidad obligatoria no se quita:
+        // se crea una foto de continuidad NUEVA (~US$0.04); sin ella, se prueba solo con texto.
+        if (attempt >= 2 && continuityRequired(film)) { await runScript('continuidad.ts', ['--tomas', label, '--generar']); extra = ' · foto de continuidad nueva'; }
+        else if (attempt >= 3 && await dropReference(label)) extra = ' · sin foto de referencia';
         try {
           const fixed = await rewritePrompt({ prompt: current, kind: 'bloqueada', problem: rec.error ?? 'bloqueada', line: shot.spokenText ?? '', onCamera, attempt });
           revisionId = (await savePromptRevision(filmId, label, fixed)).revisionId;
