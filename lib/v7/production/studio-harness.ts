@@ -69,11 +69,11 @@ export async function applyPreflight(filmId: string, sceneLabel: string) {
 
 // ---------- trabajos en segundo plano ----------
 
-export const HARNESS_JOBS = ['continuidad', 'autocorreccion', 'musica', 'montar', 'voces', 'rehacer', 'decorado', 'decorado-aprobar', 'montar-episodio'] as const;
+export const HARNESS_JOBS = ['continuidad', 'autocorreccion', 'musica', 'montar', 'voces', 'rehacer', 'decorado', 'decorado-aprobar', 'montar-episodio', 'preparar'] as const;
 export type HarnessJobKind = typeof HARNESS_JOBS[number];
 export const HARNESS_JOB_NAMES: Record<HarnessJobKind, string> = {
   continuidad: 'Fotos de continuidad', autocorreccion: 'Autocorrección en vivo', musica: 'Música de la escena',
-  montar: 'Montar el avance', voces: 'Voces en off', rehacer: 'Rehacer tomas', decorado: 'Plano maestro del salón', 'decorado-aprobar': 'Aprobar el salón', 'montar-episodio': 'Montar el episodio completo'
+  montar: 'Montar el avance', voces: 'Voces en off', rehacer: 'Rehacer tomas', decorado: 'Plano maestro del salón', 'decorado-aprobar': 'Aprobar el salón', 'montar-episodio': 'Montar el episodio completo', preparar: 'Preparar de antemano'
 };
 const jobFile = (filmId: string, scene: string) => path.join(v7FilmRoot(filmId), 'harness', `${scene.toLowerCase()}-trabajo.json`);
 const logFile = (filmId: string, scene: string, kind: HarnessJobKind) => path.join(v7FilmRoot(filmId), 'harness', `${scene.toLowerCase()}-${kind}.log`);
@@ -92,7 +92,7 @@ export async function harnessJob(filmId: string, scene: string) {
 
 /** Lanza un harness para la escena. Nunca dos a la vez en la misma escena. */
 export async function startHarnessJob(filmId: string, scene: string, kind: HarnessJobKind, opts: { budgetUsd?: number; shots?: string[] } = {}) {
-  if (!/^E\d{2}$/.test(scene) && !(scene === 'EPISODIO' && kind === 'montar-episodio')) throw new Error('Escena inválida.');
+  if (!/^E\d{2}$/.test(scene) && !(scene === 'EPISODIO' && (kind === 'montar-episodio' || kind === 'preparar'))) throw new Error('Escena inválida.');
   const key = filmKeyFor(filmId);
   if (!key) throw new Error('Esta película no está registrada para los agentes (lib/v7/presets/film-registry.ts).');
   const current = await harnessJob(filmId, scene);
@@ -109,7 +109,8 @@ export async function startHarnessJob(filmId: string, scene: string, kind: Harne
     rehacer: ['scripts/rehacer.ts', key, '--tomas', shots.join(','), '--hasta', budget.toFixed(2)],
     decorado: ['scripts/decorado.ts', key, '--generar'],
     'decorado-aprobar': ['scripts/decorado.ts', key, '--aprobar'],
-    'montar-episodio': ['scripts/pelicula-final.ts', 'montar', key, '--ingles']
+    'montar-episodio': ['scripts/pelicula-final.ts', 'montar', key, '--ingles'],
+    preparar: ['scripts/preparar.ts', key, ...(scene === 'EPISODIO' ? [] : ['--escena', scene]), '--generar']
   };
   await mkdir(path.dirname(jobFile(filmId, scene)), { recursive: true });
   const out = await open(logFile(filmId, scene, kind), 'w');

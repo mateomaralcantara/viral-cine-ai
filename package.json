@@ -123,7 +123,8 @@
     "continuidad": "node --import tsx scripts/continuidad.ts",
     "crear:episodio2": "node --import tsx scripts/crear-pelicula.ts episodio2",
     "decorado": "node --import tsx scripts/decorado.ts",
-    "rehacer": "node --import tsx scripts/rehacer.ts"
+    "rehacer": "node --import tsx scripts/rehacer.ts",
+    "preparar": "node --import tsx scripts/preparar.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",

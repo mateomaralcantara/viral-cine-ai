@@ -1,5 +1,6 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
+import { ensureLocalStudioSession } from '@/lib/v7/security/local-studio-client';
 
 type SceneState = { label: string; titulo: string; total: number; fijadas: number; quitadas: number; verde: boolean; avance: string | null; avanceAlDia: boolean; montando: boolean };
 type Estado = { scenes: SceneState[]; episodio: { verde: boolean; archivo: string | null; alDia: boolean; montando: boolean } };
@@ -11,6 +12,27 @@ type Estado = { scenes: SceneState[]; episodio: { verde: boolean; archivo: strin
 export default function V7GreenPanel({ filmId, scene, onSelect }: { filmId: string; scene: string; onSelect: (s: string) => void }) {
   const endpoint = '/api/v7/films/' + encodeURIComponent(filmId) + '/scene-studio';
   const [estado, setEstado] = useState<Estado | null>(null);
+  const [prep, setPrep] = useState<{ running: boolean; log: string; kind: string } | null>(null);
+  const [prepMsg, setPrepMsg] = useState('');
+  const loadPrep = useCallback(async () => {
+    const r = await fetch(endpoint + '?scene=EPISODIO&job=1', { cache: 'no-store' }).catch(() => null);
+    const d = r ? await r.json() as { ok: boolean; job?: { running: boolean; log: string; kind: string } | null } : null;
+    if (d?.ok) setPrep(d.job?.kind === 'preparar' ? d.job : null);
+  }, [endpoint]);
+  useEffect(() => { void loadPrep(); }, [loadPrep]);
+  useEffect(() => { if (!prep?.running) return; const t = setInterval(() => void loadPrep(), 5000); return () => clearInterval(t); }, [prep?.running, loadPrep]);
+  async function prepare(target: string) {
+    setPrepMsg('');
+    try {
+      await ensureLocalStudioSession();
+      const r = await fetch(endpoint, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'harness', kind: 'preparar', scene: target }) });
+      const d = await r.json() as { ok: boolean; error?: string };
+      if (!d.ok) throw new Error(d.error || 'No se pudo');
+      setPrepMsg(target === 'EPISODIO' ? 'Preparando todo el episodio…' : 'Preparando ' + target + '…');
+      await loadPrep();
+    } catch (e) { setPrepMsg('No se pudo: ' + (e instanceof Error ? e.message : String(e))); }
+  }
   const load = useCallback(async () => {
     const r = await fetch(endpoint + '?estado=1', { cache: 'no-store' }).catch(() => null);
     const d = r ? await r.json() as { ok: boolean; estado?: Estado } : null;
@@ -36,6 +58,14 @@ export default function V7GreenPanel({ filmId, scene, onSelect }: { filmId: stri
           </button>
         ))}
       </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button type="button" className="button-secondary" disabled={prep?.running} onClick={() => void prepare(scene)}>Preparar {scene} de antemano (textos + fotos)</button>
+        <button type="button" className="button-secondary" disabled={prep?.running} onClick={() => void prepare('EPISODIO')}>Preparar TODO el episodio (textos + fotos)</button>
+        <span className="text-xs text-slate-400">Fotos ~US$0.04 c/u · solo las que faltan · nunca toca lo fijado</span>
+      </div>
+      {prepMsg && <p className="mt-2 text-sm text-emerald-300">{prepMsg}</p>}
+      {prep && <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 p-2 text-xs text-slate-300">{(prep.running ? 'Trabajando…\n' : 'Terminado.\n') + prep.log}</pre>}
 
       {cur && (cur.verde
         ? <div className="mt-4">
