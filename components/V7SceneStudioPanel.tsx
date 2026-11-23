@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ensureLocalStudioSession } from '@/lib/v7/security/local-studio-client';
 import V7HarnessPanel from '@/components/V7HarnessPanel';
+import V7GreenPanel from '@/components/V7GreenPanel';
 
 type StudioShot = {
   shotId: string; title: string; camera: string; editSeconds: number; providerSeconds: number;
@@ -99,6 +100,8 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
             className={s === scene ? 'button-primary' : 'button-secondary'}>{s}</button>
         ))}
       </div>
+
+      {board && !board.legacy && scene && <V7GreenPanel filmId={filmId} scene={scene} onSelect={setScene}/>}
 
       {board && <div className="mt-4 grid gap-3 sm:grid-cols-4 text-sm">
         <div className="rounded-xl border border-white/10 p-3"><div className="text-slate-400">Escena</div><b>{board.sceneLabel} · {board.title}</b></div>

@@ -7,7 +7,7 @@ import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import {
-  applyPreflight, approveScene, HARNESS_JOBS, harnessJob, latestAvance, scenePreflight, setMasterInfo, shotAuthorAction, startHarnessJob, type HarnessJobKind
+  applyPreflight, approveScene, greenStatus, HARNESS_JOBS, harnessJob, latestAvance, latestEpisode, scenePreflight, setMasterInfo, shotAuthorAction, startHarnessJob, type HarnessJobKind
 } from '@/lib/v7/production/studio-harness';
 
 export const runtime = 'nodejs';
@@ -40,6 +40,13 @@ export async function GET(request: Request, context: Context) {
     if (params.get('avance') === '1') {
       const file = await latestAvance(filmId, scene);
       if (!file) return fail(404, 'Todavía no hay avance de ' + scene + '. Pulsa «Montar el avance».');
+      return serveFile(request, file, 'video/mp4');
+    }
+    // Escenas en verde: el estudio pregunta cada pocos segundos; las verdes se montan solas (gratis).
+    if (params.get('estado') === '1') return NextResponse.json({ ok: true, estado: await greenStatus(filmId, { autoMount: true }) }, { headers: noStore });
+    if (params.get('episodio') === '1') {
+      const file = await latestEpisode(filmId);
+      if (!file) return fail(404, 'Todavía no hay episodio completo montado.');
       return serveFile(request, file, 'video/mp4');
     }
     if (params.get('decorado') === 'info') return NextResponse.json({ ok: true, decorado: await setMasterInfo(filmId).then((d) => d && { ...d, file: undefined }) }, { headers: noStore });

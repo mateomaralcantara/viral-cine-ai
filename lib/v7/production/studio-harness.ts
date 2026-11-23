@@ -3,14 +3,14 @@
  * Los trabajos largos corren en segundo plano (un proceso de los scripts) con su registro en disco.
  */
 import { spawn } from 'node:child_process';
-import { access, mkdir, open, readdir, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, open, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { filmKeyFor } from '@/lib/v7/presets/film-registry';
 import { CONVIDADOS_DECORADOS } from '@/lib/v7/presets/convidados-reparto';
 import { readV7FilmBundle, v7FilmRoot } from '@/lib/v7/storage/film-store';
 import { indexedScenes } from './scene-approval-board';
 import { latestPromptRevision, readShotRecord, savePromptRevision, shotReferencePath } from './scene-veo-engine';
-import { isLocked, lockShot, removeShot, restoreShot, unlockShot } from './shot-lock';
+import { isLocked, isRemoved, lockPath, lockShot, removeShot, restoreShot, unlockShot } from './shot-lock';
 import { originalShotVideo } from './shot-current-video';
 import { approvedSet, readSetSheet, setMasterPath } from './set-master';
 import { characterKeyFromId, listSheets, serieOf } from './character-identity';
@@ -69,11 +69,11 @@ export async function applyPreflight(filmId: string, sceneLabel: string) {
 
 // ---------- trabajos en segundo plano ----------
 
-export const HARNESS_JOBS = ['continuidad', 'autocorreccion', 'musica', 'montar', 'voces', 'rehacer', 'decorado', 'decorado-aprobar'] as const;
+export const HARNESS_JOBS = ['continuidad', 'autocorreccion', 'musica', 'montar', 'voces', 'rehacer', 'decorado', 'decorado-aprobar', 'montar-episodio'] as const;
 export type HarnessJobKind = typeof HARNESS_JOBS[number];
 export const HARNESS_JOB_NAMES: Record<HarnessJobKind, string> = {
   continuidad: 'Fotos de continuidad', autocorreccion: 'Autocorrección en vivo', musica: 'Música de la escena',
-  montar: 'Montar el avance', voces: 'Voces en off', rehacer: 'Rehacer tomas', decorado: 'Plano maestro del salón', 'decorado-aprobar': 'Aprobar el salón'
+  montar: 'Montar el avance', voces: 'Voces en off', rehacer: 'Rehacer tomas', decorado: 'Plano maestro del salón', 'decorado-aprobar': 'Aprobar el salón', 'montar-episodio': 'Montar el episodio completo'
 };
 const jobFile = (filmId: string, scene: string) => path.join(v7FilmRoot(filmId), 'harness', `${scene.toLowerCase()}-trabajo.json`);
 const logFile = (filmId: string, scene: string, kind: HarnessJobKind) => path.join(v7FilmRoot(filmId), 'harness', `${scene.toLowerCase()}-${kind}.log`);
@@ -92,7 +92,7 @@ export async function harnessJob(filmId: string, scene: string) {
 
 /** Lanza un harness para la escena. Nunca dos a la vez en la misma escena. */
 export async function startHarnessJob(filmId: string, scene: string, kind: HarnessJobKind, opts: { budgetUsd?: number; shots?: string[] } = {}) {
-  if (!/^E\d{2}$/.test(scene)) throw new Error('Escena inválida.');
+  if (!/^E\d{2}$/.test(scene) && !(scene === 'EPISODIO' && kind === 'montar-episodio')) throw new Error('Escena inválida.');
   const key = filmKeyFor(filmId);
   if (!key) throw new Error('Esta película no está registrada para los agentes (lib/v7/presets/film-registry.ts).');
   const current = await harnessJob(filmId, scene);
@@ -108,7 +108,8 @@ export async function startHarnessJob(filmId: string, scene: string, kind: Harne
     voces: ['scripts/pelicula-final.ts', 'voces', key, '--generar'],
     rehacer: ['scripts/rehacer.ts', key, '--tomas', shots.join(','), '--hasta', budget.toFixed(2)],
     decorado: ['scripts/decorado.ts', key, '--generar'],
-    'decorado-aprobar': ['scripts/decorado.ts', key, '--aprobar']
+    'decorado-aprobar': ['scripts/decorado.ts', key, '--aprobar'],
+    'montar-episodio': ['scripts/pelicula-final.ts', 'montar', key, '--ingles']
   };
   await mkdir(path.dirname(jobFile(filmId, scene)), { recursive: true });
   const out = await open(logFile(filmId, scene, kind), 'w');
@@ -164,4 +165,58 @@ export async function setMasterInfo(filmId: string) {
   const sheet = await readSetSheet(serie, key);
   const file = setMasterPath(serie, key);
   return { key, nombre: sheet?.nombre ?? CONVIDADOS_DECORADOS.find((d) => d.key === key)?.nombre ?? key, aprobado: Boolean(sheet?.aprobado && (await approvedSet(film, serie))), existe: await exists(file), file };
+}
+
+// ---------- escenas en verde: montaje automático (gratis) ----------
+
+/** Último episodio completo montado (sin la versión con subtítulos grabados). */
+export async function latestEpisode(filmId: string) {
+  const dir = path.join(v7FilmRoot(filmId), 'final');
+  const files = (await readdir(dir).catch(() => [] as string[]))
+    .filter((f) => f.endsWith('.mp4') && !f.startsWith('avance-') && !f.includes('-subtitulada')).sort();
+  return files.length ? path.join(dir, files[files.length - 1]) : null;
+}
+const mtime = (f: string) => stat(f).then((x) => x.mtimeMs, () => 0);
+
+/**
+ * Estado de cada escena: VERDE cuando todas sus tomas están fijadas (o quitadas por el autor).
+ * Una escena verde se monta sola (gratis) si su avance falta o es anterior a la última fijación;
+ * con todas las escenas verdes, se monta solo el episodio completo.
+ */
+export async function greenStatus(filmId: string, opts: { autoMount?: boolean } = {}) {
+  const { film } = await readV7FilmBundle(filmId);
+  const root = v7FilmRoot(filmId);
+  const scenes = [];
+  let newestLock = 0;
+  for (const sc of indexedScenes(film)) {
+    let fijadas = 0; let quitadas = 0; let sceneLock = 0;
+    for (const { label } of sc.shots) {
+      const dir = path.join(root, label.toLowerCase());
+      if (await isRemoved(dir)) { quitadas++; continue; }
+      if (await isLocked(dir)) { fijadas++; sceneLock = Math.max(sceneLock, await mtime(lockPath(dir))); }
+    }
+    const total = sc.shots.length;
+    const verde = fijadas > 0 && fijadas + quitadas === total;
+    const avance = await latestAvance(filmId, sc.label);
+    const avanceAlDia = !!avance && (await mtime(avance)) >= sceneLock;
+    newestLock = Math.max(newestLock, sceneLock);
+    let montando = false;
+    if (opts.autoMount && verde && !avanceAlDia) {
+      const job = await harnessJob(filmId, sc.label);
+      if (!job?.running) { await startHarnessJob(filmId, sc.label, 'montar').catch(() => undefined); }
+      montando = true;
+    }
+    scenes.push({ label: sc.label, titulo: sc.scene.title, total, fijadas, quitadas, verde, avance: avance ? path.basename(avance) : null, avanceAlDia, montando });
+  }
+  const episodioVerde = scenes.length > 0 && scenes.every((x) => x.verde);
+  const ep = await latestEpisode(filmId);
+  const episodioAlDia = !!ep && (await mtime(ep)) >= newestLock;
+  let episodioMontando = false;
+  if (opts.autoMount && episodioVerde && !episodioAlDia) {
+    const job = await harnessJob(filmId, 'EPISODIO');
+    if (!job?.running) await startHarnessJob(filmId, 'EPISODIO', 'montar-episodio').catch(() => undefined);
+    episodioMontando = true;
+  }
+  if (episodioVerde && !episodioMontando) episodioMontando = (await harnessJob(filmId, 'EPISODIO'))?.running === true;
+  return { scenes, episodio: { verde: episodioVerde, archivo: ep ? path.basename(ep) : null, alDia: episodioAlDia, montando: episodioMontando } };
 }

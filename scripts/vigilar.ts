@@ -100,7 +100,15 @@ async function main() {
       await agent('pulir.ts', ['--toma', label, '--hasta', left.toFixed(2), '--rondas', '3']);
     }
     const allLocked = (await Promise.all(scene.shots.map(({ label }) => isLocked(path.join(root, label.toLowerCase()))))).every(Boolean);
-    if (allLocked) { console.log(`\n[${stamp()}] ${sceneLabel}: todas las tomas están bien y FIJADAS. Fin.`); break; }
+    if (allLocked) {
+      console.log(`\n[${stamp()}] ${sceneLabel}: todas las tomas están bien y FIJADAS (escena en VERDE). Montando la escena completa (gratis)…`);
+      await new Promise<void>((resolve) => {
+        const child = spawn(process.execPath, ['--import', 'tsx', path.join('scripts', 'pelicula-final.ts'), 'montar', key, '--escena', sceneLabel], { stdio: 'inherit', env: process.env });
+        child.on('exit', () => resolve());
+      });
+      console.log(`[${stamp()}] ${sceneLabel}: lista para ver en el estudio («Ver escena completa»). Fin.`);
+      break;
+    }
     idleRounds = worked || pendingInScene ? 0 : idleRounds + 1;
     if (idleRounds >= 8) { console.log(`\n[${stamp()}] ${sceneLabel}: no queda nada que los agentes puedan corregir solos. Revisa las tomas no fijadas en el estudio.`); break; }
     await sleep(Number(process.env.V7_VIGILAR_SEGUNDOS || 45));
