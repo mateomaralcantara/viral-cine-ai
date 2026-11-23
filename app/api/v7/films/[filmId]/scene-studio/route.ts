@@ -3,7 +3,12 @@ import { localAdminAuthorized, localOriginAllowed } from '@/lib/v7/security/loca
 import {
   resumeSceneShot, resumeWholeScene, sceneLabels, savePromptRevision, sceneStudioBoard, submitSceneShot, submitWholeScene
 } from '@/lib/v7/production/scene-veo-engine';
-import { applyPreflight, harnessJob, scenePreflight, startHarnessJob } from '@/lib/v7/production/studio-harness';
+import { createReadStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
+import { Readable } from 'node:stream';
+import {
+  applyPreflight, approveScene, HARNESS_JOBS, harnessJob, latestAvance, scenePreflight, setMasterInfo, shotAuthorAction, startHarnessJob, type HarnessJobKind
+} from '@/lib/v7/production/studio-harness';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -27,6 +32,22 @@ export async function GET(request: Request, context: Context) {
     // Análisis inicial (gratis) y estado del harness en marcha.
     if (params.get('preflight') === '1') return NextResponse.json({ ok: true, preflight: await scenePreflight(filmId, scene), providerCalls: 0 }, { headers: noStore });
     if (params.get('job') === '1') return NextResponse.json({ ok: true, job: await harnessJob(filmId, scene), providerCalls: 0 }, { headers: noStore });
+    // Ver en el estudio: el último avance de la escena (MP4, con avance/retroceso) y el plano maestro del salón.
+    if (params.get('avance') === 'info') {
+      const file = await latestAvance(filmId, scene);
+      return NextResponse.json({ ok: true, avance: file ? { name: file.split(/[\\/]/).pop(), updatedAt: (await stat(file)).mtime.toISOString() } : null }, { headers: noStore });
+    }
+    if (params.get('avance') === '1') {
+      const file = await latestAvance(filmId, scene);
+      if (!file) return fail(404, 'Todavía no hay avance de ' + scene + '. Pulsa «Montar el avance».');
+      return serveFile(request, file, 'video/mp4');
+    }
+    if (params.get('decorado') === 'info') return NextResponse.json({ ok: true, decorado: await setMasterInfo(filmId).then((d) => d && { ...d, file: undefined }) }, { headers: noStore });
+    if (params.get('decorado') === '1') {
+      const d = await setMasterInfo(filmId);
+      if (!d?.existe) return fail(404, 'Aún no hay plano maestro del salón.');
+      return serveFile(request, d.file, 'image/jpeg');
+    }
     const board = await sceneStudioBoard(filmId, scene);
     return NextResponse.json({ ok: true, board: { ...board, sceneLabels: labels.studioLabels }, providerCalls: 0 }, { headers: noStore });
   } catch (error) {
@@ -58,9 +79,18 @@ export async function POST(request: Request, context: Context) {
       return NextResponse.json({ ok: true, result: await applyPreflight(filmId, scene), providerCalls: 0 }, { headers: noStore });
     }
     if (body.action === 'harness') {
-      const kind = body.kind === 'continuidad' ? 'continuidad' : body.kind === 'autocorreccion' ? 'autocorreccion' : null;
-      if (!kind) return fail(400, 'Harness desconocido.');
-      return NextResponse.json({ ok: true, job: await startHarnessJob(filmId, scene, kind, { budgetUsd: Number(body.budgetUsd) }) }, { headers: noStore });
+      const kind = HARNESS_JOBS.find((k) => k === body.kind) as HarnessJobKind | undefined;
+      if (!kind) return fail(400, 'Trabajo desconocido.');
+      const shots = Array.isArray(body.shots) ? body.shots.filter((x): x is string => typeof x === 'string').slice(0, 30) : [];
+      return NextResponse.json({ ok: true, job: await startHarnessJob(filmId, scene, kind, { budgetUsd: Number(body.budgetUsd), shots }) }, { headers: noStore });
+    }
+    if (body.action === 'approve-scene') {
+      return NextResponse.json({ ok: true, result: await approveScene(filmId, scene) }, { headers: noStore });
+    }
+    if (body.action === 'shot-author') {
+      const what = ['fijar', 'soltar', 'quitar', 'devolver'].find((x) => x === body.what) as 'fijar' | 'soltar' | 'quitar' | 'devolver' | undefined;
+      if (!what) return fail(400, 'Acción de toma desconocida.');
+      return NextResponse.json({ ok: true, result: await shotAuthorAction(filmId, shotId, what) }, { headers: noStore });
     }
     if (body.action === 'resume-scene') {
       return NextResponse.json({ ok: true, result: await resumeWholeScene(filmId, scene) }, { headers: noStore });
@@ -77,4 +107,19 @@ export async function POST(request: Request, context: Context) {
   } catch (error) {
     return fail(409, error);
   }
+}
+
+/** Sirve un archivo local con soporte de rangos (para poder avanzar y retroceder en el video). */
+async function serveFile(request: Request, file: string, type: string) {
+  const size = (await stat(file)).size;
+  const range = /bytes=(\d*)-(\d*)/.exec(request.headers.get('range') || '');
+  if (range) {
+    const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
+    const end = range[1] && range[2] ? Math.min(size - 1, Number(range[2])) : size - 1;
+    if (!(start >= 0 && start <= end && end < size)) return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${size}` } });
+    const stream = Readable.toWeb(createReadStream(file, { start, end })) as ReadableStream;
+    return new Response(stream, { status: 206, headers: { ...noStore, 'Content-Type': type, 'Accept-Ranges': 'bytes', 'Content-Length': String(end - start + 1), 'Content-Range': `bytes ${start}-${end}/${size}` } });
+  }
+  const stream = Readable.toWeb(createReadStream(file)) as ReadableStream;
+  return new Response(stream, { headers: { ...noStore, 'Content-Type': type, 'Accept-Ranges': 'bytes', 'Content-Length': String(size) } });
 }

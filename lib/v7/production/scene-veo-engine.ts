@@ -19,7 +19,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { GenerateVideosOperation, GoogleGenAI } from '@google/genai';
 import { activeLessons, applyLessons, readCounts, speakableDialogue } from '@/lib/v7/qa/lessons';
-import { isLocked } from '@/lib/v7/production/shot-lock';
+import { isLocked, isRemoved } from '@/lib/v7/production/shot-lock';
 import { readV7FilmBundle, v7DataRoot, v7FilmRoot } from '@/lib/v7/storage/film-store';
 import { indexedScenes } from '@/lib/v7/production/scene-approval-board';
 import { veoSeconds } from '@/lib/v7/production/cinema-core-policy';
@@ -414,6 +414,7 @@ export async function sceneStudioBoard(filmId: string, sceneLabel: string) {
       redoAuthorization: estimatedUsd === null ? null : redoAuthorizationPhrase(shot.shotId, estimatedUsd),
       videoReady: record?.status === 'review-required',
       locked: await isLocked(shotDir(filmId, shot.shotId)),
+      removed: await isRemoved(shotDir(filmId, shot.shotId)),
       hasReference: Boolean(reference),
       gate: await readFile(path.join(shotDir(filmId, shot.shotId), 'puerta.json'), 'utf8').then((t) => JSON.parse(t) as { pass: boolean; reasons: string[] }, () => null)
     };

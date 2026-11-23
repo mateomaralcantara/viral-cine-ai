@@ -9,7 +9,7 @@ type StudioShot = {
   promptText: string; revisionId: string | null; revisionUsed: boolean;
   mode: 'text-to-video' | 'image-to-video'; estimatedUsd: number | null;
   authorization: string | null; redoAuthorization: string | null; videoReady: boolean;
-  locked?: boolean; hasReference?: boolean; gate?: { pass: boolean; reasons: string[] } | null;
+  locked?: boolean; removed?: boolean; hasReference?: boolean; gate?: { pass: boolean; reasons: string[] } | null;
 };
 type StudioBoard = {
   sceneLabel: string; sceneLabels?: string[]; platform?: 'gemini' | 'vertex'; platformProblem?: string | null; frozen?: boolean; title: string; legacy: boolean; model: string; providerEnabled: boolean;
@@ -121,10 +121,10 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
       {message && <p className="mt-3 text-sm text-red-300" role="alert">{message}</p>}
       {summary && <p className="mt-3 text-sm text-emerald-300" role="status">{summary}</p>}
 
-      {board && !board.legacy && scene && <V7HarnessPanel filmId={filmId} scene={scene} onChanged={() => void refresh().catch(() => undefined)}/>}
+      {board && !board.legacy && scene && <V7HarnessPanel part="antes" filmId={filmId} scene={scene} onChanged={() => void refresh().catch(() => undefined)}/>}
 
       {board && !board.legacy && <div className="mt-5 rounded-2xl border border-violet-400/40 bg-violet-500/[.06] p-4">
-        <h3 className="text-lg font-black">Escena completa de un solo tirón</h3>
+        <h3 className="text-lg font-black">3 · Generar la escena completa con Veo</h3>
         {board.sceneAuthorization ? <>
           <p className="mt-1 text-sm text-slate-300">
             Envía las {board.pendingShots.length} tomas pendientes con su prompt actual (las que no tengan versión se guardan tal cual).
@@ -147,6 +147,8 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
           onClick={() => void post({ action: 'resume-scene', scene }, 'resume-scene').then((d) => reportResume(d))}>Recuperar todas · gratis</button>
       </div>}
 
+      {board && !board.legacy && scene && <V7HarnessPanel part="despues" filmId={filmId} scene={scene} onChanged={() => void refresh().catch(() => undefined)}/>}
+
       <div className="mt-5 space-y-4">
         {board?.shots.map((shot) => {
           const draft = drafts[shot.shotId] ?? shot.promptText;
@@ -160,6 +162,7 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <b>{shot.shotId} · {shot.title}</b>
                 <span className="flex flex-wrap items-center gap-2">
+                  {shot.removed && <span className="rounded bg-slate-500/30 px-2 text-xs font-bold text-slate-200">QUITADA DEL MONTAJE</span>}
                   {shot.locked && <span className="rounded bg-emerald-500/20 px-2 text-xs font-bold text-emerald-300">FIJADA</span>}
                   {!shot.locked && shot.gate && <span className={'rounded px-2 text-xs font-bold ' + (shot.gate.pass ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300')}>{shot.gate.pass ? 'PASA LA PUERTA' : 'NO PASA LA PUERTA'}</span>}
                   <span className={'text-xs font-bold uppercase ' + statusColor(shot.status)}>{shot.status}</span>
@@ -184,6 +187,18 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
                   href={'/api/v7/films/' + encodeURIComponent(filmId) + '/scene-production/video?shotId=' + encodeURIComponent(shot.shotId)}>Ver MP4</a>}
                 <span className="text-xs text-slate-400">{shot.revisionId ? 'Versión ' + shot.revisionId.slice(0, 18) : 'Sin versión guardada'}</span>
               </div>
+              {shot.videoReady && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                <span className="text-slate-400">Decisión del autor:</span>
+                {!shot.locked
+                  ? <button type="button" className="button-secondary" disabled={!!busy} onClick={() => void post({ action: 'shot-author', what: 'fijar', shotId: shot.shotId }, shot.shotId)}>Aprobar esta toma</button>
+                  : <button type="button" className="button-secondary" disabled={!!busy} onClick={() => void post({ action: 'shot-author', what: 'soltar', shotId: shot.shotId }, shot.shotId)}>Soltar (permitir cambios)</button>}
+                {!shot.removed
+                  ? <button type="button" className="button-secondary" disabled={!!busy} onClick={() => void post({ action: 'shot-author', what: 'quitar', shotId: shot.shotId }, shot.shotId)}>Quitar del montaje</button>
+                  : <button type="button" className="button-secondary" disabled={!!busy} onClick={() => void post({ action: 'shot-author', what: 'devolver', shotId: shot.shotId }, shot.shotId)}>Devolver al montaje</button>}
+                {shot.estimatedUsd !== null && <button type="button" className="button-secondary" disabled={!!busy || !board.providerEnabled}
+                  onClick={() => { if (window.confirm(`¿Rehacer ${shot.shotId} con una foto de continuidad nueva? Cuesta ~US$${(shot.estimatedUsd! + 0.04).toFixed(2)}. El video actual se archiva.`)) void post({ action: 'harness', kind: 'rehacer', scene, shots: [shot.shotId], budgetUsd: Math.ceil(shot.estimatedUsd! * 100 + 1) / 100 }, shot.shotId).then((d) => { if (d) setSummary(`${shot.shotId}: se está rehaciendo. Mira el registro en «Corregir, ver y aprobar»; cuando termine pulsa «4 · Autocorrección».`); }); }}>
+                  Rehacer con foto nueva · ~US${(shot.estimatedUsd + 0.04).toFixed(2)}</button>}
+              </div>}
               {shot.error && <p className="mt-2 text-xs text-red-300">{shot.error}</p>}
               {shot.status === 'review-required' && shot.redoAuthorization && (
                 <details className="mt-3 rounded-xl border border-white/10 p-3">
