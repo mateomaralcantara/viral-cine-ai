@@ -1,0 +1,68 @@
+{
+  "filmId": "film-dos-toques-de-bocina-v7",
+  "sceneId": "E01",
+  "status": "voice-auditions-scripted-but-no-audio-assets",
+  "language": "es-DO",
+  "source": "GUION-LITERARIO-V1.md",
+  "voiceRequirements": [
+    {
+      "id": "GABRIEL-ESDO-V1",
+      "character": "Gabriel Santos",
+      "ageInFiction": 39,
+      "role": "father",
+      "performance": "barítono medio cálido, español dominicano natural, pausa emocional, sin exageración",
+      "rightsStatus": "unknown",
+      "approvedPerformance": false,
+      "lines": [
+        {
+          "startSeconds": 23.2,
+          "endSeconds": 28.2,
+          "text": "No existe un día que yo pudiera olvidarme de ustedes.",
+          "direction": "respuesta tierna y firme, sonriendo sin mover labios si no hay lipsync"
+        }
+      ]
+    },
+    {
+      "id": "DANIEL-ESDO-V1",
+      "character": "Daniel Santos",
+      "ageInFiction": 11,
+      "role": "son",
+      "performance": "voz original infantil, espontánea, acento dominicano; no imitar a menores reales",
+      "rightsStatus": "unknown",
+      "approvedPerformance": false,
+      "lines": [
+        {
+          "startSeconds": 29.5,
+          "endSeconds": 35,
+          "text": "Papi, tú sí que llegas temprano, aunque el motor suene como una lata.",
+          "direction": "broma inocente, carcajada ligera al final"
+        }
+      ]
+    },
+    {
+      "id": "LUCIA-ESDO-V1",
+      "character": "Lucía Santos",
+      "ageInFiction": 7,
+      "role": "daughter",
+      "performance": "voz original infantil, dulce y clara, tono dominicano sin caricaturizar; no imitar a niñas reales",
+      "rightsStatus": "unknown",
+      "approvedPerformance": false,
+      "lines": [
+        {
+          "startSeconds": 15.7,
+          "endSeconds": 21.7,
+          "text": "Para que no te olvides de nosotros en el trabajo.",
+          "direction": "tono suave, entrega dibujo, voz fuera de cuadro"
+        }
+      ]
+    }
+  ],
+  "rehearsalActions": [
+    "Comprobar que las tres locuciones no se superponen con dos pitidos 46.7s/47.36s.",
+    "Mantener música baja bajo cada diálogo.",
+    "Desarrollar o licenciar voces con derechos demostrables en Avatares u otro sistema, sin falsas aprobaciones.",
+    "Probar audibilidad sobre el MP3 antes de generar tomas finales."
+  ],
+  "videoGenerated": false,
+  "paidGenerationAuthorized": false
+}

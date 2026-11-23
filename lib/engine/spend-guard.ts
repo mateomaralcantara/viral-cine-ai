@@ -10,11 +10,15 @@ export type GenerationReservation = {
 export function reserveShotGeneration(
   project: FilmProject,
   scene: FilmScene,
-  shot: FilmShot
+  shot: FilmShot,
+  reservedUsdOverride?: number
 ): GenerationReservation {
   assertShotGenerationAllowed(project, scene, shot);
 
-  const reservedUsd = estimatedGenerationCost(shot, scene);
+  const reservedUsd =
+    reservedUsdOverride !== undefined
+      ? round(Math.max(0, reservedUsdOverride))
+      : estimatedGenerationCost(shot, scene);
   shot.generationCount = (shot.generationCount || 0) + 1;
   shot.estimatedSpendUsd = round((shot.estimatedSpendUsd || 0) + reservedUsd);
   shot.lastGenerationAt = new Date().toISOString();
@@ -26,8 +30,34 @@ export function reserveShotGeneration(
   };
 }
 
+export function releaseNoChargeGenerationReservation(
+  shot: FilmShot,
+  reservedUsd: number
+) {
+  shot.generationCount = Math.max(0, (shot.generationCount || 0) - 1);
+  shot.estimatedSpendUsd = round(
+    Math.max(0, (shot.estimatedSpendUsd || 0) - reservedUsd)
+  );
+  shot.lastGenerationState = undefined;
+}
+
 export function assertShotGenerationAllowed(project: FilmProject, scene: FilmScene, shot: FilmShot) {
-  const maximumGenerations = integerEnv('SHOT_MAX_TOTAL_GENERATIONS', 1, 1, 10);
+  const configuredMaximumGenerations = integerEnv('SHOT_MAX_TOTAL_GENERATIONS', 1, 1, 10);
+  const registeredPilotShot =
+    shot.id === 'pilot-15d-01' ||
+    Boolean(project.plan?.realMotion?.pilotShotIds?.includes(shot.id));
+
+  const controlledPilotRetry =
+    project.pilot?.enabled === true &&
+    Boolean(project.plan?.realMotion) &&
+    registeredPilotShot &&
+    (
+      shot.qualityForceRegenerate === true ||
+      shot.safeFailoverResume === true
+    );
+  const maximumGenerations = controlledPilotRetry
+    ? Math.max(2, configuredMaximumGenerations)
+    : configuredMaximumGenerations;
   const generationCount = shot.generationCount || 0;
   if (generationCount >= maximumGenerations) {
     throw new ProductionSafetyError(
@@ -80,6 +110,14 @@ export function totalReservedSpend(project: FilmProject) {
 }
 
 export function estimatedGenerationCost(shot: FilmShot, scene?: FilmScene) {
+  if (shot.videoModelOverride === 'veo-3.1-lite-generate-preview') {
+    return round(0.05 * shot.durationSeconds);
+  }
+
+  if (shot.motionSpec?.preferredProviders?.[0] === 'wan') {
+    return round(0.025 * shot.durationSeconds);
+  }
+
   const blocks = Math.max(1, Math.ceil(shot.durationSeconds / 8));
   const generalVideo = numberEnv('COST_AI_VIDEO_8S', 1.23, 0, 1_000) * blocks;
   if (shot.mode !== 'avatar-video' || !likelyAvatarFallback(scene, shot)) return round(generalVideo);

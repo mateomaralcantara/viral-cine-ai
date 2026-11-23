@@ -3,6 +3,7 @@ import { copyFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { deflateSync } from 'node:zlib';
 import type { FilmScene, ProjectInput } from '@/lib/domain/schemas';
+import { probeVideo } from '@/lib/media/probe';
 
 const ffmpeg = () => process.env.FFMPEG_PATH || 'ffmpeg';
 
@@ -17,6 +18,30 @@ export async function createSilenceAudio(durationSeconds: number, outputPath: st
   await run([
     '-y', '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo', '-t', String(durationSeconds),
     '-c:a', 'libmp3lame', '-b:a', '128k', outputPath
+  ]);
+  return outputPath;
+}
+
+/**
+ * Generates an audible deterministic signal for offline/demo speech segments.
+ * This is intentionally NOT speech synthesis. Its purpose is to exercise the
+ * complete audio transport, muxing, checkpoint and audible-audio validation
+ * path without making any external or paid provider call.
+ */
+export async function createSyntheticSpeechAudio(durationSeconds: number, outputPath: string) {
+  const duration = Math.max(0.25, durationSeconds);
+  const fadeDuration = Math.min(0.05, duration / 4);
+  const fadeOutStart = Math.max(0, duration - fadeDuration);
+  await run([
+    '-y',
+    '-f', 'lavfi',
+    '-i', 'sine=frequency=620:sample_rate=48000',
+    '-t', String(duration),
+    '-af', `volume=0.25,afade=t=in:st=0:d=${fadeDuration},afade=t=out:st=${fadeOutStart}:d=${fadeDuration}`,
+    '-ac', '2',
+    '-c:a', 'libmp3lame',
+    '-b:a', '128k',
+    outputPath
   ]);
   return outputPath;
 }
@@ -45,6 +70,39 @@ export async function renderAnimatedImage(
   return outputPath;
 }
 
+export async function renderCinematicStillVideo(
+  imagePath: string,
+  durationSeconds: number,
+  outputPath: string,
+  aspectRatio: ProjectInput['aspectRatio']
+) {
+  const { width, height } = dimensions(aspectRatio);
+  const frames = Math.max(1, Math.round(durationSeconds * 25));
+  const filter = [
+    `scale=${width * 2}:${height * 2}:force_original_aspect_ratio=increase`,
+    `crop=${width * 2}:${height * 2}`,
+    `zoompan=z='min(zoom+0.00045,1.08)':d=${frames}:s=${width}x${height}:fps=25:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'`,
+    'format=yuv420p'
+  ].join(',');
+
+  await run([
+    '-y',
+    '-loop', '1',
+    '-i', imagePath,
+    '-t', String(durationSeconds),
+    '-vf', filter,
+    '-an',
+    '-c:v', 'libx264',
+    '-preset', 'medium',
+    '-crf', '19',
+    '-r', '25',
+    '-pix_fmt', 'yuv420p',
+    '-movflags', '+faststart',
+    outputPath
+  ]);
+  return outputPath;
+}
+
 export async function normalizeGeneratedVideo(
   videoPath: string,
   audioPath: string,
@@ -52,13 +110,268 @@ export async function normalizeGeneratedVideo(
   outputPath: string,
   aspectRatio: ProjectInput['aspectRatio']
 ) {
+  const probe = await probeVideo(videoPath);
+  const shortfallTolerance =
+    durationSeconds < 0.5
+      ? Math.max(0.08, durationSeconds * 0.2)
+      : Math.max(0.25, durationSeconds * 0.05);
+  const minimumVisualDuration = Math.max(0.12, durationSeconds - shortfallTolerance);
+
+  if (
+    !probe.hasVideo ||
+    !Number.isFinite(probe.durationSeconds) ||
+    probe.durationSeconds < minimumVisualDuration
+  ) {
+    throw new Error(
+      `Video fuente demasiado corto para ${durationSeconds.toFixed(2)}s: ` +
+      `${probe.durationSeconds.toFixed(2)}s disponibles, mínimo ${minimumVisualDuration.toFixed(2)}s. ` +
+      'ViralCine no repetirá la escena como relleno.'
+    );
+  }
+
   const { width, height } = dimensions(aspectRatio);
   const filter = `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},fps=25,format=yuv420p`;
   await run([
-    '-y', '-stream_loop', '-1', '-i', videoPath, '-i', audioPath, '-t', String(durationSeconds),
+    '-y', '-i', videoPath, '-i', audioPath, '-t', String(durationSeconds),
     '-vf', filter, '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'libx264', '-preset', 'medium',
     '-crf', '20', '-af', 'apad', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-ac', '2', outputPath
   ]);
+  return outputPath;
+}
+
+export async function normalizeGeneratedVideoWithEmbeddedAudio(
+  videoPath: string,
+  durationSeconds: number,
+  outputPath: string,
+  aspectRatio: ProjectInput['aspectRatio']
+) {
+  const probe = await probeVideo(videoPath);
+  const shortfallTolerance =
+    durationSeconds < 0.5
+      ? Math.max(0.08, durationSeconds * 0.2)
+      : Math.max(0.25, durationSeconds * 0.05);
+  const minimumVisualDuration = Math.max(0.12, durationSeconds - shortfallTolerance);
+
+  if (
+    !probe.hasVideo ||
+    !probe.hasAudio ||
+    !Number.isFinite(probe.durationSeconds) ||
+    probe.durationSeconds < minimumVisualDuration
+  ) {
+    throw new Error(
+      `Lip-sync fuente inválido: video=${probe.hasVideo}, audio=${probe.hasAudio}, ` +
+      `duración=${probe.durationSeconds.toFixed(2)}s, mínimo=${minimumVisualDuration.toFixed(2)}s. ` +
+      'ViralCine no sustituirá ni desplazará el audio sincronizado por el proveedor.'
+    );
+  }
+
+  const { width, height } = dimensions(aspectRatio);
+  const filter = `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},fps=25,format=yuv420p`;
+
+  await run([
+    '-y',
+    '-i', videoPath,
+    '-t', String(durationSeconds),
+    '-vf', filter,
+    '-map', '0:v:0',
+    '-map', '0:a:0',
+    '-c:v', 'libx264',
+    '-preset', 'medium',
+    '-crf', '20',
+    '-af', 'apad',
+    '-c:a', 'aac',
+    '-b:a', '192k',
+    '-ar', '48000',
+    '-ac', '2',
+    outputPath
+  ]);
+
+  return outputPath;
+}
+
+export async function feminizeEmbeddedVoicePreserveTiming(
+  videoPath: string,
+  durationSeconds: number,
+  outputAudioPath: string,
+  pitchFactor = 1.17
+) {
+  if (!Number.isFinite(pitchFactor) || pitchFactor < 1.08 || pitchFactor > 1.25) {
+    throw new Error(
+      'Factor de feminización fuera del rango seguro 1.08-1.25: ' + pitchFactor
+    );
+  }
+
+  const sampleRate = 48000;
+  const shiftedRate = Math.round(sampleRate * pitchFactor);
+  const tempo = 1 / pitchFactor;
+
+  await run([
+    '-y',
+    '-i', videoPath,
+    '-vn',
+    '-map', '0:a:0',
+    '-af',
+    [
+      'asetrate=' + shiftedRate,
+      'aresample=' + sampleRate,
+      'atempo=' + tempo.toFixed(6),
+      'highpass=f=90',
+      'equalizer=f=180:t=q:w=1:g=-3',
+      'equalizer=f=3200:t=q:w=1:g=2',
+      'alimiter=limit=0.95',
+      'apad'
+    ].join(','),
+    '-t', String(durationSeconds),
+    '-ar', String(sampleRate),
+    '-ac', '2',
+    '-c:a', 'aac',
+    '-b:a', '192k',
+    outputAudioPath
+  ]);
+
+  return outputAudioPath;
+}
+
+export async function fitSpeechAudioToExactDuration(
+  audioPath: string,
+  targetSeconds: number,
+  outputPath: string
+) {
+  if (!Number.isFinite(targetSeconds) || targetSeconds <= 0) {
+    throw new Error('Duración destino inválida para ajuste de voz.');
+  }
+
+  const probe = await probeVideo(audioPath);
+  if (!probe.hasAudio || !Number.isFinite(probe.durationSeconds)) {
+    throw new Error('No se pudo medir la nueva voz.');
+  }
+
+  const speedFactor = probe.durationSeconds / targetSeconds;
+  if (speedFactor < 0.85 || speedFactor > 1.20) {
+    throw new Error(
+      'La nueva voz se aleja demasiado del timing original: ' +
+        probe.durationSeconds.toFixed(3) +
+        's vs ' +
+        targetSeconds.toFixed(3) +
+        's. No se forzará el sincronismo.'
+    );
+  }
+
+  await run([
+    '-y',
+    '-i', audioPath,
+    '-vn',
+    '-af', 'atempo=' + speedFactor.toFixed(6) + ',apad',
+    '-t', String(targetSeconds),
+    '-ar', '48000',
+    '-ac', '2',
+    '-c:a', 'aac',
+    '-b:a', '192k',
+    outputPath
+  ]);
+
+  return outputPath;
+}
+
+export async function createCleanVoicePreserveTiming(
+  audioPath: string,
+  durationSeconds: number,
+  outputPath: string
+) {
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+    throw new Error('Duración inválida para voz limpia.');
+  }
+
+  await run([
+    '-y',
+    '-i', audioPath,
+    '-vn',
+    '-af', 'aresample=48000,apad',
+    '-t', String(durationSeconds),
+    '-ar', '48000',
+    '-ac', '2',
+    '-c:a', 'pcm_s16le',
+    outputPath
+  ]);
+
+  return outputPath;
+}
+
+export async function createYouthfulChildVoicePreserveTiming(
+  audioPath: string,
+  durationSeconds: number,
+  outputPath: string,
+  pitchFactor = 1.14
+) {
+  if (!Number.isFinite(pitchFactor) || pitchFactor < 1.05 || pitchFactor > 1.22) {
+    throw new Error(
+      'Factor de voz infantil fuera del rango seguro 1.05-1.22: ' + pitchFactor
+    );
+  }
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+    throw new Error('Duración inválida para voz infantil.');
+  }
+
+  const sampleRate = 48000;
+  const shiftedRate = Math.round(sampleRate * pitchFactor);
+  const tempo = 1 / pitchFactor;
+
+  await run([
+    '-y',
+    '-i', audioPath,
+    '-vn',
+    '-af',
+    [
+      'asetrate=' + shiftedRate,
+      'aresample=' + sampleRate,
+      'atempo=' + tempo.toFixed(6),
+      'highpass=f=120',
+      'equalizer=f=180:t=q:w=1:g=-5',
+      'equalizer=f=320:t=q:w=1:g=-2',
+      'equalizer=f=2800:t=q:w=1:g=2.5',
+      'equalizer=f=5200:t=q:w=1:g=1.5',
+      'alimiter=limit=0.92',
+      'apad'
+    ].join(','),
+    '-t', String(durationSeconds),
+    '-ar', String(sampleRate),
+    '-ac', '2',
+    '-c:a', 'pcm_s16le',
+    outputPath
+  ]);
+
+  return outputPath;
+}
+
+export async function replaceAudioPreserveVideo(
+  videoPath: string,
+  audioPath: string,
+  durationSeconds: number,
+  outputPath: string
+) {
+  const probe = await probeVideo(videoPath);
+  if (!probe.hasVideo || !probe.hasAudio) {
+    throw new Error(
+      'El clip fuente debe contener video y audio antes de reemplazar únicamente la voz.'
+    );
+  }
+
+  await run([
+    '-y',
+    '-i', videoPath,
+    '-i', audioPath,
+    '-t', String(durationSeconds),
+    '-map', '0:v:0',
+    '-map', '1:a:0',
+    '-c:v', 'copy',
+    '-c:a', 'aac',
+    '-b:a', '192k',
+    '-ar', '48000',
+    '-ac', '2',
+    '-movflags', '+faststart',
+    outputPath
+  ]);
+
   return outputPath;
 }
 
@@ -70,11 +383,34 @@ export async function concatenate(clips: string[], outputPath: string) {
   return outputPath;
 }
 
-export async function mixBackgroundMusic(videoPath: string, musicPath: string, outputPath: string) {
+export async function mixBackgroundMusic(
+  videoPath: string,
+  musicPath: string,
+  outputPath: string,
+  offsetSeconds = 0
+) {
+  const safeOffset = Math.max(0, Number.isFinite(offsetSeconds) ? offsetSeconds : 0);
   await run([
-    '-y', '-i', videoPath, '-stream_loop', '-1', '-i', musicPath,
-    '-filter_complex', '[0:a]volume=1.0[voice];[1:a]volume=0.11[music];[voice][music]amix=inputs=2:duration=first:dropout_transition=2[a]',
-    '-map', '0:v:0', '-map', '[a]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-shortest', outputPath
+    '-y',
+    '-i', videoPath,
+    '-stream_loop', '-1',
+    '-ss', safeOffset.toFixed(3),
+    '-i', musicPath,
+    '-filter_complex',
+    '[0:a]volume=1.0[voice];' +
+    '[1:a]volume=0.12[music];' +
+    '[music][voice]sidechaincompress=threshold=0.025:ratio=8:attack=20:release=350[ducked];' +
+    '[voice][ducked]amix=inputs=2:duration=first:dropout_transition=2[mix];' +
+    '[mix]loudnorm=I=-16:TP=-1.5:LRA=11[a]',
+    '-map', '0:v:0',
+    '-map', '[a]',
+    '-c:v', 'copy',
+    '-c:a', 'aac',
+    '-b:a', '192k',
+    '-ar', '48000',
+    '-ac', '2',
+    '-shortest',
+    outputPath
   ]);
   return outputPath;
 }
@@ -112,6 +448,41 @@ export async function burnSubtitles(videoPath: string, subtitlePath: string, out
 export async function copyMedia(source: string, destination: string) {
   await copyFile(source, destination);
   return destination;
+}
+
+export async function normalizeReferenceImage(
+  imagePath: string,
+  outputPath: string,
+  aspectRatio: ProjectInput['aspectRatio']
+) {
+  const { width, height } = dimensions(aspectRatio);
+  await run([
+    '-y',
+    '-i', imagePath,
+    '-frames:v', '1',
+    '-vf',
+    'scale=' + width + ':' + height + ':force_original_aspect_ratio=increase,crop=' + width + ':' + height,
+    outputPath
+  ]);
+  return outputPath;
+}
+
+export async function extractLastFrame(
+  videoPath: string,
+  outputPath: string,
+  aspectRatio: ProjectInput['aspectRatio']
+) {
+  const { width, height } = dimensions(aspectRatio);
+  await run([
+    '-y',
+    '-sseof', '-0.12',
+    '-i', videoPath,
+    '-frames:v', '1',
+    '-vf',
+    'scale=' + width + ':' + height + ':force_original_aspect_ratio=increase,crop=' + width + ':' + height,
+    outputPath
+  ]);
+  return outputPath;
 }
 
 export async function createSceneContactSheet(videoPath: string, durationSeconds: number, outputPath: string) {

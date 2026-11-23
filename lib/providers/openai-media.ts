@@ -41,10 +41,16 @@ export async function generateImageWithReferences(referencePaths: string[], prom
   return outputPath;
 }
 
-export async function generateSpeech(text: string, instructions: string, outputPath: string) {
+export async function generateSpeech(
+  text: string,
+  instructions: string,
+  outputPath: string,
+  voice?: string
+) {
+  const selectedVoice = voice?.trim() || process.env.OPENAI_TTS_VOICE || 'marin';
   const response = await client('generar voz con OpenAI').audio.speech.create({
     model: process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts',
-    voice: (process.env.OPENAI_TTS_VOICE || 'marin') as 'marin',
+    voice: selectedVoice as 'marin',
     input: text.slice(0, 4096),
     instructions,
     response_format: 'mp3'

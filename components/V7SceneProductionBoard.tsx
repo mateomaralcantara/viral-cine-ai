@@ -1,0 +1,222 @@
+'use client';
+import { useCallback, useEffect, useState } from 'react';
+import { CheckCircle2, Film, RefreshCcw, ShieldCheck } from 'lucide-react';
+import {ensureLocalStudioSession} from '@/lib/v7/security/local-studio-client';
+import V7E02CloudImageGallery from '@/components/V7E02CloudImageGallery';
+
+type Shot={id:string;label:string;title:string;approved:boolean;readyForApproval:boolean;hasVideo:boolean;reason:string};
+type Scene={id:string;label:string;title:string;approved:boolean;readyForApproval:boolean;readyForAssembly:boolean;assembled:boolean;reason:string;shots:Shot[]};
+type Board={ok:boolean;scenes:Scene[];sceneCount:number;shotCount:number;approvedShotCount:number;
+ approvedSceneCount:number;pipeline:{mode:string;plannedSteps:number;paidProviderDispatchEnabled:boolean;automaticPaidRetries:number};
+ families:Array<{id:string;label:string;agents:readonly string[]}>};
+export default function V7SceneProductionBoard({filmId}:{filmId:string}){
+  const endpoint='/api/v7/films/'+encodeURIComponent(filmId)+'/scene-production';
+  const [board,setBoard]=useState<Board|null>(null);
+  const [error,setError]=useState('');
+  const [localSession,setLocalSession]=useState('Conectando automáticamente…');
+  const [working,setWorking]=useState('');
+  const [notice,setNotice]=useState('');
+  const [approvalTarget,setApprovalTarget]=useState<{kind:'shot'|'scene';id:string}|null>(null);
+  const [reviewed,setReviewed]=useState(false);
+  const [qualityChecks,setQualityChecks]=useState({identityWardrobe:false,voiceSound:false,motionContinuity:false});
+  const [approvalNotes,setApprovalNotes]=useState('');
+  function openReview(kind:'shot'|'scene',id:string){
+    setApprovalTarget({kind,id});setReviewed(false);
+    setQualityChecks({identityWardrobe:false,voiceSound:false,motionContinuity:false});
+    setApprovalNotes('');setNotice('');
+  }
+  const reviewComplete=reviewed&&Object.values(qualityChecks).every(Boolean);
+  const refresh=useCallback(async()=>{
+    const response=await fetch(endpoint,{cache:'no-store'});
+    const data=await response.json() as Board&{error?:string};
+    if(!response.ok||!data.ok)throw new Error(data.error||'Tablero no disponible');
+    setBoard(data);setError('');
+  },[endpoint]);
+  useEffect(()=>{
+    void ensureLocalStudioSession().then(()=>setLocalSession('Sesión administrativa local activa.'))
+      .catch(e=>setLocalSession(String(e)));
+    void refresh().catch(e=>setError(e instanceof Error?e.message:String(e)));
+    const timer=setInterval(()=>{void refresh().catch(()=>undefined);},12000);
+    return ()=>clearInterval(timer);
+  },[refresh]);
+  async function assemble(sceneId:string){
+    await ensureLocalStudioSession();
+    setWorking(sceneId);setNotice('');
+    try{
+      const response=await fetch(endpoint,{method:'POST',
+        headers:{'Content-Type':'application/json'},credentials:'same-origin',
+        body:JSON.stringify({action:'assemble-local',sceneId})});
+      const data=await response.json() as {ok?:boolean;error?:string};
+      if(!response.ok||!data.ok)throw new Error(data.error||'Montaje incompleto');
+      await refresh();setNotice('Escena ensamblada con FFmpeg local; revisa el MP4 y aprueba. Sin gastos.');
+    }catch(e){setNotice(e instanceof Error?e.message:String(e));}
+    finally{setWorking('');}
+  }
+  async function approve(kind:'shot'|'scene',id:string) {
+    if(!approvalTarget||approvalTarget.kind!==kind||approvalTarget.id!==id||!reviewComplete){
+      setNotice('Primero revisa el video y confirma las tres comprobaciones artísticas.');return;
+    }
+    setWorking(id);setNotice('');
+    try{
+      await ensureLocalStudioSession();
+      const response=await fetch(endpoint,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},credentials:'same-origin',
+        body:JSON.stringify({action:'approve-artistic',targetType:kind,targetId:id,confirmHuman:true,
+          checks:{identityWardrobe:'pass',voiceSound:'pass',motionContinuity:'pass'},notes:approvalNotes.trim()||'Director confirmó revisión y tres criterios de calidad'})
+      });
+      const data=await response.json() as {ok?:boolean;error?:string};
+      if(!response.ok||!data.ok)throw new Error(data.error||'No se registró la aprobación');
+      await refresh();
+      setApprovalTarget(null);
+      setNotice((kind==='shot'?'Toma':'Escena')+' aprobada y guardada. Sin costos.');
+    }catch(e){setNotice(e instanceof Error?e.message:String(e));}
+    finally{setWorking('');}
+  }
+  return (
+    <section className="panel mt-6 rounded-3xl p-6 md:p-8">
+      <div className="flex items-center gap-3">
+        <Film className="h-6 w-6 text-violet-300"/>
+        <h2 className="text-2xl font-black">Producción por escenas · Familias de agentes</h2>
+      </div>
+      <p className="mt-2 text-sm leading-6 text-slate-300">
+        Revisa cada MP4 completo antes de aprobar. Las tomas sin video no permiten aprobación.
+        Confirma identidad y vestuario, sonido y voces, y movimiento y continuidad individualmente.
+        La aprobación artística no genera videos ni cargos. La escena completa requiere montaje previo.
+      </p>
+      <div className="mt-4 grid gap-3 sm:grid-cols-4">
+        {[
+          ['Escenas',board?.sceneCount??'—'],
+          ['Tomas',board?.shotCount??'—'],
+          ['Tomas aprobadas',board?.approvedShotCount??'—'],
+          ['Escenas aprobadas',board?.approvedSceneCount??'—']
+        ].map(([label,value])=><div key={String(label)} className="rounded-xl border border-white/10 p-3">
+          <div className="text-xs text-slate-400">{label}</div><div className="mt-1 text-xl font-bold">{value}</div>
+        </div>)}
+      </div>
+      <div className="mt-4 rounded-xl border border-amber-400/20 p-3 text-xs text-amber-200">
+        <ShieldCheck className="mr-2 inline h-4 w-4"/>
+        Planificación automática sin costo. Ninguna llamada pagada se envía desde este tablero.
+        Reintentos de proveedor: bloqueados. La aprobación artística es siempre humana.
+      </div>
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <p className="flex-1 text-sm text-emerald-200">
+          {localSession} No necesitas copiar ni pegar el token.
+        </p>
+        <button type="button" className="button-secondary" onClick={()=>void refresh().catch(e=>setError(String(e)))}>
+          <RefreshCcw className="mr-2 inline h-4 w-4"/>Actualizar todo
+        </button>
+      </div>
+      {error&&<p className="mt-3 text-sm text-red-300" role="alert">{error}</p>}
+      {notice&&<p className="mt-3 text-sm text-amber-200" role="status">{notice}</p>}
+      {board&&<p className="mt-3 text-xs text-slate-400">
+        {board.families.length} familias · {board.pipeline.plannedSteps} tareas planificadas · cero envíos externos
+      </p>}
+      <div className="mt-5 space-y-3">
+        {board?.scenes.map(scene=>(
+          <details key={scene.id} className="rounded-2xl border border-white/10 p-4" open={scene.label==='E01'||(scene.label==='E02'&&filmId==='film-dos-toques-de-bocina-v7')}>
+            <summary className="cursor-pointer font-bold">
+              {scene.label} · {scene.title}
+              <span className={'ml-2 text-xs '+(scene.approved?'text-emerald-300':'text-slate-400')}>
+                {scene.approved?'APROBADA':scene.assembled?'Montada · revisión pendiente':'En producción'}
+              </span>
+            </summary>
+            <p className="mt-3 text-xs text-slate-400">{scene.reason}</p>
+            {scene.label==='E02'&&filmId==='film-dos-toques-de-bocina-v7'&&(
+              <V7E02CloudImageGallery filmId={filmId} sceneShots={scene.shots}/>
+            )}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button type="button" className="button-secondary"
+                disabled={!scene.readyForAssembly||!!working}
+                onClick={()=>void assemble(scene.id)}>
+                {scene.assembled?'Montaje listo':working===scene.id?'Montando…':'Montar escena completa · Sin costo'}
+              </button>
+              {scene.assembled&&<a className="button-secondary"
+                href={endpoint+'/video?sceneId='+encodeURIComponent(scene.id)}
+                target="_blank" rel="noreferrer">Revisar escena MP4</a>}
+            </div>
+            <button type="button" className="button-primary mt-3"
+              disabled={!scene.readyForApproval||!!working}
+              onClick={()=>openReview('scene',scene.id)}>
+              {scene.approved?'Escena aprobada':working===scene.id?'Guardando…':'Aprobar escena completa'}
+            </button>
+            <div className="mt-4 space-y-2">
+              {scene.shots.map(shot=>(
+                <div key={shot.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 p-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold">
+                      {shot.label} · {shot.approved&&<CheckCircle2 className="mr-1 inline h-4 w-4 text-emerald-300"/>}
+                      {shot.approved?'APROBADA':shot.reason}
+                    </p>
+                    <p className="truncate text-xs text-slate-400"
+                      title={shot.label==='E02-P04'?'Gabriel ya está dentro con casco negro en mano y observa la maleta':shot.title}>
+                      {shot.label==='E02-P04'?'Gabriel ya está dentro con casco negro en mano y observa la maleta':shot.title}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {shot.hasVideo&&
+                      <a className="button-secondary text-sm" target="_blank" rel="noreferrer"
+                        href={endpoint+'/video?shotId='+encodeURIComponent(shot.id)}>Ver MP4</a>}
+                    {!shot.approved&&!shot.readyForApproval&&
+                      <span className="max-w-[280px] text-xs text-amber-200" role="status">
+                        {shot.reason}
+                      </span>}
+                    <button type="button" className="button-primary"
+                      disabled={shot.approved||!shot.readyForApproval||!!working}
+                      title={shot.readyForApproval?'Revisar criterios antes de aprobar':shot.reason}
+                      onClick={()=>openReview('shot',shot.id)}>
+                      {shot.approved?'Aprobada':working===shot.id?'Guardando…':shot.readyForApproval?'Revisar y aprobar':'Sin MP4'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </details>
+        ))}
+      </div>
+      {approvalTarget&&<div className="mt-5 rounded-2xl border border-emerald-500/40 bg-slate-900/90 p-4" role="region" aria-label="Verificación artística">
+        <h3 className="text-lg font-bold">Revisión artística · {approvalTarget.kind==='shot'?'Toma':'Escena'}</h3>
+        <p className="mt-1 text-sm text-slate-300">
+          Confirma que has visto el MP4 completo y verificado sus características. Ningún criterio se marca automáticamente.
+        </p>
+        <label className="mt-3 flex gap-2 text-sm">
+          <input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/>
+          He visto el video completo y considero que está listo para aprobación.
+        </label>
+        <div className="mt-3 space-y-2">
+          {([
+            ['identityWardrobe','Identidades, rostros y vestuario coherentes'],
+            ['voiceSound','Diálogo, voces y sonido correctos'],
+            ['motionContinuity','Movimientos, cámara y continuidad correctos']
+          ] as const).map(([key,label])=><label key={key} className="flex gap-2 text-sm">
+            <input type="checkbox" checked={qualityChecks[key]} onChange={e=>
+              setQualityChecks(previous=>({...previous,[key]:e.target.checked}))}/>
+            {label}
+          </label>)}
+        </div>
+        <label className="mt-3 block text-sm" htmlFor="v7-approval-notes">Observaciones del director (opcional)</label>
+        <textarea id="v7-approval-notes" className="mt-1 w-full rounded-lg border border-white/20 bg-slate-950 p-2 text-white"
+          maxLength={900} rows={2} value={approvalNotes}
+          onChange={e=>setApprovalNotes(e.target.value)} placeholder="Ej.: ninguna; voz y movimiento aprobados"/>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button type="button" className="button-primary"
+            disabled={!reviewComplete||!!working}
+            onClick={()=>void approve(approvalTarget.kind,approvalTarget.id)}>
+            {working?'Guardando…':'Confirmar aprobación artística'}
+          </button>
+          <button type="button" className="button-secondary" disabled={!!working}
+            onClick={()=>setApprovalTarget(null)}>Cancelar</button>
+        </div>
+      </div>}
+      <details className="mt-5 rounded-2xl border border-white/10 p-4">
+        <summary className="cursor-pointer font-bold">Ver familias de agentes de la producción</summary>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          {board?.families.map(f=><div key={f.id} className="rounded-xl border border-white/10 p-3">
+            <p className="text-sm font-bold">{f.label}</p>
+            <p className="mt-1 text-xs text-slate-400">{f.agents.join(' · ')}</p>
+          </div>)}
+        </div>
+      </details>
+    </section>
+  );
+}

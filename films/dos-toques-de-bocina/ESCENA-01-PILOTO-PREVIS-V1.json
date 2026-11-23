@@ -1,0 +1,104 @@
+{
+  "filmId": "film-dos-toques-de-bocina-v7",
+  "sceneId": "E01",
+  "title": "La señal",
+  "durationSeconds": 50,
+  "videoFile": "DOS_TOQUES_DE_BOCINA_E01_LA_SENAL_PREVIS_50S.mp4",
+  "sha256": "ca872c06b41e07f407e3c0f29f149b5367fa24d910638419142f1f6f60beea5c",
+  "audio": true,
+  "codecVideo": "h264",
+  "codecAudio": "aac",
+  "status": "PREVISUALIZACION_EDITORIAL_PENDIENTE_DE_REVIEW",
+  "paidProviderCalls": 0,
+  "generatedPerformances": false,
+  "dubbingReady": false,
+  "approvedFilmFinal": false,
+  "sourcePortraits": [
+    {
+      "id": "gabriel",
+      "voice": "GABRIEL-ESDO-V1",
+      "asset": "DOS_TOQUES_CASTING_GABRIEL_CANDIDATO_V1.png",
+      "sha256": "8b7ac29db0345c0778b061d29be2b1cd3eac035717c3a81cd32750942a820f16",
+      "approvedEditorially": true,
+      "localImportConfirmed": false
+    },
+    {
+      "id": "daniel",
+      "voice": "DANIEL-ESDO-V1",
+      "asset": "DOS_TOQUES_CASTING_DANIEL_CANDIDATO_V1.png",
+      "sha256": "57c36b95f854bc4bf90cf2370fa37bbc946d6a54f72f1b9af6a65fee99861f26",
+      "approvedEditorially": true,
+      "localImportConfirmed": false
+    },
+    {
+      "id": "lucia",
+      "voice": "LUCIA-ESDO-V1",
+      "asset": "DOS_TOQUES_CASTING_LUCIA_CANDIDATO_V1.png",
+      "sha256": "4fa24dd018bb8d77d618098575a80bcbfa80c9573be5860649bb03a85cea98e2",
+      "approvedEditorially": true,
+      "localImportConfirmed": false
+    }
+  ],
+  "soundtrack": {
+    "file": "DOS_TOQUES_DE_BOCINA_BANDA_SONORA_10MIN_V1.mp3",
+    "sha256": "f18ccaa52c8313238ec44dc95b2d85f086a8e6fe92892c2fb7c8f1d7d181e5ad",
+    "clip": {
+      "startSeconds": 0,
+      "endSeconds": 50
+    },
+    "compositionApproved": true,
+    "mixedForFilm": false
+  },
+  "foley": {
+    "type": "bocina-sintetica-provisional",
+    "count": 2,
+    "onsetsSeconds": [
+      46.7,
+      47.36
+    ],
+    "finalVersionPending": true
+  },
+  "shotPlan": [
+    {
+      "id": "E01-P01",
+      "startSeconds": 0,
+      "durationSeconds": 8
+    },
+    {
+      "id": "E01-P02",
+      "startSeconds": 8,
+      "durationSeconds": 7
+    },
+    {
+      "id": "E01-P03",
+      "startSeconds": 15,
+      "durationSeconds": 7
+    },
+    {
+      "id": "E01-P04",
+      "startSeconds": 22,
+      "durationSeconds": 7
+    },
+    {
+      "id": "E01-P05",
+      "startSeconds": 29,
+      "durationSeconds": 7
+    },
+    {
+      "id": "E01-P06",
+      "startSeconds": 36,
+      "durationSeconds": 7
+    },
+    {
+      "id": "E01-P07",
+      "startSeconds": 43,
+      "durationSeconds": 7
+    }
+  ],
+  "notes": [
+    "El video entregado es previs con retratos animados, no actuaciones Veo ni clips aprobados.",
+    "Las líneas se presentan en pantalla, sin audio de doblaje.",
+    "Importación local mediante panel Prueba E01, sin sobrescritura.",
+    "La música y los retratos originales se entregan fuera de GitHub como archivos descargables en la conversación."
+  ]
+}

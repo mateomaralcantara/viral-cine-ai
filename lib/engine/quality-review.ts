@@ -109,10 +109,24 @@ export async function reviewSceneQuality(
   const characters = activeCharacterIds
     .map((id) => project.plan?.characters.find((character) => character.id === id))
     .filter((character) => Boolean(character));
-  const referencePaths = characters
-    .map((character) => character?.referenceAsset)
-    .filter((asset): asset is string => Boolean(asset))
-    .slice(0, 2)
+  const realMotionBible = project.plan.realMotion?.characterBible || [];
+  const referenceAssets = characters.flatMap((character) => {
+    if (!character) return [];
+    const bible = realMotionBible.find(
+      (entry) => entry.characterId === character.id
+    );
+    const stateId = shot?.characterStateIds?.[character.id];
+    const state = bible?.states.find((item) => item.id === stateId);
+
+    return [
+      character.referenceAsset,
+      bible?.masterReferenceAsset,
+      bible?.bodyReferenceAsset,
+      state?.referenceAsset
+    ].filter((asset): asset is string => Boolean(asset));
+  });
+  const referencePaths = [...new Set(referenceAssets)]
+    .slice(0, 4)
     .map((asset) => assetAbsolutePath(project.id, asset));
   const previousShot = shot && shot.order > 1 ? scene.shots.find((candidate) => candidate.order === shot.order - 1) : undefined;
   const previousScene = !previousShot ? project.plan.scenes.find((candidate) => candidate.order === scene.order - 1) : undefined;

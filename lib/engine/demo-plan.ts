@@ -26,6 +26,7 @@ export function createDemoPlan(input: ProjectInput): FilmPlan {
       wardrobe: 'ropa cotidiana sobria que evoluciona hacia una presencia segura y cinematográfica',
       personality: 'curioso, resiliente, imperfecto y decidido',
       voiceInstructions: 'Español caribeño neutral, íntimo, seguro, ritmo narrativo cinematográfico.',
+      voiceProvider: 'offline' as const,
       imagePrompt: `Retrato cinematográfico del protagonista de ${input.title}, estilo ${input.visualStyle}, iluminación de estudio, rostro frontal consistente.`
     },
     {
@@ -37,6 +38,7 @@ export function createDemoPlan(input: ProjectInput): FilmPlan {
       wardrobe: 'vestuario elegante y funcional en una paleta complementaria al protagonista',
       personality: 'directa, estratégica y empática',
       voiceInstructions: 'Voz femenina madura, clara, cálida y con autoridad tranquila.',
+      voiceProvider: 'offline' as const,
       imagePrompt: `Retrato cinematográfico de una mentora llamada Elena, estilo ${input.visualStyle}, luz suave, identidad visual consistente.`
     }
   ];
@@ -48,6 +50,7 @@ export function createDemoPlan(input: ProjectInput): FilmPlan {
     const mode: SceneMode = order % 5 === 0 ? 'avatar' : 'ai-video';
     const durationSeconds = durations[index];
     const development = `${input.premise} En este momento, ${beat.toLowerCase()} modifica el rumbo del protagonista.`;
+    const spoken = mode === 'avatar' ? 'No necesitas otra oportunidad. Necesitas usar de verdad la que ya tienes.' : '';
 
     return {
       id: randomUUID(),
@@ -57,7 +60,8 @@ export function createDemoPlan(input: ProjectInput): FilmPlan {
       durationSeconds,
       summary: development,
       narration: `Toda transformación comienza mucho antes de que los demás puedan verla. En ${input.title}, este instante revela ${beat.toLowerCase()} y obliga al protagonista a mirar de frente aquello que había evitado.`,
-      dialogue: mode === 'avatar' ? 'Elena: No necesitas otra oportunidad. Necesitas usar de verdad la que ya tienes.' : '',
+      dialogue: mode === 'avatar' ? `Elena: ${spoken}` : '',
+      dialogueTurns: mode === 'avatar' ? [{ speakerId: guideId, text: spoken, emotion: 'serena y firme' }] : [],
       visualPrompt: `${input.visualStyle}. ${development} Mismos personajes, vestuario y paleta del proyecto. Composición cinematográfica ${input.aspectRatio}, profundidad de campo, iluminación narrativa, sin texto ni marcas.`,
       negativePrompt: 'rostro diferente, identidad inconsistente, manos deformes, texto, logos, marcas de agua, baja resolución, anatomía rota, duplicados',
       camera: act === 1 ? 'dolly-in lento y planos cerrados' : act === 2 ? 'cámara en movimiento y planos medios' : 'plano amplio, movimiento estable y cierre heroico',

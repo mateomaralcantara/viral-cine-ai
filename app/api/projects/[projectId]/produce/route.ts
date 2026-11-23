@@ -5,6 +5,9 @@ import { saveShotCheckpoint, type SceneAssets } from '@/lib/engine/scene-checkpo
 import type { FilmShot } from '@/lib/domain/schemas';
 import { updateProject } from '@/lib/storage/project-store';
 import { assertProductionCanQueue, ProductionSafetyError, safeErrorMessage } from '@/lib/engine/production-safety';
+import { assertIdentityLocksReady } from '@/lib/engine/preflight-identity-check';
+import { assertPilotStateLocksReady } from '@/lib/engine/pilot-state-lock-v5';
+import { assertPilotRoutingLocksReady } from '@/lib/engine/pilot-routing-lock-v5';
 
 export const runtime = 'nodejs';
 
@@ -49,6 +52,10 @@ export async function POST(request: Request, context: Context) {
           throw new Error('La toma requiere que elijas aprobar el material existente o autorizar un reintento manual.');
         }
       }
+      assertIdentityLocksReady(current);
+      assertPilotStateLocksReady(current);
+      assertPilotRoutingLocksReady(current);
+
       try {
         assertProductionCanQueue(current);
       } catch (error) {

@@ -1,0 +1,870 @@
+import { access } from 'node:fs/promises';
+import path from 'node:path';
+import type { FilmProject, FilmScene, FilmShot } from '@/lib/domain/schemas';
+import {
+  assetAbsolutePath,
+  assetRelativePath,
+  getProject,
+  projectAssetDir,
+  saveProject
+} from '@/lib/storage/project-store';
+import { generateSpeech } from '@/lib/providers/openai-media';
+import {
+  audioFileToDataUri,
+  generateRunwayGrok15AudioDrivenFromEnvironment,
+  generateRunwayGrokLiteFromEnvironment,
+  generateRunwayWan3AudioReferenceFromEnvironment,
+  grok15AudioDrivenCredits,
+  grokLiteImageToVideoCredits,
+  wan3VideoCredits,
+  imageFileToDataUri
+} from '@/lib/providers/runway-router-v6';
+import {
+  concatenate,
+  createSilenceAudio,
+  extractLastFrame,
+  normalizeGeneratedVideo,
+  normalizeGeneratedVideoWithEmbeddedAudio
+} from '@/lib/media/ffmpeg';
+import {
+  assertCinematicSceneVideo,
+  probeVideo
+} from '@/lib/media/probe';
+import {
+  appendSpend,
+  estimateOperationCost,
+  latestSpendForKey,
+  voiceCostUnits
+} from '@/lib/engine/spend-ledger';
+import {
+  renderedAssets,
+  saveSceneCheckpoint,
+  saveShotCheckpoint
+} from '@/lib/engine/scene-checkpoints';
+import {
+  planScene3SynchronizedV6,
+  validateScene3SynchronizedV6,
+  SCENE3_DIALOGUE_V6,
+  SCENE3_MARIANA_ID_V6
+} from '@/lib/engine/scene3-sync-plan-v6';
+import { applyFifteenDaysCoreVoiceLocksV5 } from '@/lib/engine/fifteen-days-voice-lock-v5';
+
+const MAX_LITE_CREDITS = 25;
+const MAX_DIALOGUE_CREDITS = 130;
+const MAX_WAN_DIALOGUE_CREDITS = 80;
+const MAX_SCENE_CREDITS = 180;
+const MAX_VOICE_USD = 0.01;
+
+export type Scene3SynchronizedResult = {
+  projectId: string;
+  sceneVideo: string;
+  runwayCredits: number;
+  runwayUsd: number;
+};
+
+export type Scene3DialogueProviderV6 = 'grok15' | 'wan3';
+
+export async function produceScene3SynchronizedV6(
+  projectId: string,
+  options: { dialogueProvider?: Scene3DialogueProviderV6 } = {}
+): Promise<Scene3SynchronizedResult> {
+  const dialogueProvider = options.dialogueProvider || 'grok15';
+  let project = await getProject(projectId);
+  assertProjectReady(project);
+
+  applyFifteenDaysCoreVoiceLocksV5(project);
+  planScene3SynchronizedV6(project);
+  validateScene3SynchronizedV6(project);
+  project = await saveProject(project);
+
+  const scene2 = project.plan!.scenes.find((item) => item.order === 2)!;
+  const scene2Video = scene2.videoAsset
+    ? assetAbsolutePath(project.id, scene2.videoAsset)
+    : undefined;
+  if (!scene2Video || !(await exists(scene2Video))) {
+    throw new Error('La Escena 2 aprobada no tiene video local para continuidad.');
+  }
+
+  project = await getProject(project.id);
+  const liveScene3 = project.plan!.scenes.find((item) => item.order === 3)!;
+  liveScene3.status = 'rendering';
+  liveScene3.error = undefined;
+  project.status = 'producing';
+  project.error = undefined;
+  project.productionLog.push(
+    new Date().toISOString() +
+      ' ViralCine 6 Safe: Escena 3 inicia arquitectura audio-driven: plan -> voz -> video condicionado por audio -> audio embebido preservado -> composición local.'
+  );
+  project = await saveProject(project);
+
+  const continuityFrame = path.join(
+    projectAssetDir(project.id, 'images'),
+    'scene-003-continuity-from-scene2.jpg'
+  );
+  if (!(await exists(continuityFrame))) {
+    await extractLastFrame(
+      scene2Video,
+      continuityFrame,
+      project.input.aspectRatio
+    );
+  }
+
+  const t1 = await produceSetupShot(
+    project.id,
+    continuityFrame
+  );
+
+  const t1LastFrame = path.join(
+    projectAssetDir(project.id, 'images'),
+    'scene-003-shot-01-last.jpg'
+  );
+  await extractLastFrame(
+    t1,
+    t1LastFrame,
+    project.input.aspectRatio
+  );
+
+  const t2 = await produceDialogueShot(
+    project.id,
+    t1LastFrame,
+    dialogueProvider
+  );
+
+  const t2LastFrame = path.join(
+    projectAssetDir(project.id, 'images'),
+    'scene-003-shot-02-last.jpg'
+  );
+  await extractLastFrame(
+    t2,
+    t2LastFrame,
+    project.input.aspectRatio
+  );
+
+  const t3 = await produceReactionShot(
+    project.id,
+    t2LastFrame
+  );
+
+  project = await getProject(project.id);
+  const finalScene = project.plan!.scenes.find((item) => item.order === 3)!;
+  const clips = [t1, t2, t3];
+
+  const sceneVideo = path.join(
+    projectAssetDir(project.id, 'video'),
+    'scene-003.mp4'
+  );
+  await concatenate(clips, sceneVideo);
+  await assertCinematicSceneVideo(
+    sceneVideo,
+    24,
+    { requireMotion: true, requireAudibleAudio: true }
+  );
+
+  const speakingShot = finalScene.shots.find((shot) => shot.order === 2)!;
+  const representativeShot =
+    finalScene.shots.find((shot) => shot.order === 1)!;
+
+  if (!representativeShot.imageAsset || !speakingShot.voiceAsset) {
+    throw new Error('Escena 3 no tiene assets representativos completos.');
+  }
+
+  finalScene.imageAsset = representativeShot.imageAsset;
+  finalScene.voiceAsset = speakingShot.voiceAsset;
+  finalScene.videoAsset = assetRelativePath(project.id, sceneVideo);
+  finalScene.status = 'review-required';
+  finalScene.error = undefined;
+  finalScene.productionStrategy = 'real-cinema-v2';
+
+  project.status = 'quality-review';
+  project.error = undefined;
+  project.progress = {
+    phase: 'quality-review',
+    percent: 45,
+    message:
+      'Escena 3 generada con diálogo audio-driven. Revisar sincronía boca/voz y actuación de Mariana.',
+    currentScene: 3,
+    totalScenes: project.plan!.scenes.length,
+    updatedAt: new Date().toISOString()
+  };
+  project.productionLog.push(
+    new Date().toISOString() +
+      ' ViralCine 6 Safe: Escena 3 compuesta en 24s. T2 conserva el audio embebido generado junto al movimiento facial; MP3 externo NO fue reinsertado.'
+  );
+
+  const sceneAssets = renderedAssets(
+    project.id,
+    finalScene.mode,
+    assetAbsolutePath(project.id, finalScene.imageAsset),
+    assetAbsolutePath(project.id, finalScene.voiceAsset),
+    sceneVideo
+  );
+  await saveSceneCheckpoint(project, finalScene, sceneAssets);
+  project = await saveProject(project);
+
+  const dialogueCredits =
+    dialogueProvider === 'wan3'
+      ? wan3VideoCredits(8, '1280:720')
+      : grok15AudioDrivenCredits(8, '720p', 1, 1);
+
+  const credits =
+    grokLiteImageToVideoCredits(8, 'auto_720p') +
+    dialogueCredits +
+    grokLiteImageToVideoCredits(8, 'auto_720p');
+
+  return {
+    projectId: project.id,
+    sceneVideo,
+    runwayCredits: credits,
+    runwayUsd: credits * 0.01
+  };
+}
+
+async function produceSetupShot(
+  projectId: string,
+  continuityFrame: string
+) {
+  let project = await getProject(projectId);
+  const scene = scene3(project);
+  const shot = shotByOrder(scene, 1);
+
+  if (shot.status === 'ready' && shot.videoAsset) {
+    const current = assetAbsolutePath(project.id, shot.videoAsset);
+    if (await exists(current)) return current;
+  }
+
+  const key = 'scene-003-shot-01';
+  const imagePath = continuityFrame;
+
+  const silencePath = path.join(
+    projectAssetDir(project.id, 'audio'),
+    key + '.mp3'
+  );
+  if (!(await exists(silencePath))) {
+    await createSilenceAudio(8, silencePath);
+  }
+
+  const rawPath = path.join(
+    projectAssetDir(project.id, 'video'),
+    key + '-grok-lite-raw.mp4'
+  );
+  const finalPath = path.join(
+    projectAssetDir(project.id, 'video'),
+    key + '.mp4'
+  );
+
+  if (!(await exists(rawPath))) {
+    const credits = grokLiteImageToVideoCredits(8, 'auto_720p');
+    if (credits > MAX_LITE_CREDITS) {
+      throw new Error('SAFE COST GATE T1: Grok Lite supera 25 créditos.');
+    }
+    const spendKey = 'v6safe:e3:t1:grok-lite:1';
+    await assertSpendAvailable(project.id, spendKey, rawPath);
+    await appendSpend(project.id, {
+      operation: 'video',
+      provider: 'runway-direct',
+      model: 'grok_imagine_1_5_lite',
+      state: 'submitted',
+      estimatedUsd: credits * 0.01,
+      sceneId: scene.id,
+      shotId: shot.id,
+      idempotencyKey: spendKey
+    });
+    try {
+      const generated = await generateRunwayGrokLiteFromEnvironment(
+        {
+          model: 'grok_imagine_1_5_lite',
+          promptImage: await imageFileToDataUri(imagePath),
+          promptText: [
+            shot.visualPrompt,
+            'Movimiento corporal sutil y natural. Elena sigue escribiendo; Mariana termina de sentarse.',
+            'Nadie habla. No animar habla ni conversación.',
+            'Una sola toma continua. Sin texto ni subtítulos.'
+          ].join(' '),
+          ratio: 'auto_720p',
+          duration: 8
+        },
+        rawPath
+      );
+      await appendSpend(project.id, {
+        operation: 'video',
+        provider: 'runway-direct',
+        model: generated.model,
+        state: 'succeeded',
+        estimatedUsd: credits * 0.01,
+        actualUsd: generated.credits * 0.01,
+        sceneId: scene.id,
+        shotId: shot.id,
+        idempotencyKey: spendKey,
+        providerRequestId: generated.taskId,
+        outputAsset: assetRelativePath(project.id, rawPath)
+      });
+    } catch (error) {
+      await recordUnknownVideoFailure(project, scene, shot, spendKey, 'grok_imagine_1_5_lite', credits, error);
+      throw error;
+    }
+  }
+
+  await normalizeGeneratedVideo(
+    rawPath,
+    silencePath,
+    8,
+    finalPath,
+    project.input.aspectRatio
+  );
+  await assertCinematicSceneVideo(finalPath, 8, { requireMotion: true });
+
+  await markShotReady(project.id, 1, {
+    imagePath,
+    voicePath: silencePath,
+    rawPath,
+    finalPath,
+    provider: 'Runway Direct / grok_imagine_1_5_lite',
+    pipelineVersion: '6.0-safe-scene3-setup',
+    spendUsd: 0.25
+  });
+
+  return finalPath;
+}
+
+async function produceDialogueShot(
+  projectId: string,
+  sceneContinuityFrame: string,
+  dialogueProvider: Scene3DialogueProviderV6
+) {
+  let project = await getProject(projectId);
+  const scene = scene3(project);
+  const shot = shotByOrder(scene, 2);
+
+  if (shot.status === 'ready' && shot.videoAsset) {
+    const current = assetAbsolutePath(project.id, shot.videoAsset);
+    if (await exists(current)) return current;
+  }
+
+  const key = 'scene-003-shot-02';
+  const voicePath = path.join(
+    projectAssetDir(project.id, 'audio'),
+    key + '-mariana-cedar.mp3'
+  );
+
+  if (!(await exists(voicePath))) {
+    const estimate = estimateOperationCost(
+      'voice',
+      voiceCostUnits(SCENE3_DIALOGUE_V6)
+    );
+    if (estimate > MAX_VOICE_USD) {
+      throw new Error(
+        'SAFE COST GATE VOZ: estimación US$' +
+          estimate.toFixed(4) +
+          ' supera US$0.01.'
+      );
+    }
+
+    const spendKey = 'v6safe:e3:t2:voice:cedar:1';
+    await assertSpendAvailable(project.id, spendKey, voicePath);
+    await appendSpend(project.id, {
+      operation: 'voice',
+      provider: 'openai',
+      model: process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts',
+      state: 'submitted',
+      estimatedUsd: estimate,
+      sceneId: scene.id,
+      shotId: shot.id,
+      characterId: SCENE3_MARIANA_ID_V6,
+      idempotencyKey: spendKey
+    });
+
+    try {
+      await withLegacyPaidGate(async () => {
+        await generateSpeech(
+          SCENE3_DIALOGUE_V6,
+          [
+            'Español latino natural.',
+            'Voz femenina madura, calmada, clara y cálida, con autoridad tranquila.',
+            'Habla exactamente el texto recibido.',
+            'No traduzcas, no parafrasees, no agregues, no omitas ni sustituyas palabras.',
+            'Debe caber naturalmente dentro de ocho segundos.',
+            'Sin tono publicitario ni melodramático.'
+          ].join(' '),
+          voicePath,
+          'cedar'
+        );
+      });
+
+      await appendSpend(project.id, {
+        operation: 'voice',
+        provider: 'openai',
+        model: process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts',
+        state: 'succeeded',
+        estimatedUsd: estimate,
+        sceneId: scene.id,
+        shotId: shot.id,
+        characterId: SCENE3_MARIANA_ID_V6,
+        idempotencyKey: spendKey,
+        outputAsset: assetRelativePath(project.id, voicePath)
+      });
+    } catch (error) {
+      await appendSpend(project.id, {
+        operation: 'voice',
+        provider: 'openai',
+        model: process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts',
+        state: 'failed-unknown',
+        estimatedUsd: estimate,
+        sceneId: scene.id,
+        shotId: shot.id,
+        characterId: SCENE3_MARIANA_ID_V6,
+        idempotencyKey: spendKey,
+        error: errorText(error)
+      });
+      throw error;
+    }
+  }
+
+  const voiceProbe = await probeVideo(voicePath);
+  if (!voiceProbe.hasAudio || voiceProbe.durationSeconds < 3 || voiceProbe.durationSeconds > 8) {
+    throw new Error(
+      'VOZ T2 FUERA DE RANGO: duración=' +
+        voiceProbe.durationSeconds.toFixed(3) +
+        's. Debe quedar entre 3 y 8s antes de generar el video; Runway NO fue llamado.'
+    );
+  }
+
+  const useWan = dialogueProvider === 'wan3';
+  const rawPath = path.join(
+    projectAssetDir(project.id, 'video'),
+    key + (useWan ? '-wan3-audio-ref-raw.mp4' : '-grok-audio-driven-raw.mp4')
+  );
+  const finalPath = path.join(
+    projectAssetDir(project.id, 'video'),
+    key + '.mp4'
+  );
+
+  if (!(await exists(rawPath))) {
+    const credits = useWan
+      ? wan3VideoCredits(8, '1280:720')
+      : grok15AudioDrivenCredits(8, '720p', 1, 1);
+
+    const expectedCredits = useWan
+      ? MAX_WAN_DIALOGUE_CREDITS
+      : MAX_DIALOGUE_CREDITS;
+
+    if (credits !== expectedCredits) {
+      throw new Error(
+        'SAFE COST GATE T2: costo inesperado ' + credits + ' créditos.'
+      );
+    }
+
+    const model = useWan ? 'wan3' : 'grok_imagine_1_5';
+    const spendKey = useWan
+      ? 'v6safe:e3:t2:wan3-audio-ref:1'
+      : 'v6safe:e3:t2:grok15-audio-driven:1';
+
+    await assertSpendAvailable(project.id, spendKey, rawPath);
+
+    await appendSpend(project.id, {
+      operation: 'video',
+      provider: 'runway-direct',
+      model,
+      state: 'submitted',
+      estimatedUsd: credits * 0.01,
+      sceneId: scene.id,
+      shotId: shot.id,
+      idempotencyKey: spendKey
+    });
+
+    try {
+      const imageUri = await imageFileToDataUri(sceneContinuityFrame);
+      const audioUri = await audioFileToDataUri(voicePath);
+
+      const generated = useWan
+        ? await generateRunwayWan3AudioReferenceFromEnvironment(
+            {
+              model: 'wan3',
+              promptText: [
+                '[Image 1] es el último frame aprobado de T1 y fija identidad, vestuario, calle, iluminación y continuidad.',
+                'Mariana es la mujer madura sentada junto a Elena y es la única persona que habla.',
+                'Usa el audio de referencia como la interpretación vocal de Mariana.',
+                'Sincroniza con precisión los movimientos de labios, mandíbula y expresiones de Mariana con el ritmo y fonemas del audio de referencia.',
+                'Elena permanece en silencio y no mueve los labios como si hablara.',
+                'Plano medio corto frontal de Mariana, boca completamente visible, leve push-in continuo, sin cortes.',
+                'No añadir palabras, voz adicional, música, texto, subtítulos, logos ni marcas de agua.'
+              ].join(' '),
+              audio: true,
+              duration: 8,
+              ratio: '1280:720',
+              references: [{ uri: imageUri }],
+              referenceAudio: [{ type: 'audio', uri: audioUri }]
+            },
+            rawPath
+          )
+        : await generateRunwayGrok15AudioDrivenFromEnvironment(
+            {
+              model: 'grok_imagine_1_5',
+              promptText: [
+                '[Image 1] es el último frame aprobado de T1 y define identidades, calle, iluminación y continuidad.',
+                'Mariana es la mujer madura que acaba de sentarse junto a Elena; Elena es la mujer del cuaderno.',
+                'Mariana es la única persona que habla.',
+                'Su boca, labios y mandíbula permanecen visibles durante todo el parlamento.',
+                'La interpretación facial y los movimientos de boca deben seguir el audio de referencia exactamente, palabra por palabra.',
+                'Elena, si aparece, permanece completamente en silencio y no mueve los labios como si hablara.',
+                'Plano medio corto frontal, leve push-in continuo, sin cortes.',
+                'No generar voz adicional, música, texto, subtítulos, logos ni marcas de agua.'
+              ].join(' '),
+              duration: 8,
+              ratio: '16:9',
+              resolution: '720p',
+              references: [{ uri: imageUri }],
+              referenceAudio: [{ type: 'audio', uri: audioUri }]
+            },
+            rawPath
+          );
+
+      await appendSpend(project.id, {
+        operation: 'video',
+        provider: 'runway-direct',
+        model: generated.model,
+        state: 'succeeded',
+        estimatedUsd: credits * 0.01,
+        actualUsd: generated.credits * 0.01,
+        sceneId: scene.id,
+        shotId: shot.id,
+        idempotencyKey: spendKey,
+        providerRequestId: generated.taskId,
+        outputAsset: assetRelativePath(project.id, rawPath)
+      });
+    } catch (error) {
+      await recordUnknownVideoFailure(
+        project,
+        scene,
+        shot,
+        spendKey,
+        model,
+        credits,
+        error
+      );
+      throw error;
+    }
+  }
+
+  const rawProbe = await probeVideo(rawPath);
+  if (!rawProbe.hasAudio) {
+    throw new Error(
+      'El proveedor audio-reference devolvió video sin audio embebido. No se publicará la toma.'
+    );
+  }
+
+  await normalizeGeneratedVideoWithEmbeddedAudio(
+    rawPath,
+    8,
+    finalPath,
+    project.input.aspectRatio
+  );
+  await assertCinematicSceneVideo(
+    finalPath,
+    8,
+    { requireMotion: true, requireAudibleAudio: true }
+  );
+
+  await markShotReady(project.id, 2, {
+    imagePath: sceneContinuityFrame,
+    voicePath,
+    rawPath,
+    lipSyncPath: rawPath,
+    finalPath,
+    provider:
+      dialogueProvider === 'wan3'
+        ? 'Runway Direct / wan3 audio-reference'
+        : 'Runway Direct / grok_imagine_1_5 audio-driven',
+    pipelineVersion:
+      dialogueProvider === 'wan3'
+        ? '6.0-wan3-audio-reference-review'
+        : '6.0-audio-driven-lipsync',
+    spendUsd:
+      (dialogueProvider === 'wan3'
+        ? MAX_WAN_DIALOGUE_CREDITS
+        : MAX_DIALOGUE_CREDITS) * 0.01
+  });
+
+  return finalPath;
+}
+
+async function produceReactionShot(
+  projectId: string,
+  firstFrame: string
+) {
+  let project = await getProject(projectId);
+  const scene = scene3(project);
+  const shot = shotByOrder(scene, 3);
+
+  if (shot.status === 'ready' && shot.videoAsset) {
+    const current = assetAbsolutePath(project.id, shot.videoAsset);
+    if (await exists(current)) return current;
+  }
+
+  const key = 'scene-003-shot-03';
+  const silencePath = path.join(
+    projectAssetDir(project.id, 'audio'),
+    key + '.mp3'
+  );
+  if (!(await exists(silencePath))) {
+    await createSilenceAudio(8, silencePath);
+  }
+
+  const rawPath = path.join(
+    projectAssetDir(project.id, 'video'),
+    key + '-grok-lite-raw.mp4'
+  );
+  const finalPath = path.join(
+    projectAssetDir(project.id, 'video'),
+    key + '.mp4'
+  );
+
+  if (!(await exists(rawPath))) {
+    const credits = grokLiteImageToVideoCredits(8, 'auto_720p');
+    if (credits > MAX_LITE_CREDITS) {
+      throw new Error('SAFE COST GATE T3: Grok Lite supera 25 créditos.');
+    }
+    const spendKey = 'v6safe:e3:t3:grok-lite:1';
+    await assertSpendAvailable(project.id, spendKey, rawPath);
+    await appendSpend(project.id, {
+      operation: 'video',
+      provider: 'runway-direct',
+      model: 'grok_imagine_1_5_lite',
+      state: 'submitted',
+      estimatedUsd: credits * 0.01,
+      sceneId: scene.id,
+      shotId: shot.id,
+      idempotencyKey: spendKey
+    });
+    try {
+      const generated = await generateRunwayGrokLiteFromEnvironment(
+        {
+          model: 'grok_imagine_1_5_lite',
+          promptImage: await imageFileToDataUri(firstFrame),
+          promptText: [
+            shot.visualPrompt,
+            'Elena levanta lentamente la mirada del cuaderno y procesa la propuesta.',
+            'Mariana espera en silencio. Ninguna persona habla.',
+            'Bocas relajadas, sin movimientos de habla.',
+            'Movimiento natural y contenido, una sola toma continua, sin texto.'
+          ].join(' '),
+          ratio: 'auto_720p',
+          duration: 8
+        },
+        rawPath
+      );
+      await appendSpend(project.id, {
+        operation: 'video',
+        provider: 'runway-direct',
+        model: generated.model,
+        state: 'succeeded',
+        estimatedUsd: credits * 0.01,
+        actualUsd: generated.credits * 0.01,
+        sceneId: scene.id,
+        shotId: shot.id,
+        idempotencyKey: spendKey,
+        providerRequestId: generated.taskId,
+        outputAsset: assetRelativePath(project.id, rawPath)
+      });
+    } catch (error) {
+      await recordUnknownVideoFailure(project, scene, shot, spendKey, 'grok_imagine_1_5_lite', credits, error);
+      throw error;
+    }
+  }
+
+  await normalizeGeneratedVideo(
+    rawPath,
+    silencePath,
+    8,
+    finalPath,
+    project.input.aspectRatio
+  );
+  await assertCinematicSceneVideo(finalPath, 8, { requireMotion: true });
+
+  await markShotReady(project.id, 3, {
+    imagePath: firstFrame,
+    voicePath: silencePath,
+    rawPath,
+    finalPath,
+    provider: 'Runway Direct / grok_imagine_1_5_lite',
+    pipelineVersion: '6.0-safe-scene3-reaction',
+    spendUsd: 0.25
+  });
+
+  return finalPath;
+}
+
+async function markShotReady(
+  projectId: string,
+  order: number,
+  input: {
+    imagePath: string;
+    voicePath: string;
+    rawPath: string;
+    lipSyncPath?: string;
+    finalPath: string;
+    provider: string;
+    pipelineVersion: string;
+    spendUsd: number;
+  }
+) {
+  const project = await getProject(projectId);
+  const scene = scene3(project);
+  const shot = shotByOrder(scene, order);
+
+  shot.imageAsset = assetRelativePath(project.id, input.imagePath);
+  shot.voiceAsset = assetRelativePath(project.id, input.voicePath);
+  shot.baseVideoAsset = assetRelativePath(project.id, input.rawPath);
+  shot.lipSyncAsset = input.lipSyncPath
+    ? assetRelativePath(project.id, input.lipSyncPath)
+    : undefined;
+  shot.videoAsset = assetRelativePath(project.id, input.finalPath);
+  shot.status = 'ready';
+  shot.error = undefined;
+  shot.lastProvider = input.provider;
+  shot.lastGenerationState = 'succeeded';
+  shot.generationCount = (shot.generationCount || 0) + 1;
+  shot.estimatedSpendUsd =
+    (shot.estimatedSpendUsd || 0) + input.spendUsd;
+  shot.pipelineVersion = input.pipelineVersion;
+
+  const assets = renderedAssets(
+    project.id,
+    shot.mode,
+    input.imagePath,
+    input.voicePath,
+    input.finalPath
+  );
+  await saveShotCheckpoint(project, scene, shot, assets);
+
+  project.productionLog.push(
+    new Date().toISOString() +
+      ' ViralCine 6 Safe: E3/T' +
+      order +
+      ' lista · ' +
+      input.provider +
+      '.'
+  );
+  await saveProject(project);
+}
+
+async function recordUnknownVideoFailure(
+  project: FilmProject,
+  scene: FilmScene,
+  shot: FilmShot,
+  spendKey: string,
+  model: string,
+  credits: number,
+  error: unknown
+) {
+  const message = errorText(error);
+  const taskIdMatch = message.match(/taskId=([0-9a-f-]{36})/i);
+
+  await appendSpend(project.id, {
+    operation: 'video',
+    provider: 'runway-direct',
+    model,
+    state: 'failed-unknown',
+    estimatedUsd: credits * 0.01,
+    sceneId: scene.id,
+    shotId: shot.id,
+    idempotencyKey: spendKey,
+    providerRequestId: taskIdMatch?.[1],
+    error: message
+  });
+}
+
+async function assertSpendAvailable(
+  projectId: string,
+  spendKey: string,
+  expectedAsset: string
+) {
+  const previous = await latestSpendForKey(projectId, spendKey);
+  if (!previous) return;
+
+  if (previous.state === 'succeeded' && await exists(expectedAsset)) {
+    throw new Error(
+      'SAFE RESUME: existe operación succeeded y asset para ' +
+        spendKey +
+        '. La toma debe reconciliarse/reutilizarse, no cobrarse de nuevo.'
+    );
+  }
+
+  if (
+    ['submitted', 'succeeded', 'failed-unknown', 'reconciled'].includes(
+      previous.state
+    )
+  ) {
+    throw new Error(
+      'SAFE RETRY BLOCK: existe estado ' +
+        previous.state +
+        ' para ' +
+        spendKey +
+        '. No se reintentará automáticamente.'
+    );
+  }
+}
+
+async function withLegacyPaidGate<T>(run: () => Promise<T>) {
+  const oldExternal = process.env.ALLOW_EXTERNAL_API_CALLS;
+  const oldPaid = process.env.ALLOW_PAID_GENERATION;
+  process.env.ALLOW_EXTERNAL_API_CALLS = 'true';
+  process.env.ALLOW_PAID_GENERATION = 'true';
+  try {
+    return await run();
+  } finally {
+    restoreEnv('ALLOW_EXTERNAL_API_CALLS', oldExternal);
+    restoreEnv('ALLOW_PAID_GENERATION', oldPaid);
+  }
+}
+
+function assertProjectReady(project: FilmProject) {
+  if (project.input.title.trim().toLocaleUpperCase() !== '15 DÍAS') {
+    throw new Error('Este productor solo está autorizado para 15 DÍAS.');
+  }
+  if (
+    process.env.ALLOW_EXTERNAL_API_CALLS === 'true' ||
+    process.env.ALLOW_PAID_GENERATION === 'true' ||
+    process.env.ALLOW_PAID_PROVIDER_FALLBACK === 'true'
+  ) {
+    throw new Error(
+      'Las APIs legacy deben permanecer bloqueadas en .env.local. Este productor abre solo cada llamada explícitamente autorizada.'
+    );
+  }
+  const scene2 = project.plan?.scenes.find((item) => item.order === 2);
+  if (!scene2 || scene2.status !== 'ready') {
+    throw new Error('Escena 2 debe estar aprobada/ready antes de producir Escena 3.');
+  }
+}
+
+function scene3(project: FilmProject) {
+  const scene = project.plan?.scenes.find((item) => item.order === 3);
+  if (!scene) throw new Error('No existe Escena 3.');
+  return scene;
+}
+
+function shotByOrder(scene: FilmScene, order: number) {
+  const shot = scene.shots.find((item) => item.order === order);
+  if (!shot) throw new Error('No existe E3/T' + order + '.');
+  return shot;
+}
+
+async function exists(filePath: string) {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function restoreEnv(name: string, value: string | undefined) {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+}
+
+function errorText(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+export const SCENE3_SAFE_MAX_USD_V6 =
+  MAX_SCENE_CREDITS * 0.01 + MAX_VOICE_USD;

@@ -1,0 +1,99 @@
+name: ViralCine 4.2/5.0 CI
+
+on:
+  push:
+    branches:
+      - feat/viralcine-4-real-cinema
+      - feat/viralcine-5-real-motion
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          ffmpeg -version | head -n 1
+          ffprobe -version | head -n 1
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        id: typecheck
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          npm run typecheck 2>&1 | tee typecheck.log
+
+      - name: Publish TypeScript diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: typecheck-diagnostics-${{ github.sha }}
+          path: typecheck.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Enforce Typecheck
+        if: steps.typecheck.outcome == 'failure'
+        run: |
+          echo "Typecheck failed. Diagnostics were uploaded as an artifact."
+          cat typecheck.log
+          exit 1
+
+      - name: Tests
+        id: tests
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee tests.log
+
+      - name: Publish test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-diagnostics-${{ github.sha }}
+          path: tests.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Enforce Tests
+        if: steps.tests.outcome == 'failure'
+        run: |
+          echo "Tests failed. Diagnostics were uploaded as an artifact."
+          cat tests.log
+          exit 1
+
+      - name: Real Cinema offline smoke
+        env:
+          PRODUCTION_MODE: demo
+          REAL_CINEMA_PIPELINE: 'true'
+          ALLOW_EXTERNAL_API_CALLS: 'false'
+          ALLOW_PAID_GENERATION: 'false'
+          PILOT_MODE: 'false'
+          FAKE_PROVIDER_SCENARIO: success
+        run: npm run smoke
+
+      - name: Production build
+        run: npm run build
+
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high

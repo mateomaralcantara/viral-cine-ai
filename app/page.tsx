@@ -1,5 +1,5 @@
-import StudioApp from '@/components/StudioApp';
+import V7StudioHome from '@/components/V7StudioHome';
 
 export default function HomePage() {
-  return <StudioApp />;
+  return <V7StudioHome />;
 }

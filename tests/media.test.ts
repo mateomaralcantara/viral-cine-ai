@@ -7,8 +7,17 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { ProjectInputSchema } from '../lib/domain/schemas';
 import { checkFfmpeg } from '../lib/media/ffmpeg-check';
-import { createPlaceholderImage, createSceneContactSheet, createSilenceAudio, renderAnimatedImage } from '../lib/media/ffmpeg';
-import { assertCinematicSceneVideo, assertPlayableSceneVideo } from '../lib/media/probe';
+import {
+  createPlaceholderImage,
+  createSceneContactSheet,
+  createSilenceAudio,
+  createSyntheticSpeechAudio,
+  normalizeGeneratedVideo,
+  normalizeGeneratedVideoWithEmbeddedAudio,
+  renderAnimatedImage
+} from '../lib/media/ffmpeg';
+import { assertCinematicSceneVideo, assertCinematicVideoTrack, assertPlayableSceneVideo } from '../lib/media/probe';
+import { createSyntheticMotionVideo } from '../lib/media/synthetic-video';
 
 const execFileAsync = promisify(execFile);
 
@@ -39,6 +48,29 @@ test('FFmpeg produce un clip MP4 reproducible desde imagen y audio', async (cont
   assert.ok((await stat(contactSheet)).size > 1_000);
 });
 
+test('la voz sintética offline supera el umbral audible sin relajar producción real', async (context) => {
+  if (!(await checkFfmpeg())) return context.skip('FFmpeg no está disponible');
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'viralcine-audible-demo-'));
+  const image = path.join(directory, 'scene.png');
+  const audio = path.join(directory, 'synthetic-voice.mp3');
+  const video = path.join(directory, 'scene.mp4');
+  const input = ProjectInputSchema.parse({
+    title: 'Prueba de audio offline',
+    premise: 'Una señal local prueba el transporte de voz sin llamadas externas.',
+    durationMinutes: 5,
+    genre: 'Técnico',
+    audience: 'Equipo interno',
+    visualStyle: 'Cinematográfico',
+    budgetUsd: 50
+  });
+  await createPlaceholderImage('Audio offline', 'Validación audible sin proveedor pagado.', image, input);
+  await createSyntheticSpeechAudio(2, audio);
+  await renderAnimatedImage(image, audio, 2, video, '16:9');
+  await assert.doesNotReject(
+    () => assertCinematicSceneVideo(video, 2, { requireAudibleAudio: true })
+  );
+});
+
 test('rechaza un MP4 negro antes de enviarlo a la auditoria de calidad', async (context) => {
   if (!(await checkFfmpeg())) return context.skip('FFmpeg no está disponible');
   const directory = await mkdtemp(path.join(os.tmpdir(), 'viralcine-black-video-'));
@@ -53,5 +85,59 @@ test('rechaza un MP4 negro antes de enviarlo a la auditoria de calidad', async (
   await assert.rejects(
     () => assertCinematicSceneVideo(video, 2, { requireMotion: true }),
     /Video rechazado.*negro/
+  );
+  await assert.rejects(
+    () => assertCinematicVideoTrack(video, 2),
+    /Fuente visual rechazada.*negro/
+  );
+});
+
+
+test('normalizador rechaza video corto en vez de repetirlo como relleno', async (context) => {
+  if (!(await checkFfmpeg())) return context.skip('FFmpeg no está disponible');
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'viralcine-no-loop-'));
+  const source = path.join(directory, 'source.mp4');
+  const audio = path.join(directory, 'voice.mp3');
+  const output = path.join(directory, 'output.mp4');
+
+  await createSyntheticMotionVideo(1, source, '16:9');
+  await createSilenceAudio(2, audio);
+
+  await assert.rejects(
+    () => normalizeGeneratedVideo(source, audio, 2, output, '16:9'),
+    /no repetirá la escena como relleno/i
+  );
+});
+
+
+test('normalizador de lip-sync conserva el audio embebido del proveedor', async (context) => {
+  if (!(await checkFfmpeg())) return context.skip('FFmpeg no está disponible');
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'viralcine-embedded-audio-'));
+  const image = path.join(directory, 'frame.png');
+  const audio = path.join(directory, 'provider-audio.mp3');
+  const source = path.join(directory, 'provider-lipsync.mp4');
+  const output = path.join(directory, 'normalized.mp4');
+
+  const input = ProjectInputSchema.parse({
+    title: 'Lip sync embebido',
+    premise: 'Prueba técnica para mantener el audio sincronizado que entrega el proveedor.',
+    durationMinutes: 5,
+    genre: 'Técnico',
+    audience: 'Equipo',
+    visualStyle: 'Cine',
+    budgetUsd: 50
+  });
+
+  await createPlaceholderImage('Lip sync', 'Frame técnico.', image, input);
+  await createSyntheticSpeechAudio(2, audio);
+  await renderAnimatedImage(image, audio, 2, source, '16:9');
+
+  await normalizeGeneratedVideoWithEmbeddedAudio(source, 2, output, '16:9');
+
+  const probe = await assertPlayableSceneVideo(output, 2);
+  assert.equal(probe.hasVideo, true);
+  assert.equal(probe.hasAudio, true);
+  await assert.doesNotReject(
+    () => assertCinematicSceneVideo(output, 2, { requireAudibleAudio: true })
   );
 });
