@@ -21,6 +21,7 @@ export default function V7HarnessPanel({ filmId, scene, onChanged }: { filmId: s
   const [budget, setBudget] = useState('5');
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState('');
+  const [note, setNote] = useState('');
 
   const loadJob = useCallback(async () => {
     const r = await fetch(endpoint + '?scene=' + scene + '&job=1', { cache: 'no-store' });
@@ -61,17 +62,18 @@ export default function V7HarnessPanel({ filmId, scene, onChanged }: { filmId: s
     <div className="mt-5 rounded-2xl border border-cyan-400/40 bg-cyan-500/[.05] p-4">
       <h3 className="text-lg font-black">Harness de la escena {scene}</h3>
       <p className="mt-1 text-xs text-slate-300">Orden recomendado: 1 → 2 → generar la escena → 3. Ninguna toma con errores entra en la película.</p>
-      {msg && <p className="mt-2 text-sm text-red-300" role="alert">{msg}</p>}
+      {msg && <p className="mt-2 rounded-lg border border-red-400/50 bg-red-500/10 p-2 text-sm text-red-200" role="alert">No se pudo: {msg}</p>}
+      {note && !msg && <p className="mt-2 text-sm text-emerald-300" role="status">{note}</p>}
 
       <div className="mt-3 flex flex-wrap gap-2">
         <button type="button" className="button-secondary" disabled={!!busy} onClick={() => void analyze()}>
           {busy === 'pre' ? 'Analizando…' : '1 · Análisis inicial de perfección · gratis'}</button>
         <button type="button" className="button-secondary" disabled={!!busy || running}
-          onClick={() => void post({ action: 'harness', kind: 'continuidad' }, 'cont').then((d) => d && loadJob())}>
+          onClick={() => { setNote(''); void post({ action: 'harness', kind: 'continuidad' }, 'cont').then((d) => { if (d) { setNote('Fotos de continuidad en marcha: mira el recuadro de abajo (se actualiza cada 5 s).'); void loadJob(); } }); }}>
           2 · Fotos de continuidad · ~US$0.04 c/u</button>
         <span className="flex items-center gap-2">
           <button type="button" className="button-primary" disabled={!!busy || running}
-            onClick={() => void post({ action: 'harness', kind: 'autocorreccion', budgetUsd: Number(budget) }, 'auto').then((d) => d && loadJob())}>
+            onClick={() => { setNote(''); void post({ action: 'harness', kind: 'autocorreccion', budgetUsd: Number(budget) }, 'auto').then((d) => { if (d) { setNote('Autocorrección en marcha: mira el recuadro de abajo.'); void loadJob(); } }); }}>
             3 · Autocorrección en vivo</button>
           <label className="text-xs text-slate-300">tope US$
             <input className="ml-1 w-16 rounded border border-white/20 bg-slate-950 p-1 text-white" value={budget} onChange={(e) => setBudget(e.target.value)} inputMode="decimal"/>
