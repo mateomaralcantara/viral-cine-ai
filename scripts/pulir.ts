@@ -19,7 +19,7 @@
  * Nunca reintenta un resultado incierto (failed-unknown) y nunca pasa del tope que le das.
  */
 import { spawn } from 'node:child_process';
-import { access, mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { access, copyFile, mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import nextEnv from '@next/env';
 import { FILM_KEYS } from '../lib/v7/presets/film-registry';
@@ -31,7 +31,8 @@ import {
 } from '../lib/v7/production/scene-veo-engine';
 import { currentShotVideo, fileSha256, originalShotVideo, repairRecordPath } from '../lib/v7/production/shot-current-video';
 import { gateEnabled, qualityGate, type GateResult } from '../lib/v7/qa/quality-gate';
-import { approvedSheets, castInShot, continuityRequired } from '../lib/v7/production/continuity-chain';
+import { approvedSheets, castInShot, continuityRequired, extractAnchorFrame } from '../lib/v7/production/continuity-chain';
+import { planContinuity } from '../lib/v7/production/continuity-runner';
 import { serieOf } from '../lib/v7/production/character-identity';
 import { rewritePrompt } from '../lib/v7/qa/prompt-doctor';
 import { isLocked, lockShot } from '../lib/v7/production/shot-lock';
@@ -155,6 +156,43 @@ async function toOnCamera(label: string) {
   return prompt;
 }
 
+const CELEBRITY_CODES = /15236754|29310472|64151117/;
+
+/** Bloqueos anteriores de esta toma por «persona famosa». */
+async function celebrityBlocks(label: string) {
+  try {
+    const dir = path.join(root, label.toLowerCase(), 'veo-attempts');
+    let n = 0;
+    for (const f of (await readdir(dir)).filter((x) => x.endsWith('.json'))) {
+      const r = JSON.parse(await readFile(path.join(dir, f), 'utf8')) as { status?: string; error?: string };
+      if (r.status === 'failed-no-video' && CELEBRITY_CODES.test(r.error ?? '')) n++;
+    }
+    return n;
+  } catch { return 0; }
+}
+
+/** Usa como foto de partida un fotograma de la toma aprobada más cercana con el mismo personaje. */
+async function anchorFrameAsReference(label: string) {
+  const plan = await planContinuity(filmId, { shots: [label], repeat: true });
+  const anchor = plan.jobs[0]?.anchor;
+  if (!anchor) return false;
+  const video = await currentShotVideo(path.join(root, anchor.toLowerCase()), anchor);
+  if (!video) return false;
+  const ref = shotReferencePath(filmId, label);
+  const tmp = path.join(path.dirname(ref), 'continuidad', `${label}-ancla-${anchor}.jpg`);
+  await mkdir(path.dirname(tmp), { recursive: true });
+  await extractAnchorFrame(video.file, tmp);
+  await dropReference(label);
+  await copyFile(tmp, ref);
+  return true;
+}
+
+/** Último recurso: la toma va solo con texto (la continuidad obligatoria lo permite y queda anotado). */
+async function textOnlyByFilter(label: string) {
+  await dropReference(label);
+  await writeFile(path.join(root, label.toLowerCase(), 'continuidad-sin-foto.json'), JSON.stringify({ motivo: 'Google bloquea la foto por parecido a persona famosa', fecha: new Date().toISOString() }, null, 2) + '\n');
+}
+
 async function dropReference(label: string) {
   const ref = shotReferencePath(filmId, label);
   if (!(await exists(ref))) return false;
@@ -225,6 +263,17 @@ async function main() {
       if (blocked) {
         const attempt = (await blockedAttempts(label)) + 1;
         let extra = '';
+        // BLOQUEO «PERSONA FAMOSA» (códigos 15236754 / 29310472 / 64151117): Google cree que la FOTO de partida
+        // se parece a alguien conocido. Reescribir el texto no sirve: se cambia la foto, por escalones.
+        if (CELEBRITY_CODES.test(rec.error ?? '')) {
+          const n = (await celebrityBlocks(label)) + 1;
+          let how = '';
+          if (n === 1 && await anchorFrameAsReference(label)) how = 'foto de partida = fotograma de una toma ya aprobada (Veo ya aceptó esa cara)';
+          else if (n <= 2) { await runScript('continuidad.ts', ['--tomas', label, '--generar']); how = 'foto de continuidad nueva'; }
+          else { await textOnlyByFilter(label); how = 'sin foto (Google confunde la cara con una persona famosa): solo texto con la descripción fija; la puerta revisará la cara'; }
+          revisionId = (await savePromptRevision(filmId, label, current)).revisionId;
+          note(label, 'BLOQUEADA', `parecido a persona famosa (intento ${n}) → ${how} · Google no cobró el bloqueo`);
+        } else {
         // La foto de partida también puede disparar el filtro. Con continuidad obligatoria no se quita:
         // se crea una foto de continuidad NUEVA (~US$0.04); sin ella, se prueba solo con texto.
         if (attempt >= 2 && continuityRequired(film)) { await runScript('continuidad.ts', ['--tomas', label, '--generar']); extra = ' · foto de continuidad nueva'; }
@@ -234,6 +283,7 @@ async function main() {
           revisionId = (await savePromptRevision(filmId, label, fixed)).revisionId;
           note(label, 'BLOQUEADA', `texto reformulado (intento ${attempt}${extra}) · Google no cobró el bloqueo`);
         } catch (e) { note(label, 'BLOQUEADA', (e as Error).message); continue; }
+        }
       }
       const est = rate ? estimateShotUsd(shot.durationSeconds, rate) : 0;
       if (!budget || spent + est > budget + 1e-9) {

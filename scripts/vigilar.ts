@@ -97,7 +97,7 @@ async function main() {
         }
       }
       // 2. Revisor + Reparador + Pulir (imagen y bloqueos de Google).
-      await agent('pulir.ts', ['--toma', label, '--hasta', left.toFixed(2), '--rondas', '2']);
+      await agent('pulir.ts', ['--toma', label, '--hasta', left.toFixed(2), '--rondas', '3']);
     }
     const allLocked = (await Promise.all(scene.shots.map(({ label }) => isLocked(path.join(root, label.toLowerCase()))))).every(Boolean);
     if (allLocked) { console.log(`\n[${stamp()}] ${sceneLabel}: todas las tomas están bien y FIJADAS. Fin.`); break; }

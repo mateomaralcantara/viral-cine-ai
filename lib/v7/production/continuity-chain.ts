@@ -97,5 +97,7 @@ export async function continuityBlock(input: { film: { metadata?: Record<string,
   if (!continuityRequired(input.film)) return null;
   const cast = castInShot(input.shot, input.prompt, await approvedSheets(input.serie));
   if (!cast.length || await exists(input.referenceFile)) return null;
+  // Último recurso de Pulir: Google bloquea la foto por «persona famosa»; queda anotado y se permite solo texto.
+  if (await exists(path.join(path.dirname(input.referenceFile), 'continuidad-sin-foto.json'))) return null;
   return `${input.label} muestra a ${cast.map((c) => c.nombre).join(' y ')} y no tiene foto de continuidad: sin ella Veo inventa la cara. Créala antes (Harness de Continuidad): npm run continuidad -- <película> --tomas ${input.label} --generar`;
 }
