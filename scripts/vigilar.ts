@@ -9,7 +9,7 @@
  *      Si FALTA parte de la frase, la manda a regenerar.
  *   2. Agente Revisor + Reparador + Pulir (imagen): revisa, repara gratis y, solo si hace falta y
  *      queda presupuesto (--hasta), regenera. Lo que queda bien se FIJA.
- * Nunca toca otra escena ni una toma fijada. Se para solo al terminar, tras 90 min (--minutos) o con Ctrl + C.
+ * Nunca toca otra escena ni una toma fijada. Se para solo al terminar, tras 150 min (--minutos) o con Ctrl + C.
  */
 import { spawn } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -18,7 +18,7 @@ import nextEnv from '@next/env';
 import { FILM_KEYS } from '../lib/v7/presets/film-registry';
 import { readV7FilmBundle, v7FilmRoot } from '../lib/v7/storage/film-store';
 import { indexedScenes } from '../lib/v7/production/scene-approval-board';
-import { readShotRecord, sceneExposureUsd } from '../lib/v7/production/scene-veo-engine';
+import { readShotRecord, resumeWholeScene, sceneExposureUsd, sceneStudioBoard } from '../lib/v7/production/scene-veo-engine';
 import { fileSha256, originalShotVideo } from '../lib/v7/production/shot-current-video';
 import { isLocked } from '../lib/v7/production/shot-lock';
 import { gateEnabled } from '../lib/v7/qa/quality-gate';
@@ -54,10 +54,16 @@ async function main() {
   console.log(budget ? `Puede regenerar hasta US$${budget.toFixed(2)} en total.` : 'Sin presupuesto de regeneración: corrige gratis y avisa de lo que haya que regenerar (usa --hasta).');
   let idleRounds = 0;
   const stuck = new Set<string>();
-  const deadline = Date.now() + Math.max(10, Number(option('--minutos') ?? 90)) * 60000; // nunca más de 90 min por defecto
+  const deadline = Date.now() + Math.max(10, Number(option('--minutos') ?? 150)) * 60000; // nunca más de 150 min por defecto (una escena larga a 1 toma por minuto + correcciones)
   for (let round = 0; round < 400 && Date.now() < deadline; round++) {
     let pendingInScene = 0;
     let worked = false;
+    // Hace avanzar la cola de la escena (recoge videos terminados y envía la siguiente toma, 1 por minuto),
+    // aunque la página del estudio esté cerrada. Las tomas que esperan turno cuentan como pendientes.
+    await resumeWholeScene(filmId, sceneLabel).catch(() => undefined);
+    const board = await sceneStudioBoard(filmId, sceneLabel).catch(() => null);
+    const waiting = board?.shots.filter((x) => ['queued', 'reserved', 'submitted', 'processing', 'quota-rejected'].includes(x.status)).length ?? 0;
+    if (waiting) pendingInScene += waiting;
     for (const { shot, label } of scene.shots) {
       const dir = path.join(root, label.toLowerCase());
       if (await isLocked(dir)) continue;
@@ -67,7 +73,7 @@ async function main() {
       // (p. ej. disco lleno): no se espera por ella, se avisa.
       const stale = rec.status === 'reserved' && !rec.operationName && Date.now() - Date.parse(rec.updatedAt || rec.createdAt) > 10 * 60000;
       if (stale) { if (!stuck.has(label)) { stuck.add(label); console.log(`  ${label}: quedó RESERVADA sin enviarse (posible disco lleno). Revísala en el estudio con «Recuperar misma tarea».`); } continue; }
-      if (['reserved', 'submitted', 'processing'].includes(rec.status)) { pendingInScene++; continue; }
+      if (['reserved', 'submitted', 'processing'].includes(rec.status)) continue; // ya contadas arriba
       if (rec.status !== 'review-required' && rec.status !== 'failed-no-video' && rec.status !== 'quota-rejected') continue;
       const video = await originalShotVideo(dir, label);
       const id = video ? `${label}:${(await fileSha256(video)).slice(0, 12)}` : `${label}:${rec.status}:${rec.revisionId}`;

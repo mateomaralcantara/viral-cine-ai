@@ -138,7 +138,10 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
               disabled={!!busy || !board.providerEnabled || !board.tariffConfigured || board.capUsd <= 0 || sceneAuth.trim() !== board.sceneAuthorization}
               onClick={() => void post({ action: 'submit-scene', scene, authorization: sceneAuth }, 'scene').then((d) => {
                 const r = (d as { result?: { submitted?: number; queued?: number; results?: Array<{ shotId: string; status: string; error?: string }> } } | null)?.result;
-                if (r) setSummary('Enviadas ' + r.submitted + ' tomas' + (r.queued ? '; ' + r.queued + ' en cola, se envían solas al terminar las anteriores' : '') + '. ' + (r.results?.filter((x) => x.status !== 'submitted').map((x) => x.shotId + ': ' + (x.error || x.status)).join(' · ') || 'Se recuperarán solas cada 30 s.'));
+                if (r) setSummary('Enviadas ' + r.submitted + ' tomas' + (r.queued ? '; ' + r.queued + ' en cola, se envían solas al terminar las anteriores' : '') + '. ' + (r.results?.filter((x) => x.status !== 'submitted').map((x) => x.shotId + ': ' + (x.error || x.status)).join(' · ') || '') +
+                  ' La AUTOCORRECCIÓN arranca sola (tope US$5): revisa, corrige, reintenta los bloqueos y fija lo que pasa la puerta.');
+                // Los agentes de autocorrección arrancan solos con la escena (si no estaban ya en marcha).
+                if (r) void post({ action: 'harness', kind: 'autocorreccion', scene, budgetUsd: 5 }, 'auto').catch(() => undefined);
               })}>
               {busy === 'scene' ? 'Enviando escena…' : 'Generar escena completa con Veo'}</button>
           </div>
