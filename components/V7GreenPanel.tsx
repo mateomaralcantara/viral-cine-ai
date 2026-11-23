@@ -73,7 +73,10 @@ export default function V7GreenPanel({ filmId, scene, onSelect }: { filmId: stri
           {cur.avance && cur.avanceAlDia
             ? <><video key={cur.avance} controls preload="metadata" className="mt-2 w-full rounded-xl border border-white/10 bg-black"
                 src={endpoint + '?scene=' + cur.label + '&avance=1&v=' + encodeURIComponent(cur.avance)}/>
-              <a className="mt-1 inline-block text-xs text-cyan-300 underline" href={endpoint + '?scene=' + cur.label + '&avance=1'} target="_blank" rel="noreferrer">Ver escena completa en otra pestaña</a></>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <a className="button-secondary" href={endpoint + '?scene=' + cur.label + '&avance=1'} target="_blank" rel="noreferrer">Ver en otra pestaña</a>
+                <a className="button-primary" href={endpoint + '?scene=' + cur.label + '&avance=1&descargar=1'}>Descargar escena {cur.label} (MP4)</a>
+              </div></>
             : <p className="mt-2 text-sm text-amber-200">Montando la escena completa (gratis)… aparecerá aquí en un par de minutos.</p>}
         </div>
         : <p className="mt-3 text-sm text-slate-300">{cur.label}: {cur.fijadas + cur.quitadas} de {cur.total} tomas en verde. Cuando estén todas, la escena se monta sola y se ve aquí.</p>)}
@@ -83,7 +86,12 @@ export default function V7GreenPanel({ filmId, scene, onSelect }: { filmId: stri
         {ep.archivo && ep.alDia && !ep.montando
           ? <><video key={ep.archivo} controls preload="metadata" className="mt-2 w-full rounded-xl border border-white/10 bg-black"
               src={endpoint + '?episodio=1&v=' + encodeURIComponent(ep.archivo)}/>
-            <a className="mt-1 inline-block text-xs text-cyan-300 underline" href={endpoint + '?episodio=1'} target="_blank" rel="noreferrer">Ver episodio completo en otra pestaña</a></>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <a className="button-primary" href={endpoint + '?episodio=1&descargar=1'}>Descargar episodio (MP4)</a>
+              <a className="button-secondary" href={endpoint + '?episodio=1&tipo=subtitulada&descargar=1'}>Con subtítulos grabados (MP4)</a>
+              <a className="button-secondary" href={endpoint + '?episodio=1&tipo=srt&descargar=1'}>Subtítulos ES (.srt)</a>
+              <a className="button-secondary" href={endpoint + '?episodio=1&tipo=en.srt&descargar=1'}>Subtítulos EN (.srt)</a>
+            </div></>
           : <p className="mt-2 text-sm text-amber-200">Montando el episodio completo con créditos y subtítulos (gratis)… puede tardar 10–20 min.</p>}
       </div>}
     </div>

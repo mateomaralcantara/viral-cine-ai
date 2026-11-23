@@ -156,7 +156,10 @@ export default function V7HarnessPanel({ filmId, scene, onChanged, part }: { fil
           <p className="text-xs text-slate-400">Avance: {avance.name} · {new Date(avance.updatedAt).toLocaleString('es')}</p>
           <video key={avance.name} controls preload="metadata" className="mt-2 w-full rounded-xl border border-white/10 bg-black"
             src={endpoint + '?scene=' + scene + '&avance=1&v=' + encodeURIComponent(avance.name)}/>
-          <a className="mt-2 inline-block text-xs text-cyan-300 underline" href={endpoint + '?scene=' + scene + '&avance=1'} target="_blank" rel="noreferrer">Abrir el MP4 en otra pestaña</a>
+          <div className="mt-2 flex flex-wrap gap-2 text-xs">
+            <a className="text-cyan-300 underline" href={endpoint + '?scene=' + scene + '&avance=1'} target="_blank" rel="noreferrer">Abrir el MP4 en otra pestaña</a>
+            <a className="text-cyan-300 underline" href={endpoint + '?scene=' + scene + '&avance=1&descargar=1'}>Descargar al PC</a>
+          </div>
         </div>
         : <p className="mt-3 text-sm text-slate-400">Aún no hay avance de {scene}: pulsa «5b · Montar el avance».</p>}
 
