@@ -120,7 +120,8 @@
     "frase": "node --import tsx scripts/frase.ts",
     "vigilar": "node --import tsx scripts/vigilar.ts",
     "cola": "node --import tsx scripts/cola.ts",
-    "continuidad": "node --import tsx scripts/continuidad.ts"
+    "continuidad": "node --import tsx scripts/continuidad.ts",
+    "crear:episodio2": "node --import tsx scripts/crear-pelicula.ts episodio2"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",

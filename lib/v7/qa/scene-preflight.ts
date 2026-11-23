@@ -68,7 +68,7 @@ export function preflightShot(i: PreflightShotInput): PreflightShot {
   const objects = TEXT_OBJECTS.filter(([re]) => re.test(seen)).map(([, name]) => name);
   if (objects.length) {
     add('riesgo', 'texto en pantalla', `Aparece ${objects.join(', ')}: Veo tiende a escribir letras o logotipos.`, 'Se pide que no tengan escritura ni marcas.');
-    extra.push(`${objects.map((o) => o[0].toUpperCase() + o.slice(1)).join(', ')}: lisos, sin ninguna escritura, letras, números ni logotipos.`);
+    extra.push(`Sin ninguna escritura, letras, números ni logotipos en ${objects.join(', ')}.`);
   }
   if (i.onCamera) {
     add('aviso', 'subtítulos', 'Con diálogo, Veo a veces graba subtítulos inventados.', 'Se recuerda: sin subtítulos.');

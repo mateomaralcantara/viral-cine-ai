@@ -3,14 +3,14 @@
 # Uso (PowerShell, dentro de viral-cine-v7-cinema-core):
 #   powershell -ExecutionPolicy Bypass -File .\scripts\INICIAR-ESTUDIO.ps1
 # Opcional:
-#   -Pelicula episodio1|convidados|primera|dos-toques   (por defecto: episodio1)
+#   -Pelicula episodio1|episodio2|convidados|primera|dos-toques   (por defecto: episodio1)
 #   -Pestana personajes|studio|scenes|master             (por defecto: personajes)
 param([string]$Pelicula = 'episodio1', [string]$Pestana = 'personajes')
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 $films = @{
-  'episodio1' = 'film-convidados-ep01-v7'; 'convidados' = 'film-los-convidados-al-agape-v7'
+  'episodio1' = 'film-convidados-ep01-v7'; 'episodio2' = 'film-convidados-ep02-v7'; 'convidados' = 'film-los-convidados-al-agape-v7'
   'primera' = 'film-la-primera-pagina-v7'; 'dos-toques' = 'film-dos-toques-de-bocina-v7'
 }
 if (-not $films.ContainsKey($Pelicula)) { throw ('Película desconocida. Usa: ' + ($films.Keys -join ', ')) }

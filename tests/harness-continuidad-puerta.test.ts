@@ -66,7 +66,7 @@ test('análisis inicial: pizarra y palabras sensibles se detectan y se propone e
   const r = preflightShot({ ...base, prompt: base.prompt + ' Detrás, una pizarra. Recuerda la muerte de su esposa.' });
   assert.ok(r.problemas.some((p) => p.tipo === 'texto en pantalla'));
   assert.ok(r.problemas.some((p) => p.tipo === 'filtro de Google'));
-  assert.match(r.promptSugerido, /sin ninguna escritura/);
+  assert.match(r.promptSugerido, /Sin ninguna escritura, letras, números ni logotipos en la pizarra/);
 });
 
 test('análisis inicial: una frase que no cabe en la toma bloquea', () => {

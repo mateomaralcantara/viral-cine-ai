@@ -38,9 +38,12 @@ export async function scenePreflight(filmId: string, sceneLabel: string) {
       const name = sheet?.nombre ?? film.characters.find((c) => c.id === id)?.name ?? key;
       return { key, nombre: name, aprobado: approved.has(key) };
     }).filter((c) => shotShows(c.nombre.replace(/^(el|la)\s+/i, '').split(/\s+/)[0], prompt));
+    // El vestuario de la escena es el del protagonista: solo se exige en las tomas donde aparece.
+    const protagonist = film.characters[0] ? characterKeyFromId(film.characters[0].id) : '';
+    const showsProtagonist = cast.some((c) => c.key === protagonist);
     inputs.push({
       label, prompt, seconds: shot.durationSeconds, onCamera: shot.metadata?.onCameraDialogue === true, spokenText: shot.spokenText ?? '',
-      costume, cast: cast.map(({ nombre, aprobado }) => ({ nombre, aprobado })), hasReference: await exists(shotReferencePath(filmId, label)), continuityRequired: required
+      costume: showsProtagonist ? costume : '', cast: cast.map(({ nombre, aprobado }) => ({ nombre, aprobado })), hasReference: await exists(shotReferencePath(filmId, label)), continuityRequired: required
     });
   }
   return { sceneLabel, ...preflightScene(inputs), fijadas: locked };

@@ -16,6 +16,7 @@ import nextEnv from '@next/env';
 import { createPrimeraPaginaBundle, getPrimeraPaginaStats, PRIMERA_PAGINA_ID } from '../lib/v7/presets/la-primera-pagina';
 import { createConvidadosBundle, getConvidadosStats, CONVIDADOS_ID } from '../lib/v7/presets/los-convidados-al-agape';
 import { createEpisodio1Bundle, getEpisodio1Stats, EPISODIO_1_ID } from '../lib/v7/presets/convidados-episodio-1';
+import { createEpisodio2Bundle, getEpisodio2Stats, EPISODIO_2_ID } from '../lib/v7/presets/convidados-episodio-2';
 import { readV7FilmBundle, saveV7FilmBundle, v7FilmBundleExists, v7FilmBundlePath, v7FilmRoot } from '../lib/v7/storage/film-store';
 import { indexedScenes } from '../lib/v7/production/scene-approval-board';
 
@@ -27,7 +28,8 @@ type FilmEntry = {
 const FILMS: Record<string, FilmEntry> = {
   primera: { id: PRIMERA_PAGINA_ID, title: 'LA PRIMERA PÁGINA', create: createPrimeraPaginaBundle, stats: getPrimeraPaginaStats },
   convidados: { id: CONVIDADOS_ID, title: 'LOS CONVIDADOS AL ÁGAPE', create: createConvidadosBundle, stats: getConvidadosStats },
-  episodio1: { id: EPISODIO_1_ID, title: 'LOS CONVIDADOS AL ÁGAPE · EPISODIO 1', create: createEpisodio1Bundle, stats: getEpisodio1Stats }
+  episodio1: { id: EPISODIO_1_ID, title: 'LOS CONVIDADOS AL ÁGAPE · EPISODIO 1', create: createEpisodio1Bundle, stats: getEpisodio1Stats },
+  episodio2: { id: EPISODIO_2_ID, title: 'LOS CONVIDADOS AL ÁGAPE · EPISODIO 2', create: createEpisodio2Bundle, stats: getEpisodio2Stats }
 };
 
 nextEnv.loadEnvConfig(process.cwd());
