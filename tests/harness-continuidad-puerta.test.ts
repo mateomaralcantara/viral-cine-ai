@@ -120,3 +120,11 @@ test('análisis inicial: «sin subtítulos ni texto en pantalla» no cuenta como
   const r = preflightShot({ ...base, prompt: base.prompt + ' Sin subtítulos ni texto en pantalla.' });
   assert.ok(!r.problemas.some((p) => p.detalle.includes('la pantalla')));
 });
+
+test('análisis inicial: «pantalla en negro» no es una pantalla con letras, y la ropa solo es un aviso', () => {
+  const r = preflightShot({ ...base, cast: [], prompt: 'Plano general. Pantalla en negro absoluto, con un leve destello dorado lejano.' });
+  assert.ok(!r.problemas.some((p) => p.tipo === 'texto en pantalla'));
+  const m = preflightShot(base);
+  assert.ok(m.problemas.some((p) => p.tipo === 'logotipos' && p.nivel === 'aviso'));
+  assert.equal(m.semaforo, 'verde');
+});

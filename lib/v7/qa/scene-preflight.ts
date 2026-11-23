@@ -22,9 +22,9 @@ const plain = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerC
 
 /** Objetos que hacen que Veo escriba letras en pantalla. */
 const TEXT_OBJECTS: Array<[RegExp, string]> = [
-  [/\bpizarra/, 'la pizarra'], [/\bmonitor|\bpantalla/, 'la pantalla'], [/\bcartel|\bletrero|\brotulo/, 'el cartel'],
+  [/\bpizarra/, 'la pizarra'], [/\bmonitor|\bpantalla(?! (en )?negr)/, 'la pantalla'], [/\bcartel|\bletrero|\brotulo/, 'el cartel'],
   [/\bperiodico|\brevista/, 'el periódico'], [/\bcarta\b|\bnota\b|\bhoja\b|\bpapel/, 'el papel'], [/\blibro/, 'los libros'],
-  [/\bportatil|\bordenador|\bmovil|\btelefono/, 'el dispositivo'], [/\bmochila|\bchaqueta|\bcamiseta/, 'la ropa']
+  [/\bportatil|\bordenador|\bmovil|\btelefono/, 'el dispositivo']
 ];
 /** Palabras que suelen disparar el filtro de Google (bloqueo gratis, pero se pierde tiempo). */
 const FILTER_WORDS: Array<[RegExp, string]> = [
@@ -60,8 +60,10 @@ export function preflightShot(i: PreflightShotInput): PreflightShot {
       extra.push(`Vestuario: ${i.costume.trim().replace(/\.$/, '')}.`);
     }
   }
-  if (/\bcapucha\b/.test(p) && !/capucha (bajada|sobre los hombros)/.test(p) && i.cast.length) {
-    add('aviso', 'vestuario', 'Menciona la capucha sin decir cómo va.', 'Indica «capucha bajada sobre los hombros» o «capucha puesta».');
+  // Ropa técnica: Veo suele inventar logotipos en chaquetas y mochilas (pasó en el Episodio 1).
+  if (/\bmochila|\bchaqueta|\bcamiseta|\babrigo/.test(seen) && i.cast.length) {
+    add('aviso', 'logotipos', 'Ropa técnica: Veo a veces inventa logotipos o marcas.', 'Se pide ropa sin logotipos.');
+    if (!/sin logotipos/.test(p)) extra.push('Ropa lisa, sin logotipos ni marcas.');
   }
 
   // 2. Texto en pantalla

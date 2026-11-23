@@ -32,12 +32,13 @@ export async function scenePreflight(filmId: string, sceneLabel: string) {
   for (const { shot, label } of sc.shots) {
     if (await isLocked(path.join(v7FilmRoot(filmId), label.toLowerCase()))) { locked.push(label); continue; }
     const prompt = (await latestPromptRevision(filmId, label).catch(() => null))?.promptText ?? shot.visualPrompt ?? '';
+    // Solo personajes con imagen (ficha de la serie). Las voces sin imagen (Narrador, Voz desconocida…) no cuentan:
+    // si no, «con voz masculina» haría creer que aparece la «Voz desconocida».
     const cast = shot.characterIds.map((id) => {
       const key = characterKeyFromId(id);
       const sheet = sheets.find((s) => s.key === key);
-      const name = sheet?.nombre ?? film.characters.find((c) => c.id === id)?.name ?? key;
-      return { key, nombre: name, aprobado: approved.has(key) };
-    }).filter((c) => shotShows(c.nombre.replace(/^(el|la)\s+/i, '').split(/\s+/)[0], prompt));
+      return sheet ? { key, nombre: sheet.nombre, aprobado: approved.has(key) } : null;
+    }).filter((c): c is { key: string; nombre: string; aprobado: boolean } => !!c && shotShows(c.nombre.replace(/^(el|la)\s+/i, '').split(/\s+/)[0], prompt));
     // El vestuario de la escena es el del protagonista: solo se exige en las tomas donde aparece.
     const protagonist = film.characters[0] ? characterKeyFromId(film.characters[0].id) : '';
     const showsProtagonist = cast.some((c) => c.key === protagonist);
