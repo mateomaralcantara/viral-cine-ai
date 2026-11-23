@@ -32,6 +32,7 @@ import { agentCredits, chunk, endCredits, type ProductionFacts } from '../lib/v7
 import { SERIES_CREDITS } from '../lib/v7/presets/series-credits';
 import { speakerKey } from '../lib/v7/production/film-voice-mix';
 import { isLocked, isRemoved } from '../lib/v7/production/shot-lock';
+import { gateEnabled } from '../lib/v7/qa/quality-gate';
 import { translateToEnglish } from '../lib/v7/production/subtitle-translate';
 import { convertSpeech, STS_CREDITS_PER_SECOND } from '../lib/v7/production/voice-conversion';
 import {
@@ -545,6 +546,8 @@ async function montar() {
   const parts: string[] = [];
   const missingVideo: string[] = [];
   const staleVoice: string[] = [];
+  const notPassed: string[] = [];
+  const strictGate = gateEnabled(film) && !flag('--sin-puerta');
   const missingVoice: string[] = [];
   // Videos de cada toma (una sola lectura) y datos reales de producción para los créditos.
   const shotVideos = new Map<string, { file: string; repaired: boolean } | null>();
@@ -569,6 +572,8 @@ async function montar() {
     for (const { shot, label } of scene.shots) {
       const dir = path.join(root, label.toLowerCase());
       if (await isRemoved(dir)) { console.log(`  ${label}: quitada por el autor (no entra en el montaje).`); continue; }
+      // PUERTA DE CALIDAD: solo entra lo que pasó la puerta o aprobó el autor (fijado). Nunca una toma con errores.
+      if (strictGate && !(await isLocked(dir))) { notPassed.push(label); continue; }
       const current = shotVideos.get(label) ?? null;
       const src = current?.file;
       if (!src) { missingVideo.push(label); continue; }
@@ -719,6 +724,7 @@ async function montar() {
   console.log('Archivo: ' + final);
   if (cues.length) console.log(`Subtítulos en español: ${cues.length} (${flag('--ingles') ? 'español + inglés' : 'español'}: pistas seleccionables en el MP4 y archivos .srt)` + (burned ? `\nVersión con subtítulos grabados: ${burned}` : '  ·  grabados en la imagen: --subtitulos-fijos' + (flag('--ingles') ? '' : '  ·  inglés: --ingles')));
   if (missingVideo.length) console.log('Sin video todavía: ' + missingVideo.join(', '));
+  if (notPassed.length) console.log('NO ENTRAN (no pasaron la puerta de calidad ni las aprobó el autor): ' + notPassed.join(', ') + '. Corrige con npm run pulir, o apruébalas tú con npm run frase -- ' + key + ' --fijar <toma>.');
   if (staleVoice.length) console.log('AVISO: la voz grabada NO coincide con el guion en ' + staleVoice.join(', ') + '. Ejecuta: npm run voces -- ' + key + ' y vuelve a montar.');
   if (missingVoice.length) console.log('Sin voz todavía: ' + missingVoice.join(', ') + '  ->  npm run voces -- ' + key + ' --generar');
 }

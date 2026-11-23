@@ -176,6 +176,8 @@ async function quitar(label: string) {
     // SALVAGUARDA: lo que queda debe contener la frase completa del guion; si no, cortar no sirve.
     const keptText = segments.filter((g) => !chosen.includes(g)).map((g) => g.text).join(' ');
     const coverage = wordMatch(line, keptText.replace(/\[[^\]]*\]/g, ' '));
+    // Para la PUERTA DE CALIDAD: cuánto del guion se oye (tras quitar lo ajeno).
+    await writeFile(path.join(dir, 'escucha.json'), JSON.stringify({ sha, coverage, fecha: new Date().toISOString() }, null, 2) + '\n');
     if (!pick.length && coverage < 0.85) {
       await writeFile(planFile, JSON.stringify({ sha, segments }, null, 2) + '\n');
       console.log(`${label}: FALTA PARTE DE LA FRASE (se oye el ${Math.round(coverage * 100)} % del guion). Cortar no basta: hay que REGENERAR esta toma.`);
@@ -204,6 +206,7 @@ async function quitar(label: string) {
   }
   await writeFile(trimmedRecordPath(dir, label), JSON.stringify({ label, originalSha256: sha, ranges, createdAt: new Date().toISOString() }, null, 2) + '\n');
   for (const f of [`${label}.editada.mp3`, `${label}.editada.json`]) await rm(path.join(root, 'voces', f), { force: true });
+  if (args.includes('--sin-fijar')) { console.log(`${label}: recortada (voz original). Pasa a la PUERTA DE CALIDAD antes de fijarse.`); return; }
   await lockShot(dir, 'se quitó lo que no se entendía: ' + ranges.map(([f, t]) => `${f.toFixed(2)}–${t.toFixed(2)} s`).join(', '));
   console.log(`${label}: listo. Voz original, sin lo que no se entendía. FIJADA. Siguiente: npm run montar -- ${key}`);
 }

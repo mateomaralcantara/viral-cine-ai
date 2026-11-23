@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import { ensureLocalStudioSession } from '@/lib/v7/security/local-studio-client';
+import V7HarnessPanel from '@/components/V7HarnessPanel';
 
 type StudioShot = {
   shotId: string; title: string; camera: string; editSeconds: number; providerSeconds: number;
@@ -8,6 +9,7 @@ type StudioShot = {
   promptText: string; revisionId: string | null; revisionUsed: boolean;
   mode: 'text-to-video' | 'image-to-video'; estimatedUsd: number | null;
   authorization: string | null; redoAuthorization: string | null; videoReady: boolean;
+  locked?: boolean; hasReference?: boolean; gate?: { pass: boolean; reasons: string[] } | null;
 };
 type StudioBoard = {
   sceneLabel: string; sceneLabels?: string[]; platform?: 'gemini' | 'vertex'; platformProblem?: string | null; frozen?: boolean; title: string; legacy: boolean; model: string; providerEnabled: boolean;
@@ -119,6 +121,8 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
       {message && <p className="mt-3 text-sm text-red-300" role="alert">{message}</p>}
       {summary && <p className="mt-3 text-sm text-emerald-300" role="status">{summary}</p>}
 
+      {board && !board.legacy && scene && <V7HarnessPanel filmId={filmId} scene={scene} onChanged={() => void refresh().catch(() => undefined)}/>}
+
       {board && !board.legacy && <div className="mt-5 rounded-2xl border border-violet-400/40 bg-violet-500/[.06] p-4">
         <h3 className="text-lg font-black">Escena completa de un solo tirón</h3>
         {board.sceneAuthorization ? <>
@@ -155,10 +159,15 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
             <div key={shot.shotId} className="rounded-2xl border border-white/10 p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <b>{shot.shotId} · {shot.title}</b>
-                <span className={'text-xs font-bold uppercase ' + statusColor(shot.status)}>{shot.status}</span>
+                <span className="flex flex-wrap items-center gap-2">
+                  {shot.locked && <span className="rounded bg-emerald-500/20 px-2 text-xs font-bold text-emerald-300">FIJADA</span>}
+                  {!shot.locked && shot.gate && <span className={'rounded px-2 text-xs font-bold ' + (shot.gate.pass ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300')}>{shot.gate.pass ? 'PASA LA PUERTA' : 'NO PASA LA PUERTA'}</span>}
+                  <span className={'text-xs font-bold uppercase ' + statusColor(shot.status)}>{shot.status}</span>
+                </span>
               </div>
+              {!shot.locked && shot.gate && !shot.gate.pass && <ul className="mt-1 list-disc pl-5 text-xs text-red-300">{shot.gate.reasons.map((r, i) => <li key={i}>{r}</li>)}</ul>}
               <p className="mt-1 text-xs text-slate-400">
-                {shot.camera} · corte {Number(shot.editSeconds.toFixed(1))}s · Veo {shot.providerSeconds}s · {shot.mode === 'image-to-video' ? 'parte de la foto de la toma' : 'solo texto (sin foto)'}
+                {shot.camera} · corte {Number(shot.editSeconds.toFixed(1))}s · Veo {shot.providerSeconds}s · {shot.mode === 'image-to-video' ? 'parte de la foto de continuidad' : 'solo texto (sin foto)'}
                 {shot.estimatedUsd !== null && ' · ~US$' + shot.estimatedUsd.toFixed(2)}
               </p>
               {shot.spokenText && <p className="mt-1 text-xs text-slate-300">Voz posterior: «{shot.spokenText}»</p>}

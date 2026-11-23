@@ -3,6 +3,7 @@ import { localAdminAuthorized, localOriginAllowed } from '@/lib/v7/security/loca
 import {
   resumeSceneShot, resumeWholeScene, sceneLabels, savePromptRevision, sceneStudioBoard, submitSceneShot, submitWholeScene
 } from '@/lib/v7/production/scene-veo-engine';
+import { applyPreflight, harnessJob, scenePreflight, startHarnessJob } from '@/lib/v7/production/studio-harness';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -22,6 +23,10 @@ export async function GET(request: Request, context: Context) {
     const labels = await sceneLabels(filmId);
     const scene = new URL(request.url).searchParams.get('scene') || labels.studioLabels[0];
     if (!scene) return fail(404, 'La película no tiene escenas para el estudio.');
+    const params = new URL(request.url).searchParams;
+    // Análisis inicial (gratis) y estado del harness en marcha.
+    if (params.get('preflight') === '1') return NextResponse.json({ ok: true, preflight: await scenePreflight(filmId, scene), providerCalls: 0 }, { headers: noStore });
+    if (params.get('job') === '1') return NextResponse.json({ ok: true, job: await harnessJob(filmId, scene), providerCalls: 0 }, { headers: noStore });
     const board = await sceneStudioBoard(filmId, scene);
     return NextResponse.json({ ok: true, board: { ...board, sceneLabels: labels.studioLabels }, providerCalls: 0 }, { headers: noStore });
   } catch (error) {
@@ -48,6 +53,14 @@ export async function POST(request: Request, context: Context) {
     if (body.action === 'submit-scene') {
       if (typeof body.authorization !== 'string') return fail(400, 'Falta la autorización de la escena.');
       return NextResponse.json({ ok: true, result: await submitWholeScene(filmId, scene, body.authorization) }, { headers: noStore });
+    }
+    if (body.action === 'preflight-apply') {
+      return NextResponse.json({ ok: true, result: await applyPreflight(filmId, scene), providerCalls: 0 }, { headers: noStore });
+    }
+    if (body.action === 'harness') {
+      const kind = body.kind === 'continuidad' ? 'continuidad' : body.kind === 'autocorreccion' ? 'autocorreccion' : null;
+      if (!kind) return fail(400, 'Harness desconocido.');
+      return NextResponse.json({ ok: true, job: await startHarnessJob(filmId, scene, kind, { budgetUsd: Number(body.budgetUsd) }) }, { headers: noStore });
     }
     if (body.action === 'resume-scene') {
       return NextResponse.json({ ok: true, result: await resumeWholeScene(filmId, scene) }, { headers: noStore });

@@ -19,6 +19,7 @@ import { FILM_KEYS } from '../lib/v7/presets/film-registry';
 import { CONVIDADOS_ID } from '../lib/v7/presets/los-convidados-al-agape';
 import { PRIMERA_PAGINA_ID } from '../lib/v7/presets/la-primera-pagina';
 import { readV7FilmBundle, v7FilmRoot } from '../lib/v7/storage/film-store';
+import { currentShotVideo } from '../lib/v7/production/shot-current-video';
 import { indexedScenes } from '../lib/v7/production/scene-approval-board';
 import { googleClient, latestPromptRevision, videoPlatform } from '../lib/v7/production/scene-veo-engine';
 import { speakerKey } from '../lib/v7/production/film-voice-mix';
@@ -59,6 +60,8 @@ async function main() {
       const dir = path.join(root, label.toLowerCase());
       let video: string | null = null;
       for (const f of [label + '-runway-gen4-turbo.mp4', label + '-veo-candidato.mp4']) if (await exists(path.join(dir, f))) { video = path.join(dir, f); break; }
+      // --actual: revisa el video que irá a la película (recortado o reparado), para la puerta de calidad.
+      if (video && flag('--actual')) video = (await currentShotVideo(dir, label, { dialogue: shot.metadata?.onCameraDialogue === true }))?.file ?? video;
       if (!video) continue;
       const bytes = await readFile(video);
       const hash = sha(bytes);

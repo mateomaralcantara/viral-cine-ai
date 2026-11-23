@@ -133,7 +133,7 @@ async function main() {
       accepted = true;
       await copyFile(out, repairedVideoPath(dir, label));
       await writeFile(repairRecordPath(dir, label), JSON.stringify({ label, originalSha256: sha, attempt: n, plan, before: { puntuacion: before.puntuacion, veredicto: before.veredicto },
-        after: after ? { puntuacion: after.puntuacion, veredicto: after.veredicto, motivo: after.motivo } : null, verifiedByAi: !!after, createdAt: new Date().toISOString() }, null, 2) + '\n');
+        after: after ? { puntuacion: after.puntuacion, veredicto: after.veredicto, motivo: after.motivo } : null, afterReview: after, verifiedByAi: !!after, createdAt: new Date().toISOString() }, null, 2) + '\n');
       fixed.push(label);
     }
     if (!accepted) notBetter.push(label);

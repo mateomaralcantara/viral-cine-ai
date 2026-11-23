@@ -9,3 +9,8 @@ export const FILM_KEYS: Record<string, string> = {
   primera: PRIMERA_PAGINA_ID,
   'dos-toques': 'film-dos-toques-de-bocina-v7'
 };
+
+/** Nombre corto de una película a partir de su id (para lanzar los agentes desde el estudio). */
+export function filmKeyFor(filmId: string) {
+  return Object.entries(FILM_KEYS).find(([, id]) => id === filmId)?.[0] ?? null;
+}

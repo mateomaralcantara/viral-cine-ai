@@ -24,6 +24,8 @@ import { readV7FilmBundle, v7DataRoot, v7FilmRoot } from '@/lib/v7/storage/film-
 import { indexedScenes } from '@/lib/v7/production/scene-approval-board';
 import { veoSeconds } from '@/lib/v7/production/cinema-core-policy';
 import { DOS_TOQUES_SCENE_PROMPTS } from '@/lib/v7/presets/dos-toques-scene-prompts';
+import { continuityBlock } from '@/lib/v7/production/continuity-chain';
+import { serieOf } from '@/lib/v7/production/character-identity';
 
 const command = promisify(execFile);
 const SCENE_LABEL = /^E\d{2}$/;
@@ -410,7 +412,10 @@ export async function sceneStudioBoard(filmId: string, sceneLabel: string) {
       estimatedUsd,
       authorization: estimatedUsd === null ? null : authorizationPhrase(shot.shotId, estimatedUsd),
       redoAuthorization: estimatedUsd === null ? null : redoAuthorizationPhrase(shot.shotId, estimatedUsd),
-      videoReady: record?.status === 'review-required'
+      videoReady: record?.status === 'review-required',
+      locked: await isLocked(shotDir(filmId, shot.shotId)),
+      hasReference: Boolean(reference),
+      gate: await readFile(path.join(shotDir(filmId, shot.shotId), 'puerta.json'), 'utf8').then((t) => JSON.parse(t) as { pass: boolean; reasons: string[] }, () => null)
     };
   }));
   const pending = shots.filter((s) => s.status === 'not-started' && s.estimatedUsd !== null);
@@ -611,6 +616,16 @@ export class PaceWait extends Error { constructor(public ms: number) { super('Es
 async function submitLocked(filmId: string, plan: Awaited<ReturnType<typeof scenePlan>>, shot: ScenePlanShot,
   revisionId: string, estimatedUsd: number, cap: number, redo = false, noWait = false) {
   const shotId = shot.shotId;
+  // HARNESS DE CONTINUIDAD: una toma con personaje oficial no sale sin su foto de continuidad.
+  {
+    const { film } = await readV7FilmBundle(filmId);
+    const entry = indexedScenes(film).flatMap((x) => x.shots).find((x) => x.label === shotId);
+    const revision = await latestPromptRevision(filmId, shotId);
+    if (entry) {
+      const block = await continuityBlock({ film, serie: serieOf(film), shot: entry.shot, prompt: revision?.promptText ?? entry.shot.visualPrompt ?? '', label: shotId, referenceFile: shotReferencePath(filmId, shotId) });
+      if (block) throw new Error(block);
+    }
+  }
   // Turno de envío: la cola de escena no espera (lo intenta en la siguiente vuelta); un envío directo espera su turno.
   const wait = await msUntilSubmitSlot();
   if (wait > 0) {

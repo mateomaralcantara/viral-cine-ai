@@ -21,6 +21,7 @@ import { indexedScenes } from '../lib/v7/production/scene-approval-board';
 import { readShotRecord, sceneExposureUsd } from '../lib/v7/production/scene-veo-engine';
 import { fileSha256, originalShotVideo } from '../lib/v7/production/shot-current-video';
 import { isLocked } from '../lib/v7/production/shot-lock';
+import { gateEnabled } from '../lib/v7/qa/quality-gate';
 
 (process.env as Record<string, string>).NODE_ENV ??= 'development';
 nextEnv.loadEnvConfig(process.cwd(), true);
@@ -80,8 +81,9 @@ async function main() {
       const dialogue = shot.metadata?.onCameraDialogue === true && rec.status === 'review-required';
       if (dialogue) {
         // 1. Escucha + Corte: lo que no se entiende fuera, con la voz original.
-        const code = await agent('frase.ts', ['--quitar', label, '--aplicar']);
+        const code = await agent('frase.ts', ['--quitar', label, '--aplicar', ...(gateEnabled(film) ? ['--sin-fijar'] : [])]);
         if (await isLocked(dir)) { console.log(`  ${label}: diálogo corregido y FIJADO.`); continue; }
+        // Con la puerta de calidad, el diálogo recortado sigue al Revisor (paso 2) antes de fijarse.
         if (code === 3) {
           console.log(`  ${label}: falta parte de la frase → se regenera${left >= 0.6 ? '' : ' (sin presupuesto: hazlo con --hasta)'}.`);
           if (left >= 0.6) await agent('pulir.ts', ['--toma', label, '--dialogo', label, '--hasta', left.toFixed(2), '--rondas', '2']);

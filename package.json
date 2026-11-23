@@ -119,7 +119,8 @@
     "arreglar:e01": "node --import tsx scripts/crear-pelicula.ts episodio1 --toma E01-P01 && node --import tsx scripts/referencia-personaje.ts episodio1 --tomas E01-P01 --generar && node --import tsx scripts/pulir.ts episodio1 --toma E01-P01,E01-P10 --dialogo E01-P01,E01-P10 --hasta 3 && node --import tsx scripts/escuchar.ts episodio1 --toma E01-P01,E01-P10 && node --import tsx scripts/pelicula-final.ts montar episodio1 --ingles",
     "frase": "node --import tsx scripts/frase.ts",
     "vigilar": "node --import tsx scripts/vigilar.ts",
-    "cola": "node --import tsx scripts/cola.ts"
+    "cola": "node --import tsx scripts/cola.ts",
+    "continuidad": "node --import tsx scripts/continuidad.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",

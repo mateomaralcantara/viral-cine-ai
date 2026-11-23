@@ -19,7 +19,7 @@
  * Nunca reintenta un resultado incierto (failed-unknown) y nunca pasa del tope que le das.
  */
 import { spawn } from 'node:child_process';
-import { access, mkdir, readdir, readFile, rename } from 'node:fs/promises';
+import { access, mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import nextEnv from '@next/env';
 import { FILM_KEYS } from '../lib/v7/presets/film-registry';
@@ -29,7 +29,10 @@ import {
   authorizationPhrase, estimateShotUsd, FILTERED_PATTERN, latestPromptRevision, readShotRecord, redoAuthorizationPhrase,
   resumeSceneShot, savePromptRevision, shotReferencePath, submitSceneShot, veoSceneRate
 } from '../lib/v7/production/scene-veo-engine';
-import { fileSha256, originalShotVideo, repairRecordPath } from '../lib/v7/production/shot-current-video';
+import { currentShotVideo, fileSha256, originalShotVideo, repairRecordPath } from '../lib/v7/production/shot-current-video';
+import { gateEnabled, qualityGate, type GateResult } from '../lib/v7/qa/quality-gate';
+import { approvedSheets, castInShot } from '../lib/v7/production/continuity-chain';
+import { serieOf } from '../lib/v7/production/character-identity';
 import { rewritePrompt } from '../lib/v7/qa/prompt-doctor';
 import { isLocked, lockShot } from '../lib/v7/production/shot-lock';
 import { activeLessons, learnFromDefects, readCounts } from '../lib/v7/qa/lessons';
@@ -85,6 +88,35 @@ async function isGood(label: string) {
   return false;
 }
 
+/**
+ * PUERTA DE CALIDAD: revisa el video que de verdad irá a la película (recortado o reparado),
+ * escucha el diálogo y solo deja pasar la toma si no tiene NINGÚN error.
+ */
+type ShotEntry = { characterIds: string[]; visualPrompt?: string; metadata?: Record<string, unknown> };
+async function gateFor(label: string, shot: ShotEntry, serie: string): Promise<GateResult | null> {
+  const dir = path.join(root, label.toLowerCase());
+  const onCamera = shot.metadata?.onCameraDialogue === true;
+  const current = await currentShotVideo(dir, label, { dialogue: onCamera });
+  const original = await originalShotVideo(dir, label);
+  if (!current || !original) return null;
+  const hash = await fileSha256(current.file);
+  const reportFile = path.join(dir, 'calidad', `${label}-${hash.slice(0, 12)}.json`);
+  if (!(await exists(reportFile))) await runScript('calidad-tomas.ts', ['--revisar', '--actual', '--toma', label]);
+  const review = JSON.parse(await readFile(reportFile, 'utf8').catch(() => 'null')) as ShotReview | null;
+  let listenCoverage: number | null = null;
+  if (onCamera) {
+    const originalSha = await fileSha256(original);
+    const read = async () => { try { const e = JSON.parse(await readFile(path.join(dir, 'escucha.json'), 'utf8')) as { sha: string; coverage: number }; return e.sha === originalSha ? e.coverage : null; } catch { return null; } };
+    listenCoverage = await read();
+    if (listenCoverage == null) { await runScript('frase.ts', ['--quitar', label]); listenCoverage = await read(); }
+  }
+  const prompt = (await latestPromptRevision(filmId, label).catch(() => null))?.promptText ?? shot.visualPrompt ?? '';
+  const showsCharacter = castInShot(shot, prompt, await approvedSheets(serie)).length > 0;
+  const result = qualityGate({ review, onCamera, showsCharacter, listenCoverage });
+  await writeFile(path.join(dir, 'puerta.json'), JSON.stringify({ label, video: path.basename(current.file), ...result, fecha: new Date().toISOString() }, null, 2) + '\n');
+  return result;
+}
+
 async function blockedAttempts(label: string) {
   try {
     const dir = path.join(root, label.toLowerCase(), 'veo-attempts');
@@ -135,6 +167,10 @@ async function dropReference(label: string) {
 async function main() {
   const { film } = await readV7FilmBundle(filmId);
   const rate = veoSceneRate();
+  // PUERTA DE CALIDAD (activa salvo que la película la desactive): solo se fija lo que no tiene ningún error.
+  const strict = gateEnabled(film);
+  const serie = serieOf(film);
+  if (strict) console.log('PUERTA DE CALIDAD activa: ninguna toma se fija si tiene un solo error.');
   // --toma E01-P01: el agente trabaja SOLO sobre esas tomas (no toca ninguna otra).
   const onlyShots = (option('--toma') ?? '').toUpperCase().split(',').map((x) => x.trim()).filter(Boolean);
   // Tomas fijadas por el autor: ningún agente las toca.
@@ -234,10 +270,12 @@ async function main() {
     // 4: lo que solo se arregla regenerando
     let open = 0;
     for (const scene of scenes) for (const { shot, label } of scene.shots) {
-      const good = await isGood(label);
+      const gate = strict ? await gateFor(label, shot, serie) : null;
+      const good = strict ? (gate ? gate.pass : null) : await isGood(label);
       if (good === null) continue;
       { const rep = await reportFor(label); if (rep?.problemas.length) await learnFromDefects(rep.problemas.map((p) => `${p.tipo} ${p.descripcion}`), rep.videoSha256.slice(0, 16)); }
-      if (good) { await lockShot(path.join(root, label.toLowerCase()), 'aprobada por el revisor'); note(label, 'BIEN', 'aprobada · FIJADA (no se vuelve a tocar)'); continue; }
+      if (good) { await lockShot(path.join(root, label.toLowerCase()), strict ? 'pasó la puerta de calidad (sin errores)' : 'aprobada por el revisor'); note(label, 'BIEN', strict ? 'PASÓ LA PUERTA (sin errores) · FIJADA' : 'aprobada · FIJADA (no se vuelve a tocar)'); continue; }
+      if (gate) console.log(`  ${label}  NO PASA LA PUERTA:\n${gate.reasons.map((x) => '     · ' + x).join('\n')}`);
       open++;
       const r = (await reportFor(label))!;
       const rec = await readShotRecord(filmId, label).catch(() => null);
@@ -248,7 +286,7 @@ async function main() {
       // Nunca se cambia la voz de un diálogo: tras 3 versiones pagadas sin mejorar, se detiene y avisa.
       if (versions >= 4 && !restoreList.includes(label)) { note(label, 'AGOTADA', `${r.puntuacion}/10 · ${versions - 1} versiones pagadas sin mejorar: se queda la actual (reparada si se pudo). Decide tú si se rehace.`); continue; }
       const revision = await latestPromptRevision(filmId, label).catch(() => null);
-      const problems = r.problemas.map((p) => `${p.tipo}: ${p.descripcion}`).join('; ') || r.motivo;
+      const problems = gate ? gate.reasons.join('; ') : r.problemas.map((p) => `${p.tipo}: ${p.descripcion}`).join('; ') || r.motivo;
       try {
         const fixed = await rewritePrompt({ prompt: revision?.promptText ?? shot.visualPrompt, kind: 'calidad', problem: problems, line: shot.spokenText ?? '', onCamera, attempt: round });
         const rev = await savePromptRevision(filmId, label, fixed);
