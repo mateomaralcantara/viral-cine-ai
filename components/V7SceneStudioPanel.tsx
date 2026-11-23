@@ -133,7 +133,7 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
           <p className="mt-2 text-xs text-amber-200">Escribe exactamente: <b>{board.sceneAuthorization}</b></p>
           <div className="mt-2 flex flex-wrap gap-2">
             <input className="min-w-[280px] flex-1 rounded-lg border border-white/20 bg-slate-950 p-2 text-sm text-white"
-              value={sceneAuth} placeholder={board.sceneAuthorization} onChange={(e) => setSceneAuth(e.target.value)}/>
+              value={sceneAuth} placeholder="Escribe aquí la frase amarilla de arriba" onChange={(e) => setSceneAuth(e.target.value)}/>
             <button type="button" className="button-primary"
               disabled={!!busy || !board.providerEnabled || !board.tariffConfigured || board.capUsd <= 0 || sceneAuth.trim() !== board.sceneAuthorization}
               onClick={() => void post({ action: 'submit-scene', scene, authorization: sceneAuth }, 'scene').then((d) => {
@@ -194,7 +194,7 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
                   </ol>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <input className="min-w-[260px] flex-1 rounded-lg border border-white/20 bg-slate-950 p-2 text-sm text-white"
-                      value={auth[shot.shotId] || ''} placeholder={shot.redoAuthorization}
+                      value={auth[shot.shotId] || ''} placeholder="Escribe aquí la frase amarilla de arriba"
                       onChange={(e) => setAuth((a) => ({ ...a, [shot.shotId]: e.target.value }))}/>
                     <button type="button" className="button-primary"
                       disabled={!!busy || !board.providerEnabled || !board.tariffConfigured || dirty || shot.revisionUsed ||
@@ -210,7 +210,7 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
                   <p className="text-xs text-amber-200">Para generar escribe exactamente: <b>{shot.authorization}</b></p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <input className="min-w-[260px] flex-1 rounded-lg border border-white/20 bg-slate-950 p-2 text-sm text-white"
-                      value={auth[shot.shotId] || ''} placeholder={shot.authorization}
+                      value={auth[shot.shotId] || ''} placeholder="Escribe aquí la frase amarilla de arriba"
                       onChange={(e) => setAuth((a) => ({ ...a, [shot.shotId]: e.target.value }))}/>
                     <button type="button" className="button-primary" disabled={!!busy || !canSubmit}
                       onClick={() => void post({ action: 'submit', shotId: shot.shotId, revisionId: shot.revisionId, authorization: auth[shot.shotId] }, shot.shotId)}>
