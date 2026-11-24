@@ -182,12 +182,13 @@ export function splitScript(story: string, maxChars = 14000): string[] {
   let cur: string[] = [];
   let size = 0;
   for (const line of lines) {
-    if (size > maxChars * 0.6 && heading.test(line) && cur.length) { out.push(cur.join('\n')); cur = []; size = 0; }
-    if (size > maxChars && line.trim() === '' && cur.length) { out.push(cur.join('\n')); cur = []; size = 0; continue; }
+    // Preferencia: cortar justo antes de una escena. Solo si una escena es enorme, se corta en una línea en blanco.
+    if (size > maxChars * 0.5 && heading.test(line) && cur.length) { out.push(cur.join('\n')); cur = []; size = 0; }
     cur.push(line); size += line.length + 1;
+    if (size > maxChars * 1.5 && line.trim() === '') { out.push(cur.join('\n')); cur = []; size = 0; }
   }
   if (cur.length) out.push(cur.join('\n'));
-  return out;
+  return out.filter((x) => x.trim().length);
 }
 
 /** Desglose completo, por partes: cada parte reutiliza las claves de personajes ya creadas. */
