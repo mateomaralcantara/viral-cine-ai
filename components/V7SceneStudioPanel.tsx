@@ -98,6 +98,21 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
     } catch (e) { setMessage(e instanceof Error ? e.message : String(e)); } finally { setBusy(''); }
   }
 
+  /** Varias fotos y/o videos cortos del autor que forman la toma entera, sin Veo (gratis). */
+  async function uploadShotMaterial(shotId: string, files: File[]) {
+    setBusy(shotId); setMessage(''); setSummary(shotId + ': subiendo y uniendo ' + files.length + ' archivo(s)…');
+    try {
+      await ensureLocalStudioSession();
+      const fd = new FormData(); fd.set('scene', scene); fd.set('shotId', shotId); fd.set('modo', 'material');
+      for (const f of files) fd.append('fotos', f);
+      const r = await fetch(endpoint + '/fotos', { method: 'POST', credentials: 'same-origin', body: fd });
+      const d = await r.json() as { ok: boolean; error?: string; material?: { fotos: number; videos: number; seconds: number } };
+      if (!d.ok || !d.material) throw new Error(d.error || 'No se pudo crear la toma con tu material');
+      setSummary(`${shotId}: tu material (${d.material.fotos} foto/s, ${d.material.videos} video/s, ${d.material.seconds} s) es la toma. Sin Veo, gratis y FIJADA.`);
+      await refresh();
+    } catch (e) { setMessage(e instanceof Error ? e.message : String(e)); setSummary(''); } finally { setBusy(''); }
+  }
+
   const statusColor = (s: string) => s === 'review-required' ? 'text-emerald-300'
     : s.startsWith('failed') ? 'text-red-300' : s === 'not-started' ? 'text-slate-400' : 'text-amber-200';
 
@@ -200,13 +215,19 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
                   ? <a href={endpoint + '/fotos?shot=' + shot.shotId} target="_blank" rel="noreferrer" title="Foto de partida">
                       <img alt={'Foto de partida ' + shot.shotId} className="h-16 rounded-lg border border-white/20" src={endpoint + '/fotos?shot=' + shot.shotId + '&v=' + (photoStamp[shot.shotId] ?? 0)}/></a>
                   : <span className="flex h-16 w-28 items-center justify-center rounded-lg border border-dashed border-white/20 text-[10px] text-slate-500">sin foto</span>}
-                <span className="text-xs text-slate-400">{shot.stillShot ? 'PLANO FIJO CON TU FOTO (sin Veo)' : shot.authorPhoto ? 'FOTO TUYA (manda: no se sustituye)' : shot.hasReference ? 'foto de continuidad' : 'Veo inventará la imagen'}</span>
+                {!shot.locked && <label className="cursor-pointer rounded-lg border border-amber-400/50 px-2 py-1 text-xs text-amber-100 hover:border-amber-300"
+                  title="Varias fotos y/o videos cortos tuyos que forman la toma entera, en el orden en que los elijas. No pasa por Veo (p. ej. víctimas, sangre).">
+                  Usar mis fotos y videos para esta toma (sin Veo)
+                  <input type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm" multiple className="hidden" disabled={!!busy}
+                    onChange={(e) => { const fs = Array.from(e.target.files ?? []); e.target.value = ''; if (fs.length) void uploadShotMaterial(shot.shotId, fs); }}/>
+                </label>}
+                <span className="text-xs text-slate-400">{shot.stillShot ? 'TOMA CON TU MATERIAL (sin Veo)' : shot.authorPhoto ? 'FOTO TUYA (manda: no se sustituye)' : shot.hasReference ? 'foto de continuidad' : 'Veo inventará la imagen'}</span>
                 {shot.authorPhoto && !shot.stillShot && <button type="button" className="rounded-lg border border-emerald-400/40 px-2 py-1 text-xs text-emerald-200" disabled={!!busy}
                   title="Para imágenes que Veo no acepta o cuando tu foto ya es el plano que quieres"
                   onClick={() => void post({ action: 'plano-fijo', shotId: shot.shotId }, shot.shotId).then((d) => { if (d) setSummary(shot.shotId + ': plano fijo con tu foto creado (gratis) y FIJADO. Entra así en la película.'); })}>
                   Usar mi foto como plano fijo · gratis, sin Veo</button>}
                 {shot.stillShot && <button type="button" className="rounded-lg border border-white/20 px-2 py-1 text-xs" disabled={!!busy}
-                  onClick={() => void post({ action: 'quitar-plano-fijo', shotId: shot.shotId }, shot.shotId)}>Quitar plano fijo</button>}
+                  onClick={() => void post({ action: 'quitar-plano-fijo', shotId: shot.shotId }, shot.shotId)}>Quitar mi material</button>}
                 {!shot.locked && <label className="cursor-pointer rounded-lg border border-white/20 px-2 py-1 text-xs hover:border-white/40">
                   {shot.authorPhoto ? 'Cambiar mi foto' : 'Subir mi foto'}
                   <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={!!busy}

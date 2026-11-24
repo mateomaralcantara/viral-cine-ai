@@ -2,7 +2,7 @@ import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { NextResponse } from 'next/server';
 import { localAdminAuthorized, localOriginAllowed } from '@/lib/v7/security/local-studio-session';
-import { uploadScenePhotos, hasAuthorPhoto } from '@/lib/v7/production/author-photos';
+import { buildAuthorMaterial, hasAuthorPhoto, isVideoName, uploadScenePhotos } from '@/lib/v7/production/author-photos';
 import { shotReferencePath } from '@/lib/v7/production/scene-veo-engine';
 import { v7FilmRoot } from '@/lib/v7/storage/film-store';
 
@@ -14,6 +14,7 @@ const fail = (status: number, error: string) => NextResponse.json({ ok: false, e
 const SHOT = /^E\d{2}-P\d{2}$/;
 const MAX_FILES = 40;
 const MAX_BYTES = 15 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 300 * 1024 * 1024;
 
 /** Foto de partida de una toma (la del autor o la de continuidad), para verla en el estudio. */
 export async function GET(request: Request, context: Context) {
@@ -40,11 +41,19 @@ export async function POST(request: Request, context: Context) {
   const entries = form.getAll('fotos').filter((f): f is File => typeof f === 'object' && 'arrayBuffer' in f);
   if (!entries.length) return fail(400, 'No llegó ninguna foto.');
   if (entries.length > MAX_FILES) return fail(413, `Máximo ${MAX_FILES} fotos por subida.`);
-  const files: Array<{ name: string; data: Buffer }> = [];
+  // modo=material: varias fotos y/o videos cortos del autor que forman la toma entera (sin Veo).
+  const material = String(form.get('modo') ?? '') === 'material';
+  if (material && !shotId) return fail(400, 'Indica la toma para tu material.');
+  const files: Array<{ name: string; data: Buffer; type?: string }> = [];
   for (const f of entries) {
-    if (f.size > MAX_BYTES) return fail(413, `«${f.name}» pesa más de 15 MB.`);
-    if (f.type && !/^image\/(jpeg|png|webp)$/.test(f.type)) return fail(415, `«${f.name}» no es JPG, PNG ni WEBP.`);
-    files.push({ name: f.name || 'foto.jpg', data: Buffer.from(await f.arrayBuffer()) });
+    const video = material && isVideoName(f.name, f.type);
+    if (f.size > (video ? MAX_VIDEO_BYTES : MAX_BYTES)) return fail(413, `«${f.name}» pesa más de ${video ? '300' : '15'} MB.`);
+    if (!video && f.type && !/^image\/(jpeg|png|webp)$/.test(f.type)) return fail(415, `«${f.name}» no es JPG, PNG ni WEBP${material ? ' (ni un video MP4, MOV o WEBM)' : ''}.`);
+    files.push({ name: f.name || 'archivo', data: Buffer.from(await f.arrayBuffer()), type: f.type });
+  }
+  if (material) {
+    try { return NextResponse.json({ ok: true, material: await buildAuthorMaterial(filmId, shotId, files) }, { headers: noStore }); }
+    catch (e) { return fail(409, e instanceof Error ? e.message : String(e)); }
   }
   try {
     return NextResponse.json({ ok: true, ...(await uploadScenePhotos(filmId, scene, files, shotId || undefined)) }, { headers: noStore });

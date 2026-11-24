@@ -69,3 +69,12 @@ test('desglose: una frase sin pausas que no cabe se parte por la mitad', () => {
   const parts = splitToFit('palabra '.repeat(30).trim(), (x) => x.length <= 100);
   assert.ok(parts.length >= 3 && parts.every((p) => p.length <= 101));
 });
+
+test('material del autor: las fotos reparten el tiempo que dejan los videos (mínimo 2 s cada una)', async () => {
+  const { photoSeconds, isVideoName } = await import('../lib/v7/production/author-photos');
+  assert.equal(photoSeconds(8, 2, 0), 4);
+  assert.equal(photoSeconds(8, 2, 5), 2);
+  assert.equal(photoSeconds(6, 0, 3), 0);
+  assert.equal(isVideoName('crimen.MOV'), true);
+  assert.equal(isVideoName('foto.jpg', 'image/jpeg'), false);
+});

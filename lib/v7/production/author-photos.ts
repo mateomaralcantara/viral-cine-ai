@@ -104,3 +104,81 @@ export async function removeStillShot(filmId: string, shotId: string) {
   await rm(path.join(dir, 'fijada.json'), { force: true });
   return { shotId };
 }
+
+// ---------- MATERIAL DEL AUTOR: varias fotos y/o videos cortos para una toma (sin Veo) ----------
+
+const VIDEO_EXT = /\.(mp4|mov|m4v|webm|mkv|avi)$/i;
+export const isVideoName = (name: string, type = '') => /^video\//.test(type) || VIDEO_EXT.test(name);
+const MAX_CLIP_SECONDS = 20;
+
+async function probeSeconds(file: string) {
+  const { stdout } = await run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file]);
+  return Number(stdout.trim()) || 0;
+}
+async function hasAudioStream(file: string) {
+  const { stdout } = await run('ffprobe', ['-v', 'error', '-select_streams', 'a', '-show_entries', 'stream=index', '-of', 'csv=p=0', file]).catch(() => ({ stdout: '' }));
+  return stdout.trim().length > 0;
+}
+
+/** Cuánto dura cada foto: el tiempo de la toma que no ocupan los videos, repartido (mínimo 2 s por foto). */
+export function photoSeconds(shotSeconds: number, photos: number, videoSeconds: number) {
+  if (!photos) return 0;
+  return Math.max(2, Math.round(((Math.max(shotSeconds - videoSeconds, 0)) / photos) * 100) / 100);
+}
+
+/**
+ * Une las fotos y videos del autor (en el orden en que se subieron) en un solo plano de la toma:
+ * fotos con acercamiento lento, videos a 1280×720 y 24 fps (máx. 20 s cada uno, con su sonido), cortes suaves.
+ * No pasa por Veo, es gratis y la toma queda FIJADA. Lo anterior se archiva, no se borra.
+ */
+export async function buildAuthorMaterial(filmId: string, shotId: string, files: Array<{ name: string; data: Buffer; type?: string }>) {
+  const { film } = await readV7FilmBundle(filmId);
+  const entry = indexedScenes(film).flatMap((x) => x.shots).find((x) => x.label === shotId);
+  if (!entry) throw new Error('No existe la toma ' + shotId);
+  if (!files.length) throw new Error('No llegó ningún archivo.');
+  const dir = path.join(v7FilmRoot(filmId), shotId.toLowerCase());
+  const work = path.join(dir, 'material-autor', new Date().toISOString().replace(/\D/g, '').slice(0, 14));
+  await mkdir(work, { recursive: true });
+
+  const saved: Array<{ file: string; video: boolean; seconds: number }> = [];
+  for (const [i, f] of files.entries()) {
+    const safe = String(i + 1).padStart(2, '0') + '-' + f.name.replace(/[^\w.-]/g, '_').slice(-60);
+    const file = path.join(work, safe);
+    await writeFile(file, f.data);
+    const video = isVideoName(f.name, f.type);
+    saved.push({ file, video, seconds: video ? Math.min(MAX_CLIP_SECONDS, await probeSeconds(file).catch(() => 0)) : 0 });
+    if (video && !saved[saved.length - 1].seconds) throw new Error(`«${f.name}» no es un video válido (usa MP4, MOV o WEBM).`);
+  }
+  const shotSeconds = Math.max(2, entry.shot.durationSeconds);
+  const per = photoSeconds(shotSeconds, saved.filter((x) => !x.video).length, saved.reduce((n, x) => n + x.seconds, 0));
+
+  const parts: string[] = [];
+  for (const [i, item] of saved.entries()) {
+    const out = path.join(work, `parte-${String(i + 1).padStart(2, '0')}.mp4`);
+    const secs = item.video ? item.seconds : per;
+    const fade = `fade=t=in:st=0:d=0.25,fade=t=out:st=${Math.max(0, secs - 0.25).toFixed(2)}:d=0.25`;
+    if (item.video) {
+      const audio = await hasAudioStream(item.file);
+      await run('ffmpeg', ['-nostdin', '-v', 'error', '-y', '-i', item.file, ...(audio ? [] : ['-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo']),
+        '-filter_complex', `[0:v]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=24,format=yuv420p,${fade}[v]`,
+        '-map', '[v]', '-map', audio ? '0:a:0' : '1:a', '-t', secs.toFixed(2), '-c:v', 'libx264', '-crf', '18', '-preset', 'medium', '-c:a', 'aac', '-ar', '48000', '-ac', '2', '-shortest', out]);
+    } else {
+      const frames = Math.round(secs * 24);
+      const zoom = `scale=3840:2160:force_original_aspect_ratio=increase,crop=3840:2160,zoompan=z='min(1+0.10*on/${frames},1.10)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=1280x720:fps=24,format=yuv420p,${fade}`;
+      await run('ffmpeg', ['-nostdin', '-v', 'error', '-y', '-loop', '1', '-i', item.file, '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo',
+        '-filter_complex', `[0:v]${zoom}[v]`, '-map', '[v]', '-map', '1:a', '-t', secs.toFixed(2), '-c:v', 'libx264', '-crf', '18', '-preset', 'medium', '-c:a', 'aac', '-ar', '48000', '-ac', '2', '-shortest', out])
+        .catch(() => { throw new Error(`«${path.basename(item.file).slice(3)}» no es una imagen válida (usa JPG, PNG o WEBP).`); });
+    }
+    parts.push(out);
+  }
+  const list = path.join(work, 'lista.txt');
+  await writeFile(list, parts.map((p) => `file '${p.replace(/\\/g, '/').replace(/'/g, "'\\''")}'`).join('\n') + '\n');
+  const final = path.join(dir, shotId + '-plano-fijo.mp4');
+  const tmp = final + '.tmp.mp4';
+  await run('ffmpeg', ['-nostdin', '-v', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', tmp]);
+  await archiveFile(final);
+  await rename(tmp, final);
+  for (const p of parts) await rm(p, { force: true });
+  await writeFile(path.join(dir, 'fijada.json'), JSON.stringify({ fijada: true, motivo: `material del autor (${saved.length} archivo/s, sin Veo)`, fecha: new Date().toISOString() }, null, 2) + '\n');
+  return { shotId, archivos: saved.length, fotos: saved.filter((x) => !x.video).length, videos: saved.filter((x) => x.video).length, seconds: Math.round(await probeSeconds(final) * 10) / 10 };
+}

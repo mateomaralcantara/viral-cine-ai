@@ -10,7 +10,7 @@ const nextConfig = {
     ]
   },
   experimental: {
-    proxyClientMaxBodySize: '50mb'
+    proxyClientMaxBodySize: '320mb' // videos cortos del autor (estudio local)
   }
 };
 
