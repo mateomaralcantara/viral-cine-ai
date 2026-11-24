@@ -201,7 +201,9 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
                   {shot.removed && <span className="rounded bg-slate-500/30 px-2 text-xs font-bold text-slate-200">QUITADA DEL MONTAJE</span>}
                   {shot.locked && <span className="rounded bg-emerald-500/20 px-2 text-xs font-bold text-emerald-300">FIJADA</span>}
                   {!shot.locked && shot.gate && <span className={'rounded px-2 text-xs font-bold ' + (shot.gate.pass ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300')}>{shot.gate.pass ? 'PASA LA PUERTA' : 'NO PASA LA PUERTA'}</span>}
-                  <span className={'text-xs font-bold uppercase ' + statusColor(shot.status)}>{shot.status}</span>
+                  {shot.stillShot
+                    ? <span className="text-xs font-bold uppercase text-emerald-300">LISTA CON TU MATERIAL</span>
+                    : <span className={'text-xs font-bold uppercase ' + statusColor(shot.status)}>{shot.status}</span>}
                 </span>
               </div>
               {!shot.locked && shot.gate && !shot.gate.pass && <ul className="mt-1 list-disc pl-5 text-xs text-red-300">{shot.gate.reasons.map((r, i) => <li key={i}>{r}</li>)}</ul>}
@@ -260,7 +262,11 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
                   onClick={() => { if (window.confirm(`¿Rehacer ${shot.shotId} con una foto de continuidad nueva? Cuesta ~US$${(shot.estimatedUsd! + 0.04).toFixed(2)}. El video actual se archiva.`)) void post({ action: 'harness', kind: 'rehacer', scene, shots: [shot.shotId], budgetUsd: Math.ceil(shot.estimatedUsd! * 100 + 1) / 100 }, shot.shotId).then((d) => { if (d) setSummary(`${shot.shotId}: se está rehaciendo. Mira el registro en «Corregir, ver y aprobar»; cuando termine pulsa «4 · Autocorrección».`); }); }}>
                   Rehacer con foto nueva · ~US${(shot.estimatedUsd + 0.04).toFixed(2)}</button>}
               </div>}
-              {shot.error && <p className="mt-2 text-xs text-red-300">{shot.error}</p>}
+              {shot.stillShot && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                <span className="text-emerald-300">Esta toma ya está resuelta con tu material: entra así en la película. Veo no se usa.</span>
+                <a className="button-secondary" target="_blank" rel="noreferrer" href={endpoint + '?scene=' + scene + '&tomaAutor=' + shot.shotId}>Ver mi toma</a>
+              </div>}
+              {shot.error && !shot.stillShot && <p className="mt-2 text-xs text-red-300">{shot.error}</p>}
               {shot.status === 'review-required' && shot.redoAuthorization && (
                 <details className="mt-3 rounded-xl border border-white/10 p-3">
                   <summary className="cursor-pointer text-sm font-bold">Rehacer esta toma (el video actual se archiva, no se borra)</summary>
@@ -281,7 +287,7 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
                   {(dirty || shot.revisionUsed) && <p className="mt-1 text-xs text-slate-400">Primero guarda una versión nueva del texto.</p>}
                 </details>
               )}
-              {(shot.status === 'not-started' || shot.status === 'failed-no-video' || shot.status === 'quota-rejected') && shot.authorization && (
+              {!shot.stillShot && (shot.status === 'not-started' || shot.status === 'failed-no-video' || shot.status === 'quota-rejected') && shot.authorization && (
                 <div className="mt-3 rounded-xl border border-amber-400/30 p-3">
                   <p className="text-xs text-amber-200">Para generar escribe exactamente: <b>{shot.authorization}</b></p>
                   <div className="mt-2 flex flex-wrap gap-2">

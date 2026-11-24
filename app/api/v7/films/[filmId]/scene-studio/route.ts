@@ -4,6 +4,8 @@ import {
   resumeSceneShot, resumeWholeScene, sceneLabels, savePromptRevision, sceneStudioBoard, submitSceneShot, submitWholeScene
 } from '@/lib/v7/production/scene-veo-engine';
 import { createReadStream } from 'node:fs';
+import { v7FilmRoot } from '@/lib/v7/storage/film-store';
+import path from 'node:path';
 import { makeStillShot, removeStillShot } from '@/lib/v7/production/author-photos';
 import { stat } from 'node:fs/promises';
 import { Readable } from 'node:stream';
@@ -37,6 +39,13 @@ export async function GET(request: Request, context: Context) {
     if (params.get('avance') === 'info') {
       const file = await latestAvance(filmId, scene);
       return NextResponse.json({ ok: true, avance: file ? { name: file.split(/[\\/]/).pop(), updatedAt: (await stat(file)).mtime.toISOString() } : null }, { headers: noStore });
+    }
+    // La toma hecha con el material del autor (fotos y videos, sin Veo), para verla.
+    const own = params.get('tomaAutor') ?? '';
+    if (/^E\d{2}-P\d{2}$/.test(own)) {
+      const file = path.join(v7FilmRoot(filmId), own.toLowerCase(), own + '-plano-fijo.mp4');
+      if (!(await stat(file).catch(() => null))) return fail(404, own + ' no tiene material tuyo.');
+      return serveFile(request, file, 'video/mp4', params.get('descargar') === '1');
     }
     if (params.get('avance') === '1') {
       const file = await latestAvance(filmId, scene);
