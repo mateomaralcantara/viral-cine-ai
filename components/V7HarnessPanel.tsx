@@ -123,7 +123,7 @@ export default function V7HarnessPanel({ filmId, scene, onChanged, part }: { fil
 
       <div className="mt-3 rounded-xl border border-white/10 p-3">
         <p className="text-sm"><b>Tus fotos de la escena</b> · Veo parte de ellas (no inventa la imagen). Si el nombre lleva «P03» va a esa toma; las demás se reparten en orden por las tomas sin foto tuya. Gratis.</p>
-        <input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={!!busy} className="mt-2 text-sm"
+        <input type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" multiple disabled={!!busy} className="mt-2 text-sm"
           onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ''; if (files.length) void uploadPhotos(files); }}/>
       </div>
 
