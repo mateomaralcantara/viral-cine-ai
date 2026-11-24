@@ -34,7 +34,8 @@ export const BREAKDOWN_SCHEMA = {
 
 export function buildBreakdownPrompt(input: { title: string; story: string; minutes: number; genre: string }) {
   return [
-    `Eres el primer ayudante de dirección de una productora. Desglosa este guion en un plan de rodaje para una película de unos ${input.minutes} minutos («${input.title}», ${input.genre}).`,
+    `Eres el primer ayudante de dirección de una productora. Desglosa este guion COMPLETO en un plan de rodaje («${input.title}», ${input.genre}).`,
+    '- NUNCA resumas ni recortes el guion para que dure menos: cada escena, cada plano y cada diálogo del autor deben estar. La duración final es la que resulte del guion completo' + (input.minutes ? ` (el autor estima unos ${input.minutes} minutos, solo como referencia).` : '.'),
     'REGLAS:',
     '- Respeta el texto del autor: los diálogos se copian tal cual, en orden, sin resumir ni inventar.',
     '- Escenas = secuencias del guion. Tomas de 4, 6 u 8 segundos (segundos).',
