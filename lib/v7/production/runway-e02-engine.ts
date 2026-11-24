@@ -1,14 +1,17 @@
 import {createHash,randomUUID} from 'node:crypto';
 import {localAdminAuthorized} from '@/lib/v7/security/local-studio-session';
+import {classifyRunwaySubmitError,RunwayKnownRejection,isLegacyCreditRejection} from '@/lib/v7/orchestration/provider-failure-policy';
 import {execFile} from 'node:child_process';
 import {createReadStream} from 'node:fs';
-import {mkdir,readFile,writeFile,rename,open,unlink,stat,link} from 'node:fs/promises';
+import {mkdir,readFile,writeFile,rename,open,unlink,stat,link,readdir} from 'node:fs/promises';
 import {promisify} from 'node:util';
 import path from 'node:path';
 import {v7FilmRoot} from '@/lib/v7/storage/film-store';
 import {E02_FILM_ID,E02_SHOTS,e02Shot,E02_MAX_USD,E02_COST_PER_SHOT} from '@/lib/v7/production/dos-toques-e02-shot-packets';
 import sharp from 'sharp';
 import {resolveV7ShotVideo} from '@/lib/v7/production/shot-video-source';
+import {e02CloudConfigured,getApprovedE02Image,approvedE02References} from '@/lib/v7/production/e02-supabase-references';
+import {readCorrectionRevision,latestCorrectionRevision,correctionAttemptsDir,usedCorrectionRevision,hasAnyCorrectionAuthorization} from '@/lib/v7/production/e02-correction-store';
 
 const command=promisify(execFile);
 export const RUNWAY_MODEL='gen4_turbo';
@@ -20,7 +23,7 @@ const headerVersion='2024-11-06';
 const base='https://api.dev.runwayml.com/v1';
 export type RunwayRecord={
  schemaVersion:1; filmId:string;shotId:string;provider:'runway';model:'gen4_turbo';
- status:'reserved'|'submitted'|'processing'|'review-required'|'failed-unknown';
+ status:'reserved'|'submitted'|'processing'|'review-required'|'failed-unknown'|'blocked-credits'|'blocked-credentials';
  taskId?:string;candidateName?:string;referenceShotId:string;referenceSha256:string;
  referenceImageName:string;promptHash:string;promptText:string;
  durationSeconds:10;estimatedUsd:0.5;
@@ -52,12 +55,40 @@ export async function readRunwayRecord(id:string):Promise<RunwayRecord|null>{
   if(r.filmId!==E02_FILM_ID||r.shotId!==id||r.provider!=='runway'||r.model!==RUNWAY_MODEL||
      r.durationSeconds!==10||r.estimatedUsd!==0.5)
     throw new Error('Registro Runway no coincide con el proyecto.');
+  // Read-only normalization: old Runway 400/no-credit records are definitive
+  // provider rejections, not unresolved paid generations. Keep their audit
+  // bytes intact on disk while surfacing the correct state in the UI.
+  if(isLegacyCreditRejection(r))return {...r,status:'blocked-credits'};
   return r;
  }catch(e){if((e as NodeJS.ErrnoException).code==='ENOENT')return null;throw e;}
 }
+async function correctionLedger(){
+ let archivedUsd=0,extraAuthorizationUsd=0;
+ for(const shot of E02_SHOTS){
+  const dir=correctionAttemptsDir(shot.id);
+  let names:string[];
+  try{names=await readdir(dir);}
+  catch(e){if((e as NodeJS.ErrnoException).code==='ENOENT')continue;throw e;}
+  extraAuthorizationUsd+=names.filter(n=>n.endsWith('.authorization.json')).length*RUNWAY_SHOT_USD;
+  for(const name of names.filter(n=>n.endsWith('.previous-operation.json'))){
+   const archived=JSON.parse(await readFile(path.join(dir,name),'utf8')) as RunwayRecord;
+   if(archived.shotId!==shot.id||archived.provider!=='runway'||archived.estimatedUsd!==0.5)
+    throw Error('Archivo histórico de gasto inválido.');
+   archivedUsd+=archived.estimatedUsd;
+  }
+ }
+ return {archivedUsd,extraAuthorizationUsd};
+}
+export async function runwayEffectiveSceneBudgetUsd(){
+ const ledger=await correctionLedger();
+ return Number((RUNWAY_MAX_SCENE_USD+ledger.extraAuthorizationUsd).toFixed(2));
+}
 export async function runwayReservedUsd(){
  const records=await Promise.all(E02_SHOTS.map(s=>readRunwayRecord(s.id)));
- return Number(records.reduce((total,r)=>total+(r?.estimatedUsd??0),0).toFixed(2));
+ const ledger=await correctionLedger();
+ return Number((records.reduce((total,r)=>
+  total+(r&&!['blocked-credits','blocked-credentials'].includes(r.status)
+   ?r.estimatedUsd:0),0)+ledger.archivedUsd).toFixed(2));
 }
 async function update(record:RunwayRecord){
  const dest=runwayRecordPath(record.shotId),tmp=dest+'.'+randomUUID()+'.tmp';
@@ -153,6 +184,19 @@ export async function saveE02Seed(bytes:Buffer){
  return {seedReady:true,bytes:result.length};
 }
 async function nearestReference(id:string){
+ if(e02CloudConfigured()){
+  const approved=await getApprovedE02Image(id);
+  if(!approved)throw Error(id+': primero guarda y aprueba la fotografía en Supabase.');
+  const file=path.join(shotDir(id),id+'-cloud-approved-'+approved.hash+'.jpg');
+  await mkdir(shotDir(id),{recursive:true});
+  if(!(await fileExists(file))){
+   try{await writeFile(file,approved.bytes,{flag:'wx',mode:0o600});}
+   catch(e){if((e as NodeJS.ErrnoException).code!=='EEXIST')throw e;}
+  }
+  if(await hashFile(file)!==approved.hash)
+   throw Error('La copia local no coincide con la referencia aprobada en Supabase.');
+  return {shotId:id+'-CLOUD',file,sha256:approved.hash,still:true};
+ }
  // A director-supplied image takes precedence for its own shot. This allows
  // seven independent storyboard frames and avoids identity drift.
  const own=shotImagePath(id);
@@ -211,23 +255,82 @@ async function runwayRequest(endpoint:string,init:RequestInit){
   ...init.method==='POST'?{'Content-Type':'application/json'}:{}};
  const response=await fetch(base+endpoint,{...init,headers,cache:'no-store',signal:AbortSignal.timeout(30000)});
  const data=await response.json() as Record<string,unknown>;
- if(!response.ok)throw new Error('Runway API '+response.status+': '+
-  safeError(typeof data.error==='string'?data.error:JSON.stringify(data).slice(0,180)));
+ if(!response.ok){
+  const detail=safeError(typeof data.error==='string'?data.error:JSON.stringify(data).slice(0,180));
+  const decision=classifyRunwaySubmitError(response.status,detail);
+  if(decision.kind==='blocked-credits')
+   throw new RunwayKnownRejection('blocked-credits',
+    'Runway no tiene créditos suficientes para esta generación (HTTP '+response.status+
+    '). No se creó ninguna tarea; no repetir automáticamente. Recarga Runway o autoriza otro proveedor.');
+  if(decision.kind==='blocked-credentials')
+   throw new RunwayKnownRejection('blocked-credentials',
+    'Runway rechazó las credenciales (HTTP '+response.status+
+    '). No repetir automáticamente.');
+  throw new Error('Runway API '+response.status+': '+detail);
+ }
  return data;
 }
-export async function submitRunwayShot(id:string,confirmHash:string,approvedUsd:number){
+export async function submitRunwayShot(id:string,confirmHash:string,approvedUsd:number,correctionRevisionId?:string){
  validShot(id);
+ if(!e02CloudConfigured())throw new Error('Supabase no está configurado: bloqueada la generación hasta guardar las fotos en la nube.');
+ const approved=await approvedE02References();
+ if(!approved.referencesReady)
+  throw new Error('Escena 02: faltan fotografías aprobadas en Supabase (se requieren siete).');
  if(!runwayEnabled())throw new Error('Runway no está habilitado o falta su clave.');
- const prompt=promptFor(id);
+ const revision=correctionRevisionId?await readCorrectionRevision(id,correctionRevisionId):null;
+ const prompt=revision?.promptText??promptFor(id);
+ if(revision){
+  const latest=await latestCorrectionRevision(id);
+  if(!latest||latest.revisionId!==revision.revisionId)
+   throw Error('La corrección cambió: revisa y autoriza la versión más reciente.');
+  const approvedImage=await getApprovedE02Image(id);
+  if(!approvedImage||approvedImage.hash!==revision.referenceSha256)
+   throw Error('La fotografía aprobada cambió desde la corrección. No se enviará un render.');
+ }
  if(confirmHash!==sha(prompt)||approvedUsd!==RUNWAY_SHOT_USD)
   throw new Error('Autoriza el prompt y el costo exacto de esta toma.');
  return lock(async()=>{
   const existing=await readRunwayRecord(id);
-  if(existing)throw new Error('Runway ya tiene una operación para esta toma. Recupera la misma, sin reenviar.');
-  if(await runwayReservedUsd()+RUNWAY_SHOT_USD>RUNWAY_MAX_SCENE_USD+0.001)
+  if(!existing&&await hasAnyCorrectionAuthorization(id))
+   throw Error('Existe una autorización histórica sin tarea activa. Reconcilia el intento antes de cualquier nuevo envío.');
+  if(existing&&!revision)throw new Error('Runway ya tiene una operación para esta toma. Recupera la misma, sin reenviar.');
+  if(revision&&await usedCorrectionRevision(id,revision.revisionId))
+   throw Error('Esta versión ya tiene un intento autorizado. Nunca se enviará dos veces.');
+  if(existing&&revision){
+   if(existing.status!=='failed-unknown'||!existing.taskId)
+    throw Error('Solo puede corregirse una tarea previa identificada y fallida.');
+   const oldTask=await runwayRequest('/tasks/'+encodeURIComponent(existing.taskId),{method:'GET'});
+   if(oldTask.status!=='FAILED'||(Array.isArray(oldTask.output)&&oldTask.output.length>0))
+    throw Error('La tarea anterior no está confirmada como FAILED. Recupera su resultado; no la repitas.');
+  }
+  // Provider-wide balance block: refuse direct API submissions of P02-P07
+  // too, not just clicks on the browser's disabled button.
+  const sceneRecords=await Promise.all(E02_SHOTS.map(s=>readRunwayRecord(s.id)));
+  if(sceneRecords.some(r=>r&&['blocked-credits','blocked-credentials'].includes(r.status)))
+   throw new Error('Producción pausada: Runway carece de saldo o credenciales. No se enviará ninguna toma nueva.');
+  const limit=(await runwayEffectiveSceneBudgetUsd())+(existing&&revision?RUNWAY_SHOT_USD:0);
+  if(await runwayReservedUsd()+RUNWAY_SHOT_USD>limit+0.001)
    throw new Error('Límite de Runway para Escena 02 alcanzado.');
   const ref=await nearestReference(id);
+  if(revision&&ref.sha256!==revision.referenceSha256)
+   throw Error('El hash de la imagen aprobada no coincide con la versión autorizada.');
   const frame=await frameData(ref.file,id,ref.still);
+  if(revision){
+   const org=await runwayRequest('/organization',{method:'GET'});
+   if(typeof org.creditBalance!=='number'||org.creditBalance<50)
+    throw Error('No hay 50 créditos disponibles para una sola generación.');
+   const dir=correctionAttemptsDir(id);
+   await mkdir(dir,{recursive:true});
+   // Save a unique paid-intent receipt BEFORE changing the active task or posting.
+   await writeFile(path.join(dir,revision.revisionId+'.authorization.json'),
+    JSON.stringify({shotId:id,revisionId:revision.revisionId,approvedUsd,
+     previousTaskId:existing?.taskId??null,createdAt:new Date().toISOString()},null,2)+'\n',
+    {flag:'wx',mode:0o600});
+   if(existing){
+    await rename(runwayRecordPath(id),
+     path.join(dir,revision.revisionId+'.previous-operation.json'));
+   }
+  }
   const now=new Date().toISOString();
   const record:RunwayRecord={
    schemaVersion:1,filmId:E02_FILM_ID,shotId:id,provider:'runway',model:'gen4_turbo',
@@ -249,11 +352,25 @@ export async function submitRunwayShot(id:string,confirmHash:string,approvedUsd:
    return {shotId:id,status:record.status,taskKnown:true,newSpendAuthorizationUsd:0.5,
     provider:'runway',noAutomaticRetries:true};
   }catch(e){
-   record.status='failed-unknown';record.error=safeError(e);await update(record);
+   record.status=e instanceof RunwayKnownRejection?e.kind:'failed-unknown';
+   record.error=safeError(e);await update(record);
    await unlink(frame.workingFile).catch(()=>undefined);
+   if(e instanceof RunwayKnownRejection)throw e;
    throw new Error('Runway no confirmó el video. No se realizará un segundo envío: '+record.error);
   }
  });
+}
+// Read-only inspection: never submits video generations.
+export async function diagnoseRunwayShot(id:string){
+ validShot(id);
+ const record=await readRunwayRecord(id);
+ if(!record?.taskId)return {shotId:id,taskKnown:false,status:record?.status??'not-started',
+  failureCode:null,failure:null,hasOutput:false};
+ const task=await runwayRequest('/tasks/'+encodeURIComponent(record.taskId),{method:'GET'});
+ return {shotId:id,taskKnown:true,status:String(task.status??'UNKNOWN'),
+  failureCode:typeof task.failureCode==='string'?safeError(task.failureCode):null,
+  failure:typeof task.failure==='string'?safeError(task.failure):null,
+  hasOutput:Array.isArray(task.output)&&task.output.length>0};
 }
 export async function resumeRunwayShot(id:string){
  validShot(id);

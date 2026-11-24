@@ -2,6 +2,7 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {Clapperboard,CheckCircle2,RefreshCcw,ShieldCheck,Film} from 'lucide-react';
 import {ensureLocalStudioSession} from '@/lib/v7/security/local-studio-client';
+import V7Scene02CorrectionPanel from '@/components/V7Scene02CorrectionPanel';
 
 type Shot={id:string;title:string;action:string;editSeconds:number;
  promptText:string;promptHash:string;estimateUsd:number;
@@ -10,10 +11,15 @@ type Shot={id:string;title:string;action:string;editSeconds:number;
 type Board={ok:boolean;enabled:boolean;configured:boolean;seedReady:boolean;shots:Shot[];
  reservedUsd:number;maxSceneUsd:number;estimatedUsdPerShot:number;durationSeconds:number};
 type Detail={ok?:boolean;error?:string;status?:string;referenceShotId?:string;videoReady?:boolean};
+type CloudBoard={ok:boolean;configured:boolean;approvedCount:number;requiredCount:number;
+ referencesReady:boolean;generationQueueEnabled:boolean;
+ shots:Record<string,{approved:boolean;readyForScene:boolean;sha256?:string}>};
 const wait=(ms:number)=>new Promise<void>(resolve=>setTimeout(resolve,ms));
 export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
  const endpoint='/api/v7/films/'+encodeURIComponent(filmId)+'/runway-scene02';
+ const cloudEndpoint='/api/v7/films/'+encodeURIComponent(filmId)+'/scene02-references';
  const [board,setBoard]=useState<Board|null>(null);
+ const [cloudBoard,setCloudBoard]=useState<CloudBoard|null>(null);
  const [uploadingShot,setUploadingShot]=useState<string|null>(null);
  const [bulkUploading,setBulkUploading]=useState(false);
  const [uploadMessages,setUploadMessages]=useState<Record<string,string>>({});
@@ -25,6 +31,7 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
  const [pairNotice,setPairNotice]=useState('');
  const running=useRef(false);
  const cancel=useRef(false);
+ const migrationRequested=useRef(false);
  const refresh=useCallback(async()=>{
   const response=await fetch(endpoint,{cache:'no-store'});
   const data=await response.json() as Board&{error?:string};
@@ -32,15 +39,49 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
   setBoard(data);
   return data;
  },[endpoint]);
+ const refreshCloud=useCallback(async()=>{
+  // Cloud status is a public-to-loopback GET. No admin session is required to inspect it.
+  const response=await fetch(cloudEndpoint,{cache:'no-store',credentials:'same-origin'});
+  const raw=await response.text();
+  let status:CloudBoard&{error?:string};
+  try{status=JSON.parse(raw) as typeof status;}
+  catch{throw Error('Supabase respondió sin JSON (HTTP '+response.status+').');}
+  if(!response.ok||!status.ok)throw Error(status.error||'No fue posible consultar Supabase.');
+  setCloudBoard(status);return status;
+ },[cloudEndpoint]);
  useEffect(()=>{
   void ensureLocalStudioSession().then(()=>setPairNotice('Sesión local lista. No necesitas token.'))
    .catch(e=>setPairNotice(e instanceof Error?e.message:String(e)));
   void refresh().catch(e=>setError(String(e)));
-  const timer=setInterval(()=>{if(!running.current)void refresh().catch(()=>undefined);},14000);
+  void refreshCloud().then(async status=>{
+   // One-time, cost-free migration of the seven existing local JPGs.
+   // No repeated uploads or paid provider calls.
+   if(!status.configured||status.referencesReady||migrationRequested.current)return;
+   migrationRequested.current=true;
+   setBulkMessage('Sincronizando fotografías existentes a Supabase…');
+   try{
+    const response=await fetch(cloudEndpoint,{method:'POST',credentials:'same-origin',
+     headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'sync-existing'})});
+    const raw=await response.text();
+    if(!raw.trim())throw Error('No hubo respuesta de Supabase (HTTP '+response.status+').');
+    const imported=JSON.parse(raw) as {ok?:boolean;error?:string;
+     board?:CloudBoard;imported?:Array<{shotId:string;approved:boolean;reason?:string}>};
+    if(!response.ok||!imported.ok)throw Error(imported.error||'No se pudo sincronizar.');
+    if(imported.board)setCloudBoard(imported.board);
+    const missing=imported.imported?.filter(x=>!x.approved)??[];
+    setBulkMessage(missing.length?'Fotos locales pendientes: '+missing.map(x=>x.shotId).join(', ')+
+     '. Selecciona solo las que faltan.':'7 fotos persistidas, aprobadas y listas en Supabase.');
+   }catch(e){setError(e instanceof Error?e.message:String(e));}
+  }).catch(e=>setError(e instanceof Error?e.message:String(e)));
+  const timer=setInterval(()=>{if(!running.current){
+   void refresh().catch(()=>undefined);
+   void refreshCloud().catch(()=>undefined);
+  }},14000);
   return ()=>{cancel.current=true;clearInterval(timer);};
- },[refresh]);
+ },[refresh,refreshCloud,cloudEndpoint]);
  async function request(action:'preflight'|'submit'|'resume',shotId:string,shot?:Shot){
-  await ensureLocalStudioSession();
+  // Free preflight does not require an admin session; billing and resume still do.
+  if(action!=='preflight')await ensureLocalStudioSession();
   const response=await fetch(endpoint,{method:'POST',credentials:'same-origin',
    headers:{'Content-Type':'application/json'},
    body:JSON.stringify({action,shotId,...(action==='submit'?{
@@ -57,24 +98,25 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
   if(file.size<3000||file.size>4000000)
    throw Error(id+': la imagen debe pesar entre 3 KB y 4 MB.');
   await ensureLocalStudioSession();
-  const response=await fetch(endpoint,{method:'POST',
+  const response=await fetch(cloudEndpoint,{method:'POST',
    credentials:'same-origin',
-   headers:{'Content-Type':file.type,'X-V7-Shot-ID':id},
+   headers:{'Content-Type':file.type,'X-V7-Shot-ID':id,'X-V7-Filename':encodeURIComponent(file.name)},
    body:file,cache:'no-store'});
   // The Next.js proxy or the server may return an empty 4xx/5xx response.
   // Never report "Unexpected end of JSON input" to the artist.
   const raw=await response.text();
   if(!raw.trim())throw new Error(id+': el servidor respondió vacío (HTTP '+
    response.status+'). No se guardó la imagen. Revisa la terminal de Next.js.');
-  let result:{ok?:boolean;error?:string;alreadySaved?:boolean;imageReady?:boolean};
+  let result:{ok?:boolean;error?:string;approved?:boolean;readyForScene?:boolean};
   try{result=JSON.parse(raw) as typeof result;}
   catch{throw new Error(id+': respuesta inválida del servidor (HTTP '+
    response.status+'). Revisa el registro de Next.js.');}
-  if(!response.ok||!result.ok||!result.imageReady)
+  if(!response.ok||!result.ok||!result.approved||!result.readyForScene)
    throw Error(id+': '+(result.error||'El servidor no confirmó que el JPG quedara guardado.')+
     ' (HTTP '+response.status+').');
   setUploadMessages(old=>({...old,[id]:
-   result.alreadySaved?'Imagen ya guardada: no se duplicó.':'Imagen guardada y verificada en disco.'}));
+   'Guardada en Supabase, aprobada automáticamente y lista para escena.'}));
+  await refreshCloud();
   await refresh();
  }
  async function selectedImage(id:string,file:File|null){
@@ -129,7 +171,8 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
     saved+' imagen(es) guardada(s) de '+uploads.size+'.'+
     (unknown.length?' Se omitieron '+unknown.length+' archivos sin código E02-PXX.':''));
    if(failures.length)setError('Algunas imágenes no se guardaron: '+failures.join(' | '));
-  }finally{setBulkUploading(false);await refresh().catch(()=>undefined);}
+  }finally{setBulkUploading(false);await refreshCloud().catch(()=>undefined);
+   await refresh().catch(()=>undefined);}
  }
  async function preflight(id:string){
   try{
@@ -146,7 +189,8 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
   }catch(e){setError(String(e));}
  }
  async function produceAll(){
-  if(running.current||!board?.enabled||!board.seedReady||!allowSpend)return;
+  if(running.current||!board?.enabled||!cloudBoard?.referencesReady||!allowSpend||
+     board.shots.some(s=>s.status==='blocked-credits'||s.status==='blocked-credentials'))return;
   const notStarted=board.shots.filter(s=>s.status==='not-started');
   const budget=Number((notStarted.length*.5).toFixed(2));
   if(budget+board.reservedUsd>board.maxSceneUsd+0.001){
@@ -160,6 +204,8 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
     let state=(await refresh()).shots.find(s=>s.id===shot.id)!;
     if(state.status==='review-required'){setDetail(shot.id+' lista.');continue;}
     if(state.status==='failed-unknown')throw Error(shot.id+' tiene una operación fallida. Sin reintento automático.');
+    if(state.status==='blocked-credits'||state.status==='blocked-credentials')
+      throw Error(shot.id+': Runway está bloqueado. No se volverá a enviar ni se consumirá el presupuesto restante.');
     if(state.status==='not-started'){
      setDetail('Solicitando la operación de '+shot.id+' (aún no confirmada por Runway)…');
      await request('submit',shot.id,state);
@@ -190,6 +236,9 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
   }
   finally{running.current=false;setBusy(false);void refresh().catch(()=>undefined);}
  }
+ const blockedCredits=board?.shots.some(s=>s.status==='blocked-credits')??false;
+ const blockedCredentials=board?.shots.some(s=>s.status==='blocked-credentials')??false;
+ const providerBlocked=blockedCredits||blockedCredentials;
  const outstanding=board?.shots.filter(s=>s.status==='not-started')??[];
  const outstandingCost=outstanding.length*.5;
  return <section className="rounded-3xl border border-violet-400/30 bg-violet-400/[.04] p-5 md:p-7">
@@ -198,10 +247,19 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
    <Clapperboard className="h-6 w-6"/> Runway Gen-4 Turbo · Escena 02
   </h2>
   <p className="mt-2 text-sm text-slate-300">
-   «La casa en silencio» · 7 tomas, 55 segundos. Primero se importa una imagen del interior
-   de la vivienda. Cada clip de 10 s continúa desde el video anterior y el editor
+   «La casa en silencio» · 7 tomas, 55 segundos. Primero se guardan y aprueban las siete fotos en Supabase.
+   Cada clip de 10 s utiliza su fotografía aprobada y el editor
    recorta 8+8+8+8+8+8+7 segundos. Las voces y música se añaden después.
   </p>
+  {providerBlocked&&<div className="mt-4 rounded-xl border border-amber-400/40 bg-amber-400/10 p-4"
+    role="alert">
+   <strong>Producción pausada: {blockedCredits?'Runway no tiene créditos suficientes.':'Runway rechazó sus credenciales.'}</strong>
+   <p className="mt-1 text-sm text-slate-200">
+    Tus siete fotografías siguen guardadas. No se enviarán más tareas ni se autorizarán nuevos cargos.
+    Para continuar necesitas reponer el saldo del proveedor o aprobar un motor alternativo.
+    El importe que antes figuraba «reservado» era del libro interno de ViralCine, no una confirmación de cobro.
+   </p>
+  </div>}
   <div className="mt-4 grid gap-3 sm:grid-cols-3">
    <div className="rounded-xl border border-white/10 p-3">
     <p className="text-xs text-slate-400">Nuevas solicitudes pendientes</p>
@@ -212,7 +270,7 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
     <strong className="text-xl">US$ {outstandingCost.toFixed(2)}</strong>
    </div>
    <div className="rounded-xl border border-white/10 p-3">
-    <p className="text-xs text-slate-400">Reservado en Runway</p>
+    <p className="text-xs text-slate-400">Presupuesto registrado (no es un cobro confirmado)</p>
     <strong className="text-xl">US$ {(board?.reservedUsd??0).toFixed(2)} / 3.50</strong>
    </div>
   </div>
@@ -234,18 +292,26 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
       debe llamarse E02-P01, E02-P02 … E02-P07. También puedes seleccionar
       las imágenes por separado, debajo de cada toma. Guardar imágenes no cuesta dinero.
     </p>
-    <p className="mt-2 text-sm font-semibold">
-      {(board?.shots.filter(s=>s.imageReady).length??0)} de 7 imágenes individuales guardadas.
-      {board?.seedReady?' P01 tiene referencia y puede producirse.':
-       ' P01 necesita una imagen guardada para iniciar.'}
+    <p className="mt-2 text-sm font-semibold" role="status">
+      {!cloudBoard?'Consultando las referencias de Supabase…':
+       !cloudBoard.configured?
+        'Supabase no está conectado en este entorno de revisión. Estado real de las fotografías: no verificable desde aquí.':
+       cloudBoard.approvedCount+' de 7 fotografías verificadas y aprobadas en Supabase.'+
+       (cloudBoard.referencesReady?' ESCENA LISTA · sin aprobaciones adicionales.':
+        ' Solo importa las referencias que realmente falten.')}
     </p>
     <input className="mt-3 block max-w-full text-xs" type="file"
       accept="image/jpeg,image/png,image/webp" multiple
       aria-label="Importar siete imágenes de Escena 02"
+      disabled={!cloudBoard?.configured||bulkUploading}
       onChange={e=>{void selectedBatch(e.target.files);e.target.value='';}}/>
     <p className="mt-2 text-xs text-slate-400">
-      La carga comienza automáticamente cuando seleccionas las imágenes; no necesitas pulsar Guardar.
+      Subir = guardar en Supabase + aprobar + dejar lista. Sin botón adicional.
     </p>
+    {cloudBoard&&!cloudBoard.configured&&<p role="alert" className="mt-2 text-xs text-amber-200">
+      Las fotografías pueden seguir aprobadas en el servidor principal. Este entorno no puede consultarlas.
+      No las vuelvas a subir ni copies secretos a la revisión; verifica el 7/7 desde tu servidor habitual.
+    </p>}
     {bulkUploading&&<p className="mt-2 text-xs text-violet-200" role="status">
       Importando imágenes…</p>}
     {bulkMessage&&<p className="mt-2 text-xs text-emerald-200" role="status">{bulkMessage}</p>}
@@ -256,12 +322,13 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
    Autorizo hasta US$ {outstandingCost.toFixed(2)} para los {outstanding.length} clips pendientes, sin reintentos pagados
   </label>
   <button className="button-primary mt-3" type="button" onClick={()=>void produceAll()}
-   disabled={busy||bulkUploading||!!uploadingShot||!allowSpend||!board?.enabled||!board?.seedReady||!outstanding.length||
+   disabled={busy||bulkUploading||!!uploadingShot||providerBlocked||!allowSpend||!board?.enabled||!cloudBoard?.referencesReady||!outstanding.length||
     (board?board.reservedUsd+outstandingCost>board.maxSceneUsd+0.001:true)}>
    {busy?'Generando y recuperando clips…':'Producir bloques faltantes con Runway'}
   </button>
   {detail&&<p className="mt-3 text-sm text-emerald-200" role="status">{detail}</p>}
   {error&&<p className="mt-3 text-sm text-red-300" role="alert">{error}</p>}
+  <V7Scene02CorrectionPanel filmId={filmId}/>
   <div className="mt-5 space-y-3">
    {board?.shots.map(s=><div className="rounded-xl border border-white/10 p-4" key={s.id}>
     <div className="flex flex-wrap justify-between gap-2">
@@ -290,10 +357,13 @@ export default function V7RunwayScene02Panel({filmId}:{filmId:string}){
     </div>
     <div className="mt-3 rounded-lg border border-violet-400/20 p-3">
       <p className="text-xs font-semibold text-slate-200">
-        {s.id} · {s.imageReady?'Imagen guardada':'Imagen pendiente'}
+        {s.id} · {!cloudBoard?'Consultando referencia…':
+         !cloudBoard.configured?'Supabase no conectado aquí — estado no verificable':
+         cloudBoard.shots[s.id]?.readyForScene?'Aprobada y lista en Supabase':'Pendiente de Supabase'}
       </p>
       <input type="file" accept="image/jpeg,image/png,image/webp"
         aria-label={'Importar imagen para '+s.id}
+        disabled={!cloudBoard?.configured||bulkUploading||!!uploadingShot}
         onChange={e=>{
          const file=e.target.files?.[0]??null;
          e.target.value='';
