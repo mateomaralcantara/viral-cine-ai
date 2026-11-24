@@ -9,7 +9,8 @@ import { filmKeyFor } from '@/lib/v7/presets/film-registry';
 import { CONVIDADOS_DECORADOS } from '@/lib/v7/presets/convidados-reparto';
 import { readV7FilmBundle, v7FilmRoot } from '@/lib/v7/storage/film-store';
 import { indexedScenes } from './scene-approval-board';
-import { latestPromptRevision, readShotRecord, savePromptRevision, shotReferencePath } from './scene-veo-engine';
+import { latestPromptRevision, readShotRecord, savePromptRevision, sceneExposureUsd, shotReferencePath } from './scene-veo-engine';
+import { estimateFilmBudget } from '@/lib/v7/creation/budget-estimate';
 import { isLocked, isRemoved, lockPath, lockShot, removeShot, restoreShot, unlockShot } from './shot-lock';
 import { originalShotVideo } from './shot-current-video';
 import { approvedSet, readSetSheet, setMasterPath } from './set-master';
@@ -219,5 +220,15 @@ export async function greenStatus(filmId: string, opts: { autoMount?: boolean } 
     episodioMontando = true;
   }
   if (episodioVerde && !episodioMontando) episodioMontando = (await harnessJob(filmId, 'EPISODIO'))?.running === true;
-  return { scenes, episodio: { verde: episodioVerde, archivo: ep ? path.basename(ep) : null, alDia: episodioAlDia, montando: episodioMontando } };
+  // Presupuesto de la película: lo que costará en total, lo ya gastado y lo pendiente.
+  let seconds = 0; let shots = 0; let withPhoto = 0; let spent = 0;
+  for (const sc of indexedScenes(film)) {
+    spent += await sceneExposureUsd(filmId, sc.label).catch(() => 0);
+    for (const { shot, label } of sc.shots) {
+      shots++; seconds += shot.durationSeconds;
+      if (await exists(shotReferencePath(filmId, label))) withPhoto++;
+    }
+  }
+  const presupuesto = estimateFilmBudget({ seconds, shots, shotsWithPhoto: withPhoto, spentUsd: spent, quality: (film.metadata?.qualityPreset as 'cine' | undefined) ?? 'cine' });
+  return { presupuesto, scenes, episodio: { verde: episodioVerde, archivo: ep ? path.basename(ep) : null, alDia: episodioAlDia, montando: episodioMontando } };
 }

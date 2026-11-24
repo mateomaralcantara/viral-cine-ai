@@ -3,7 +3,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { ensureLocalStudioSession } from '@/lib/v7/security/local-studio-client';
 
 type SceneState = { label: string; titulo: string; total: number; fijadas: number; quitadas: number; verde: boolean; avance: string | null; avanceAlDia: boolean; montando: boolean };
-type Estado = { scenes: SceneState[]; episodio: { verde: boolean; archivo: string | null; alDia: boolean; montando: boolean } };
+type Budget = { total: number; spent: number; pending: number; shots: number; partidas: Array<{ concepto: string; usd: number }>; nota: string };
+type Estado = { presupuesto?: Budget; scenes: SceneState[]; episodio: { verde: boolean; archivo: string | null; alDia: boolean; montando: boolean } };
 
 /**
  * ESCENAS EN VERDE: cuando todas las tomas de una escena están fijadas (o quitadas por el autor),
@@ -50,6 +51,13 @@ export default function V7GreenPanel({ filmId, scene, onSelect }: { filmId: stri
         <h3 className="text-lg font-black">Episodio: {greens}/{estado.scenes.length} escenas en verde</h3>
         <span className="text-xs text-slate-300">Verde = todas sus tomas aprobadas y FIJADAS: nadie las vuelve a tocar. Se montan solas, gratis.</span>
       </div>
+      {estado.presupuesto && <details className="mt-3 rounded-xl border border-cyan-400/30 bg-cyan-500/[.05] p-3 text-sm">
+        <summary className="cursor-pointer"><b>Presupuesto estimado: US${estado.presupuesto.total.toFixed(2)}</b>
+          <span className="text-slate-300"> · gastado US${estado.presupuesto.spent.toFixed(2)} · pendiente US${estado.presupuesto.pending.toFixed(2)} · {estado.presupuesto.shots} tomas</span></summary>
+        <ul className="mt-2 space-y-0.5 text-xs text-slate-300">{estado.presupuesto.partidas.map((p) => <li key={p.concepto} className="flex justify-between"><span>{p.concepto}</span><span>US${p.usd.toFixed(2)}</span></li>)}</ul>
+        <p className="mt-1 text-xs text-slate-500">{estado.presupuesto.nota} Las tomas con tu foto no pagan foto de continuidad.</p>
+      </details>}
+
       <div className="mt-3 flex flex-wrap gap-2">
         {estado.scenes.map((s) => (
           <button key={s.label} type="button" onClick={() => onSelect(s.label)} title={s.titulo}

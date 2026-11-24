@@ -72,6 +72,22 @@ export default function V7HarnessPanel({ filmId, scene, onChanged, part }: { fil
       return d;
     } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); return null; } finally { setBusy(''); }
   }
+  async function uploadPhotos(files: File[]) {
+    setBusy('fotos'); setMsg(''); setNote('Subiendo ' + files.length + ' foto(s)…');
+    try {
+      await ensureLocalStudioSession();
+      const fd = new FormData(); fd.set('scene', scene);
+      for (const f of files) fd.append('fotos', f);
+      const r = await fetch(endpoint + '/fotos', { method: 'POST', credentials: 'same-origin', body: fd });
+      const d = await r.json() as { ok: boolean; error?: string; results?: Array<{ name: string; shotId: string | null; ok: boolean; error?: string }> };
+      if (!d.ok) throw new Error(d.error || 'No se pudieron subir');
+      const ok = (d.results ?? []).filter((x) => x.ok);
+      const bad = (d.results ?? []).filter((x) => !x.ok);
+      setNote(`${ok.length} foto(s) colocadas: ${ok.map((x) => `${x.name} → ${x.shotId}`).join(' · ')}${bad.length ? ` · sin colocar: ${bad.map((x) => `${x.name} (${x.error})`).join(' · ')}` : ''}`);
+      onChanged();
+    } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); setNote(''); } finally { setBusy(''); }
+  }
+
   async function start(kind: JobKind, extra: Record<string, unknown> = {}) {
     const d = await post({ action: 'harness', kind, ...extra }, kind);
     if (d) { setNote(`${JOB_NAMES[kind]}: en marcha. Mira el registro de abajo (se actualiza cada 5 s).`); await loadJob(); }
@@ -104,6 +120,12 @@ export default function V7HarnessPanel({ filmId, scene, onChanged, part }: { fil
         <button type="button" className="button-secondary" disabled={!!busy || running} onClick={() => void start('decorado')}>{setInfo.existe ? 'Crear otro · ~US$0.04' : 'Crear plano maestro · ~US$0.04'}</button>
         {setInfo.existe && !setInfo.aprobado && <button type="button" className="button-primary" disabled={!!busy || running} onClick={() => void start('decorado-aprobar')}>Aprobar este salón</button>}
       </div>}
+
+      <div className="mt-3 rounded-xl border border-white/10 p-3">
+        <p className="text-sm"><b>Tus fotos de la escena</b> · Veo parte de ellas (no inventa la imagen). Si el nombre lleva «P03» va a esa toma; las demás se reparten en orden por las tomas sin foto tuya. Gratis.</p>
+        <input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={!!busy} className="mt-2 text-sm"
+          onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ''; if (files.length) void uploadPhotos(files); }}/>
+      </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
         <button type="button" className="button-secondary" disabled={!!busy} onClick={() => void analyze()}>

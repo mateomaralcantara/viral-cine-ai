@@ -10,7 +10,7 @@ type StudioShot = {
   promptText: string; revisionId: string | null; revisionUsed: boolean;
   mode: 'text-to-video' | 'image-to-video'; estimatedUsd: number | null;
   authorization: string | null; redoAuthorization: string | null; videoReady: boolean;
-  locked?: boolean; removed?: boolean; hasReference?: boolean; gate?: { pass: boolean; reasons: string[] } | null;
+  locked?: boolean; removed?: boolean; hasReference?: boolean; authorPhoto?: boolean; gate?: { pass: boolean; reasons: string[] } | null;
 };
 type StudioBoard = {
   sceneLabel: string; sceneLabels?: string[]; platform?: 'gemini' | 'vertex'; platformProblem?: string | null; frozen?: boolean; title: string; legacy: boolean; model: string; providerEnabled: boolean;
@@ -81,6 +81,21 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
       setMessage(e instanceof Error ? e.message : String(e));
       return null;
     } finally { setBusy(''); }
+  }
+
+  const [photoStamp, setPhotoStamp] = useState<Record<string, number>>({});
+  async function uploadShotPhoto(shotId: string, file: File) {
+    setBusy(shotId); setMessage('');
+    try {
+      await ensureLocalStudioSession();
+      const fd = new FormData(); fd.set('scene', scene); fd.set('shotId', shotId); fd.append('fotos', file);
+      const r = await fetch(endpoint + '/fotos', { method: 'POST', credentials: 'same-origin', body: fd });
+      const d = await r.json() as { ok: boolean; error?: string; results?: Array<{ ok: boolean; error?: string }> };
+      if (!d.ok || !d.results?.[0]?.ok) throw new Error(d.error || d.results?.[0]?.error || 'No se pudo subir la foto');
+      setPhotoStamp((p) => ({ ...p, [shotId]: Date.now() }));
+      setSummary(shotId + ': tu foto es la foto de partida. Veo partirá de ella.');
+      await refresh();
+    } catch (e) { setMessage(e instanceof Error ? e.message : String(e)); } finally { setBusy(''); }
   }
 
   const statusColor = (s: string) => s === 'review-required' ? 'text-emerald-300'
@@ -180,6 +195,18 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
                 {shot.estimatedUsd !== null && ' · ~US$' + shot.estimatedUsd.toFixed(2)}
               </p>
               {shot.spokenText && <p className="mt-1 text-xs text-slate-300">Voz posterior: «{shot.spokenText}»</p>}
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                {shot.hasReference
+                  ? <a href={endpoint + '/fotos?shot=' + shot.shotId} target="_blank" rel="noreferrer" title="Foto de partida">
+                      <img alt={'Foto de partida ' + shot.shotId} className="h-16 rounded-lg border border-white/20" src={endpoint + '/fotos?shot=' + shot.shotId + '&v=' + (photoStamp[shot.shotId] ?? 0)}/></a>
+                  : <span className="flex h-16 w-28 items-center justify-center rounded-lg border border-dashed border-white/20 text-[10px] text-slate-500">sin foto</span>}
+                <span className="text-xs text-slate-400">{shot.authorPhoto ? 'FOTO TUYA (manda: no se sustituye)' : shot.hasReference ? 'foto de continuidad' : 'Veo inventará la imagen'}</span>
+                {!shot.locked && <label className="cursor-pointer rounded-lg border border-white/20 px-2 py-1 text-xs hover:border-white/40">
+                  {shot.authorPhoto ? 'Cambiar mi foto' : 'Subir mi foto'}
+                  <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={!!busy}
+                    onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void uploadShotPhoto(shot.shotId, f); }}/>
+                </label>}
+              </div>
               <textarea className="mt-3 w-full rounded-lg border border-white/20 bg-slate-950 p-2 text-sm text-white" rows={4}
                 value={draft} onChange={(e) => setDrafts((d) => ({ ...d, [shot.shotId]: e.target.value }))}/>
               <div className="mt-2 flex flex-wrap items-center gap-2">

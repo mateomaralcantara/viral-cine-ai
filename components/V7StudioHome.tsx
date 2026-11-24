@@ -16,6 +16,8 @@ import {
   WalletCards
 } from 'lucide-react';
 import V7FilmLibrary, { type V7LibraryFilmSummary } from '@/components/V7FilmLibrary';
+import { estimateFilmBudget } from '@/lib/v7/creation/budget-estimate';
+import { ensureLocalStudioSession } from '@/lib/v7/security/local-studio-client';
 
 type CreateResponse = {
   ok?: boolean;
@@ -34,6 +36,7 @@ export default function V7StudioHome() {
   const [films, setFilms] = useState<V7LibraryFilmSummary[]>([]);
   const [loadingFilms, setLoadingFilms] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [breaking, setBreaking] = useState(false);
   const [importingApprovedFilm, setImportingApprovedFilm] = useState(false);
   const [migrating, setMigrating] = useState(false);
   const [message, setMessage] = useState('');
@@ -98,6 +101,26 @@ export default function V7StudioHome() {
       requestId.current = crypto.randomUUID();
     } finally {
       setCreating(false);
+    }
+  }
+
+  /** Desglose del guion con IA: crea la película con escenas, tomas, diálogos y personajes, lista para el estudio. */
+  async function breakdownFilm() {
+    setBreaking(true);
+    setMessage('Desglosando el guion con IA (1–3 minutos)…');
+    try {
+      await ensureLocalStudioSession();
+      const response = await fetch('/api/v7/films/desglose', {
+        method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: form.title, story: form.story, durationMinutes: Number(form.durationMinutes), genre: form.genre, quality: form.quality })
+      });
+      const body = await response.json() as { ok?: boolean; error?: string; nextUrl?: string; stats?: { scenes: number; shots: number; totalSeconds: number }; personajes?: string[]; presupuesto?: { total: number } };
+      if (!response.ok || !body.ok || !body.nextUrl) throw new Error(body.error || 'No se pudo desglosar el guion.');
+      setMessage(`Listo: ${body.stats?.scenes} escenas, ${body.stats?.shots} tomas, ${Math.round((body.stats?.totalSeconds ?? 0) / 60)} min · presupuesto estimado US$${body.presupuesto?.total.toFixed(2)}. Personajes: ${(body.personajes ?? []).join(', ')}. Abriendo el estudio…`);
+      window.location.href = body.nextUrl;
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+      setBreaking(false);
     }
   }
 
@@ -288,6 +311,19 @@ export default function V7StudioHome() {
                     placeholder="US$ 0.00"
                   />
                 </div>
+                {(() => {
+                  const est = estimateFilmBudget({ minutes: Number(form.durationMinutes) || 0, quality: form.quality as 'cine' });
+                  return (
+                    <div className="mt-2 rounded-xl border border-cyan-400/20 bg-cyan-500/[.05] p-3 text-xs text-slate-300">
+                      <div className="flex items-center justify-between gap-2">
+                        <b className="text-cyan-200">Estimación: US${est.total.toFixed(2)}</b>
+                        <button type="button" className="rounded-lg border border-cyan-400/40 px-2 py-1 text-cyan-200" onClick={() => setForm({ ...form, budgetUsd: Math.ceil(est.total) })}>Usar como presupuesto</button>
+                      </div>
+                      <ul className="mt-2 space-y-0.5">{est.partidas.map((p) => <li key={p.concepto} className="flex justify-between"><span>{p.concepto}</span><span>US${p.usd.toFixed(2)}</span></li>)}</ul>
+                      <p className="mt-1 text-slate-500">~{est.shots} tomas de video. {est.nota} Si subes tus fotos de cada toma, no se pagan las de continuidad.</p>
+                    </div>
+                  );
+                })()}
               </Field>
 
               <Field label="Calidad">
@@ -329,6 +365,17 @@ export default function V7StudioHome() {
               {creating ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
               {creating ? 'CREANDO PROYECTO V7…' : 'CREAR PELÍCULA'}
             </button>
+
+            <button
+              className="button-primary min-h-14 text-base"
+              disabled={breaking || creating}
+              onClick={breakdownFilm}
+              title="Pega tu guion completo en «Historia»: la IA lo convierte en escenas y tomas listas para producir"
+            >
+              {breaking ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
+              {breaking ? 'DESGLOSANDO EL GUION…' : 'DESGLOSAR GUION CON IA Y CREAR LISTA PARA PRODUCIR'}
+            </button>
+            <p className="text-xs text-slate-400">«Crear película» solo guarda un borrador. «Desglosar guion» crea escenas, tomas, diálogos y personajes (unos céntimos de IA); después subes tus fotos en cada escena y generas.</p>
 
             <div className="grid gap-3 text-xs text-slate-500 sm:grid-cols-3">
               <div className="rounded-xl bg-black/20 p-3">✓ Preflight antes de producción</div>

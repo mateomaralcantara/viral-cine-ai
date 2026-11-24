@@ -41,6 +41,8 @@ export async function planContinuity(filmId: string, opts: { scene?: string; sho
       if (opts.shots?.length && !opts.shots.includes(s.label)) continue;
       const dir = path.join(root, s.label.toLowerCase());
       if (await isLocked(dir)) continue;
+      // La foto que sube el autor manda: nunca se sustituye por una de continuidad.
+      if (await exists(path.join(dir, 'foto-del-autor.json'))) { skipped.push(s.label); continue; }
       const prompt = prompts.get(s.label) ?? '';
       const cast = castInShot(s.shot, prompt, approved).slice(0, 3);
       // El texto nombra el lugar si contiene sus palabras clave («salón … del Ágape»).
