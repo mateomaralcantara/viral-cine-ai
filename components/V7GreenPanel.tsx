@@ -23,6 +23,36 @@ export default function V7GreenPanel({ filmId, scene, onSelect }: { filmId: stri
   useEffect(() => { void loadPrep(); }, [loadPrep]);
   useEffect(() => { if (!prep?.running) return; const t = setInterval(() => void loadPrep(), 5000); return () => clearInterval(t); }, [prep?.running, loadPrep]);
   const [approveMsg, setApproveMsg] = useState('');
+  // Importar tomas ya pagadas de otra versión de la película
+  const [films, setFilms] = useState<Array<{ id: string; title: string }>>([]);
+  const [importSource, setImportSource] = useState('');
+  const [importPlan, setImportPlan] = useState<Array<{ target: string; targetTitle: string; source: string; sourceTitle: string; score: number; line: string }> | null>(null);
+  const [importPick, setImportPick] = useState<Record<string, boolean>>({});
+  const [importMsg, setImportMsg] = useState('');
+  async function openImport() {
+    const r = await fetch('/api/v7/films', { cache: 'no-store' }).catch(() => null);
+    const d = r ? await r.json() as { films?: Array<{ id: string; title: string }> } : null;
+    setFilms((d?.films ?? []).filter((f) => f.id !== filmId));
+  }
+  async function proposeImport() {
+    setImportMsg('Comparando tomas…'); setImportPlan(null);
+    const r = await fetch(endpoint + '?importar=' + encodeURIComponent(importSource), { cache: 'no-store' });
+    const d = await r.json() as { ok: boolean; error?: string; propuesta?: typeof importPlan };
+    if (!d.ok || !d.propuesta) { setImportMsg('No se pudo: ' + (d.error ?? '')); return; }
+    setImportPlan(d.propuesta); setImportPick(Object.fromEntries(d.propuesta.map((p) => [p.target, true])));
+    setImportMsg(`${d.propuesta.length} tomas ya pagadas se pueden reutilizar. Revisa las parejas y desmarca las que no quieras.`);
+  }
+  async function doImport() {
+    if (!importPlan) return;
+    try {
+      await ensureLocalStudioSession();
+      const pairs = importPlan.filter((p) => importPick[p.target]).map((p) => ({ target: p.target, source: p.source }));
+      const r = await fetch(endpoint, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'importar', scene, source: importSource, pairs }) });
+      const d = await r.json() as { ok: boolean; error?: string; result?: { done: string[] } };
+      if (!d.ok || !d.result) throw new Error(d.error || 'No se pudo importar');
+      setImportMsg(`Importadas ${d.result.done.length} tomas (gratis): quedan fijadas como tu elección.`); setImportPlan(null); await load();
+    } catch (e) { setImportMsg('No se pudo: ' + (e instanceof Error ? e.message : String(e))); }
+  }
   async function approveScene() {
     setApproveMsg('Aprobando ' + scene + '…');
     try {
@@ -87,6 +117,25 @@ export default function V7GreenPanel({ filmId, scene, onSelect }: { filmId: stri
         <span className="text-xs text-slate-300">Fija todas sus tomas con video (también las hechas con tu material). Ningún agente las vuelve a tocar y la escena se monta sola.</span>
       </div>}
       {approveMsg && <p className="mt-2 text-sm text-emerald-300">{approveMsg}</p>}
+
+      <details className="mt-3 rounded-xl border border-white/10 p-3 text-sm" onToggle={(e) => { if ((e.target as HTMLDetailsElement).open) void openImport(); }}>
+        <summary className="cursor-pointer"><b>Importar tomas ya pagadas de otra versión de la película</b> <span className="text-xs text-slate-400">(gratis: no se vuelven a generar)</span></summary>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <select className="rounded-lg border border-white/20 bg-slate-950 p-2 text-sm text-white" value={importSource} onChange={(e) => { setImportSource(e.target.value); setImportPlan(null); }}>
+            <option value="">Elige la versión anterior…</option>
+            {films.map((f) => <option key={f.id} value={f.id}>{f.title} ({f.id})</option>)}
+          </select>
+          <button type="button" className="button-secondary" disabled={!importSource} onClick={() => void proposeImport()}>Ver qué tomas se reutilizan</button>
+        </div>
+        {importMsg && <p className="mt-2 text-emerald-300">{importMsg}</p>}
+        {importPlan && importPlan.length > 0 && <>
+          <ul className="mt-2 max-h-72 space-y-1 overflow-auto text-xs">
+            {importPlan.map((p) => <li key={p.target}><label className="flex gap-2"><input type="checkbox" checked={!!importPick[p.target]} onChange={(e) => setImportPick({ ...importPick, [p.target]: e.target.checked })}/>
+              <span><b>{p.target}</b> «{p.targetTitle}» ← {p.source} «{p.sourceTitle}» · parecido {Math.round(p.score * 100)} %{p.line ? ` · «${p.line.slice(0, 60)}»` : ''}</span></label></li>)}
+          </ul>
+          <button type="button" className="button-primary mt-2" onClick={() => void doImport()}>Importar las marcadas</button>
+        </>}
+      </details>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button type="button" className="button-secondary" disabled={prep?.running} onClick={() => void prepare(scene)}>Preparar {scene} de antemano (textos + fotos)</button>

@@ -126,7 +126,8 @@
     "rehacer": "node --import tsx scripts/rehacer.ts",
     "preparar": "node --import tsx scripts/preparar.ts",
     "revisar-archivos": "node --import tsx scripts/revisar-archivos.ts",
-    "evaluar": "node --import tsx scripts/evaluar.ts"
+    "evaluar": "node --import tsx scripts/evaluar.ts",
+    "importar-tomas": "node --import tsx scripts/importar-tomas.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",

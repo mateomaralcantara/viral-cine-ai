@@ -105,24 +105,43 @@ export default function V7StudioHome() {
   }
 
   /** Desglose del guion con IA: crea la película con escenas, tomas, diálogos y personajes, lista para el estudio. */
+  type Proposal = {
+    draftId: string; partes: number; marked: number; aviso: string; personajes: string[];
+    stats: { scenes: number; shots: number; totalSeconds: number }; presupuesto: { total: number };
+    escenas: Array<{ label: string; titulo: string; segundos: number; tomas: Array<{ label: string; titulo: string; segundos: number; enCamara: boolean; quien: string; frase: string }> }>;
+  };
+  const [proposal, setProposal] = useState<Proposal | null>(null);
+
+  /** Paso 1: la IA propone el desglose COMPLETO (por partes si es largo). No se crea nada todavía. */
   async function breakdownFilm() {
-    setBreaking(true);
-    setMessage('Desglosando el guion con IA (1–3 minutos)…');
+    setBreaking(true); setProposal(null);
+    setMessage('Desglosando el guion completo con IA (puede tardar varios minutos si es largo)…');
     try {
       await ensureLocalStudioSession();
       const response = await fetch('/api/v7/films/desglose', {
         method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: form.title, story: form.story, durationMinutes: Number(form.durationMinutes), genre: form.genre, quality: form.quality })
+        body: JSON.stringify({ mode: 'propuesta', title: form.title, story: form.story, durationMinutes: Number(form.durationMinutes), genre: form.genre, quality: form.quality })
       });
-      const body = await response.json() as { ok?: boolean; error?: string; nextUrl?: string; stats?: { scenes: number; shots: number; totalSeconds: number }; personajes?: string[]; presupuesto?: { total: number }; aviso?: string };
-      if (!response.ok || !body.ok || !body.nextUrl) throw new Error(body.error || 'No se pudo desglosar el guion.');
-      setMessage(`Listo: ${body.stats?.scenes} escenas, ${body.stats?.shots} tomas, ${Math.round((body.stats?.totalSeconds ?? 0) / 60)} min · presupuesto estimado US$${body.presupuesto?.total.toFixed(2)}. Personajes: ${(body.personajes ?? []).join(', ')}. Abriendo el estudio…`);
-      if (body.aviso) { setMessage(body.aviso + ' Abriendo el estudio en 6 s…'); await new Promise((r) => setTimeout(r, 6000)); }
-      window.location.href = body.nextUrl;
+      const body = await response.json() as Proposal & { ok?: boolean; error?: string };
+      if (!response.ok || !body.ok) throw new Error(body.error || 'No se pudo desglosar el guion.');
+      setProposal(body);
+      setMessage('Revisa la propuesta escena por escena. No se ha creado nada todavía.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
-      setBreaking(false);
-    }
+    } finally { setBreaking(false); }
+  }
+
+  /** Paso 2: con tu visto bueno, la propuesta se convierte en la película. */
+  async function createFromProposal() {
+    if (!proposal) return;
+    setBreaking(true);
+    try {
+      await ensureLocalStudioSession();
+      const response = await fetch('/api/v7/films/desglose', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'crear', draftId: proposal.draftId }) });
+      const body = await response.json() as { ok?: boolean; error?: string; nextUrl?: string };
+      if (!response.ok || !body.ok || !body.nextUrl) throw new Error(body.error || 'No se pudo crear la película.');
+      window.location.href = body.nextUrl;
+    } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); setBreaking(false); }
   }
 
   async function importApprovedFilm() {
@@ -374,8 +393,33 @@ export default function V7StudioHome() {
               title="Pega tu guion completo en «Historia»: la IA lo convierte en escenas y tomas listas para producir"
             >
               {breaking ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
-              {breaking ? 'DESGLOSANDO EL GUION…' : 'DESGLOSAR GUION CON IA Y CREAR LISTA PARA PRODUCIR'}
+              {breaking ? 'DESGLOSANDO EL GUION…' : 'DESGLOSAR GUION CON IA (te muestro la propuesta antes de crear)'}
             </button>
+            {proposal && (
+              <div className="rounded-2xl border border-cyan-400/40 bg-cyan-500/[.05] p-4">
+                <h3 className="text-lg font-black">Revisión del desglose (todavía no se ha creado nada)</h3>
+                <p className="mt-1 text-sm text-slate-300">
+                  {proposal.stats.scenes} escenas · <b>{proposal.stats.shots} tomas</b> · {Math.round(proposal.stats.totalSeconds / 60)} min · presupuesto estimado US${proposal.presupuesto.total.toFixed(2)}
+                  {proposal.marked > 0 && <> · tu guion marca <b>{proposal.marked} planos</b></>}{proposal.partes > 1 && <> · desglosado en {proposal.partes} partes</>}
+                </p>
+                {proposal.aviso && <p className="mt-2 rounded-lg border border-amber-400/40 bg-amber-500/10 p-2 text-sm text-amber-200">{proposal.aviso}</p>}
+                <p className="mt-1 text-xs text-slate-400">Personajes: {proposal.personajes.join(', ')}</p>
+                <div className="mt-3 max-h-[28rem] space-y-2 overflow-auto pr-1">
+                  {proposal.escenas.map((e) => (
+                    <details key={e.label} className="rounded-xl border border-white/10 p-2 text-sm">
+                      <summary className="cursor-pointer"><b>{e.label} · {e.titulo}</b> <span className="text-slate-400">— {e.tomas.length} tomas · {e.segundos} s</span></summary>
+                      <ol className="mt-2 space-y-1 text-xs text-slate-300">
+                        {e.tomas.map((t) => <li key={t.label}><b>{e.label}-{t.label}</b> {t.titulo} · {t.segundos} s{t.frase ? <> · {t.enCamara ? 'en cámara' : 'voz en off'} ({t.quien}): «{t.frase}»</> : ' · sin diálogo'}</li>)}
+                      </ol>
+                    </details>
+                  ))}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button className="button-primary" disabled={breaking} onClick={createFromProposal}>Está bien: crear la película con este desglose</button>
+                  <button className="button-secondary" disabled={breaking} onClick={breakdownFilm}>Volver a desglosar</button>
+                </div>
+              </div>
+            )}
             <p className="text-xs text-slate-400">«Crear película» solo guarda un borrador. «Desglosar guion» crea escenas, tomas, diálogos y personajes (unos céntimos de IA); después subes tus fotos en cada escena y generas.</p>
 
             <div className="grid gap-3 text-xs text-slate-500 sm:grid-cols-3">

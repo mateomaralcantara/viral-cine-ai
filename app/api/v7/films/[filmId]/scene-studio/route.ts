@@ -6,6 +6,7 @@ import {
 import { createReadStream } from 'node:fs';
 import { touchSceneChange } from '@/lib/v7/production/scene-changes';
 import { addShotToScene } from '@/lib/v7/production/scene-shots';
+import { applyImport, planImport } from '@/lib/v7/production/import-shots';
 import { v7FilmRoot } from '@/lib/v7/storage/film-store';
 import path from 'node:path';
 import { listShotVersions, makeStillShot, removeStillShot, restoreShotVersion, shotVersionFile, useVeoVideo } from '@/lib/v7/production/author-photos';
@@ -61,6 +62,9 @@ export async function GET(request: Request, context: Context) {
       if (!file) return fail(404, 'Todavía no hay avance de ' + scene + '. Pulsa «Montar el avance».');
       return serveFile(request, file, 'video/mp4', params.get('descargar') === '1');
     }
+    // Importar tomas ya pagadas de otra versión: propuesta (no cambia nada).
+    const importFrom = params.get('importar') ?? '';
+    if (/^film-[a-z0-9-]+$/.test(importFrom)) return NextResponse.json({ ok: true, propuesta: await planImport(filmId, importFrom) }, { headers: noStore });
     // Escenas en verde: el estudio pregunta cada pocos segundos; las verdes se montan solas (gratis).
     if (params.get('estado') === '1') return NextResponse.json({ ok: true, estado: await greenStatus(filmId, { autoMount: true }) }, { headers: noStore });
     if (params.get('episodio') === '1') {
@@ -114,6 +118,12 @@ export async function POST(request: Request, context: Context) {
       if (!kind) return fail(400, 'Trabajo desconocido.');
       const shots = Array.isArray(body.shots) ? body.shots.filter((x): x is string => typeof x === 'string').slice(0, 30) : [];
       return NextResponse.json({ ok: true, job: await startHarnessJob(filmId, scene, kind, { budgetUsd: Number(body.budgetUsd), shots }) }, { headers: noStore });
+    }
+    if (body.action === 'importar') {
+      const sourceId = String(body.source ?? '');
+      if (!/^film-[a-z0-9-]+$/.test(sourceId) || !Array.isArray(body.pairs)) return fail(400, 'Falta la versión de origen o las tomas.');
+      const pairs = (body.pairs as Array<{ target?: unknown; source?: unknown }>).slice(0, 500).map((x) => ({ target: String(x.target ?? ''), source: String(x.source ?? '') }));
+      return NextResponse.json({ ok: true, result: await applyImport(filmId, sourceId, pairs) }, { headers: noStore });
     }
     if (body.action === 'add-shot') {
       const result = await addShotToScene(filmId, scene, {

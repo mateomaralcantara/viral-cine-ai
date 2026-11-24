@@ -172,3 +172,40 @@ export async function requestBreakdown(ai: GoogleGenAI, input: { title: string; 
 export function countMarkedShots(story: string) {
   return (story.match(/^\s*(?:\*\*)?\s*(?:PLANO|TOMA|SHOT)\s*\d+|^\s*P\d{2}\b/gim) ?? []).length;
 }
+
+/** Parte un guion largo en trozos que el modelo puede desglosar enteros, cortando antes de cada escena/secuencia. */
+export function splitScript(story: string, maxChars = 14000): string[] {
+  if (story.length <= maxChars) return [story];
+  const lines = story.split(/\r?\n/);
+  const heading = /^\s*(#{1,3}\s|ESCENA\b|SECUENCIA\b|SEQ\b|INT\.|EXT\.|INT\/EXT|ESC\.?\s*\d|SCENE\b)/i;
+  const out: string[] = [];
+  let cur: string[] = [];
+  let size = 0;
+  for (const line of lines) {
+    if (size > maxChars * 0.6 && heading.test(line) && cur.length) { out.push(cur.join('\n')); cur = []; size = 0; }
+    if (size > maxChars && line.trim() === '' && cur.length) { out.push(cur.join('\n')); cur = []; size = 0; continue; }
+    cur.push(line); size += line.length + 1;
+  }
+  if (cur.length) out.push(cur.join('\n'));
+  return out;
+}
+
+/** Desglose completo, por partes: cada parte reutiliza las claves de personajes ya creadas. */
+export async function requestFullBreakdown(ai: GoogleGenAI, input: { title: string; story: string; minutes: number; genre: string }, onProgress?: (msg: string) => void) {
+  const parts = splitScript(input.story);
+  const merged: Raw = { premisa: '', estilo: '', personajes: [], escenas: [] };
+  let model = '';
+  for (const [i, part] of parts.entries()) {
+    onProgress?.(`parte ${i + 1} de ${parts.length}`);
+    const known = (merged.personajes ?? []).map((p) => `${p.clave}=${p.nombre}`).join(', ');
+    const story = (parts.length > 1 ? `[Parte ${i + 1} de ${parts.length} del guion. ${known ? 'Usa EXACTAMENTE estas claves para los personajes ya conocidos: ' + known + '.' : ''}]\n` : '') + part;
+    const r = await requestBreakdown(ai, { ...input, story });
+    model = r.model;
+    const raw = JSON.parse(r.raw) as Raw;
+    if (!merged.premisa && raw.premisa) merged.premisa = raw.premisa;
+    if (!merged.estilo && raw.estilo) merged.estilo = raw.estilo;
+    for (const p of raw.personajes ?? []) if (!(merged.personajes ?? []).some((x) => slugKey(x.clave || x.nombre || '') === slugKey(p.clave || p.nombre || ''))) merged.personajes!.push(p);
+    merged.escenas!.push(...(raw.escenas ?? []));
+  }
+  return { raw: merged, model, parts: parts.length };
+}

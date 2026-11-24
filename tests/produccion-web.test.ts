@@ -78,3 +78,22 @@ test('material del autor: las fotos reparten el tiempo que dejan los videos (mí
   assert.equal(isVideoName('crimen.MOV'), true);
   assert.equal(isVideoName('foto.jpg', 'image/jpeg'), false);
 });
+
+test('desglose por partes: un guion largo se corta antes de una escena, sin perder texto', async () => {
+  const { splitScript } = await import('../lib/v7/creation/script-breakdown');
+  const scene = (n: number) => `ESCENA ${n}\n` + 'Mateo habla con Ross sobre el caso.\n'.repeat(120);
+  const story = [1, 2, 3, 4, 5].map(scene).join('\n');
+  const parts = splitScript(story, 8000);
+  assert.ok(parts.length > 1);
+  assert.equal(parts.join('\n'), story);
+  assert.ok(parts.slice(1).every((p) => /^ESCENA \d/.test(p)));
+});
+
+test('importar tomas: el mismo diálogo se reconoce aunque cambie la descripción; distinto diálogo no', async () => {
+  const { shotSimilarity } = await import('../lib/v7/production/import-shots');
+  const a = { title: 'Reporte policial', line: 'Central, necesitamos a investigaciones especiales.', prompt: 'Primer plano del policía junto al coche patrulla bajo la lluvia' };
+  const b = { title: 'El policía llama', line: 'Central, necesitamos a investigaciones especiales.', prompt: 'Plano medio: un agente uniformado habla por radio' };
+  const c = { title: 'La llamada', line: 'Ha aparecido otro.', prompt: 'Ross contesta el teléfono' };
+  assert.ok(shotSimilarity(a, b) >= 0.7);
+  assert.ok(shotSimilarity(a, c) < 0.35);
+});
