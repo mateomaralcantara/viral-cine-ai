@@ -133,11 +133,16 @@ export async function approveScene(filmId: string, sceneLabel: string) {
   const sc = indexedScenes(film).find((s) => s.label === sceneLabel);
   if (!sc) throw new Error('No existe la escena ' + sceneLabel);
   const done: string[] = [];
+  const sinVideo: string[] = [];
   for (const { label } of sc.shots) {
     const dir = path.join(v7FilmRoot(filmId), label.toLowerCase());
+    if (await isRemoved(dir)) continue;
     if (await originalShotVideo(dir, label)) { await lockShot(dir, 'escena aprobada por el autor en el estudio'); done.push(label); }
+    else sinVideo.push(label);
   }
-  return { fijadas: done };
+  // Con todas aprobadas, la escena queda en VERDE y se monta sola (gratis).
+  if (!sinVideo.length) await greenStatus(filmId, { autoMount: true }).catch(() => undefined);
+  return { fijadas: done, sinVideo };
 }
 
 /** Acciones del autor sobre una toma: aprobar (fijar), soltar, quitar del montaje o devolverla. */

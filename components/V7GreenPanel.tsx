@@ -22,6 +22,21 @@ export default function V7GreenPanel({ filmId, scene, onSelect }: { filmId: stri
   }, [endpoint]);
   useEffect(() => { void loadPrep(); }, [loadPrep]);
   useEffect(() => { if (!prep?.running) return; const t = setInterval(() => void loadPrep(), 5000); return () => clearInterval(t); }, [prep?.running, loadPrep]);
+  const [approveMsg, setApproveMsg] = useState('');
+  async function approveScene() {
+    setApproveMsg('Aprobando ' + scene + '…');
+    try {
+      await ensureLocalStudioSession();
+      const r = await fetch(endpoint, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'approve-scene', scene }) });
+      const d = await r.json() as { ok: boolean; error?: string; result?: { fijadas: string[]; sinVideo: string[] } };
+      if (!d.ok || !d.result) throw new Error(d.error || 'No se pudo aprobar');
+      setApproveMsg(d.result.sinVideo.length
+        ? `${scene}: ${d.result.fijadas.length} tomas aprobadas. Sin video todavía (genéralas o usa tu material, o quítalas del montaje): ${d.result.sinVideo.join(', ')}.`
+        : `${scene} APROBADA COMPLETA (${d.result.fijadas.length} tomas). Se está montando sola: aparecerá aquí para verla.`);
+      await load();
+    } catch (e) { setApproveMsg('No se pudo: ' + (e instanceof Error ? e.message : String(e))); }
+  }
+
   async function prepare(target: string) {
     setPrepMsg('');
     try {
@@ -66,6 +81,12 @@ export default function V7GreenPanel({ filmId, scene, onSelect }: { filmId: stri
           </button>
         ))}
       </div>
+
+      {cur && !cur.verde && <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-emerald-400/50 bg-emerald-500/10 p-3">
+        <button type="button" className="button-primary" onClick={() => void approveScene()}>Aprobar escena completa {scene}</button>
+        <span className="text-xs text-slate-300">Fija todas sus tomas con video (también las hechas con tu material). Ningún agente las vuelve a tocar y la escena se monta sola.</span>
+      </div>}
+      {approveMsg && <p className="mt-2 text-sm text-emerald-300">{approveMsg}</p>}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button type="button" className="button-secondary" disabled={prep?.running} onClick={() => void prepare(scene)}>Preparar {scene} de antemano (textos + fotos)</button>

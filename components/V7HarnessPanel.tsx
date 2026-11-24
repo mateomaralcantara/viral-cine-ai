@@ -67,7 +67,7 @@ export default function V7HarnessPanel({ filmId, scene, onChanged, part }: { fil
     try {
       await ensureLocalStudioSession();
       const r = await fetch(endpoint, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scene, ...body }) });
-      const d = await r.json() as { ok: boolean; error?: string; result?: { applied?: string[]; fijadas?: string[] } };
+      const d = await r.json() as { ok: boolean; error?: string; result?: { applied?: string[]; fijadas?: string[]; sinVideo?: string[] } };
       if (!d.ok) throw new Error(d.error || 'Operación rechazada');
       return d;
     } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); return null; } finally { setBusy(''); }
@@ -187,9 +187,9 @@ export default function V7HarnessPanel({ filmId, scene, onChanged, part }: { fil
 
       <div className="mt-4 rounded-xl border border-emerald-400/30 p-3">
         <p className="text-sm">¿Te gusta como queda? Al aprobarla se fijan todas sus tomas: ningún agente las vuelve a tocar (las quitadas siguen fuera).</p>
-        <button type="button" className="button-primary mt-2" disabled={!!busy || running || !avance}
-          onClick={() => void post({ action: 'approve-scene' }, 'approve').then((d) => { if (d) { setNote(`${scene} APROBADA: ${d.result?.fijadas?.length ?? 0} tomas fijadas.`); onChanged(); } })}>
-          6 · Aprobar la escena {scene}</button>
+        <button type="button" className="button-primary mt-2" disabled={!!busy}
+          onClick={() => void post({ action: 'approve-scene' }, 'approve').then((d) => { if (d) { const r = d.result as { fijadas?: string[]; sinVideo?: string[] } | undefined; setNote(`${scene}: ${r?.fijadas?.length ?? 0} tomas aprobadas y fijadas.` + (r?.sinVideo?.length ? ` Sin video todavía (no se pueden aprobar): ${r.sinVideo.join(', ')}.` : ' ESCENA COMPLETA APROBADA: se monta sola y aparece arriba para verla.')); onChanged(); } })}>
+          6 · Aprobar escena completa {scene}</button>
       </div>
       {jobBox}
     </div>
