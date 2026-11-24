@@ -136,12 +136,18 @@ export function normalizeBreakdown(raw: unknown, meta: { filmId: string; title: 
   };
 }
 
-export const BREAKDOWN_MODELS = process.env.V7_BREAKDOWN_MODEL?.trim() ? [process.env.V7_BREAKDOWN_MODEL.trim()] : ['gemini-2.5-pro', 'gemini-2.5-flash'];
+/** Modelos a probar en orden: los de Gemini 3 (los mismos que usan los agentes revisores) y después los 2.5. */
+export const BREAKDOWN_MODELS = [...new Set([
+  process.env.V7_BREAKDOWN_MODEL?.trim(), process.env.V7_QA_MODEL?.trim(),
+  'gemini-3-pro', 'gemini-3-pro-preview', 'gemini-3-flash', 'gemini-3-flash-preview', 'gemini-2.5-pro', 'gemini-2.5-flash'
+].filter((m): m is string => !!m))];
 
 /** Pide el desglose al modelo (unos céntimos). */
 export async function requestBreakdown(ai: GoogleGenAI, input: { title: string; story: string; minutes: number; genre: string }) {
+  const tried: string[] = [];
   let lastError = '';
   for (const model of BREAKDOWN_MODELS) {
+    tried.push(model);
     try {
       const res = await ai.models.generateContent({
         model, contents: [{ role: 'user', parts: [{ text: buildBreakdownPrompt(input) }] }],
@@ -153,5 +159,5 @@ export async function requestBreakdown(ai: GoogleGenAI, input: { title: string; 
       if (!/404|NOT_FOUND|not found|is not supported/i.test(lastError)) break;
     }
   }
-  throw new Error('No se pudo desglosar el guion: ' + lastError.replace(/\s+/g, ' ').slice(0, 220));
+  throw new Error(`No se pudo desglosar el guion (probados: ${tried.join(', ')}): ` + lastError.replace(/\s+/g, ' ').slice(0, 220));
 }
