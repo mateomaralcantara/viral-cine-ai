@@ -5,14 +5,14 @@ import { ensureLocalStudioSession } from '@/lib/v7/security/local-studio-client'
 type Issue = { nivel: 'bloquea' | 'riesgo' | 'aviso'; tipo: string; detalle: string; arreglo: string };
 type ShotPre = { label: string; nota: number; semaforo: 'verde' | 'amarillo' | 'rojo'; problemas: Issue[]; promptSugerido: string };
 type Preflight = { sceneLabel: string; nota: number; listaParaGenerar: boolean; bloqueadas: string[]; tomas: ShotPre[]; fijadas: string[] };
-type JobKind = 'continuidad' | 'autocorreccion' | 'musica' | 'montar' | 'voces' | 'rehacer' | 'decorado' | 'decorado-aprobar';
+type JobKind = 'continuidad' | 'autocorreccion' | 'musica' | 'montar' | 'voces' | 'rehacer' | 'decorado' | 'decorado-aprobar' | 'revisar-archivos';
 type Job = { kind: JobKind; running: boolean; startedAt: string; log: string; budgetUsd?: number } | null;
 type SetInfo = { key: string; nombre: string; aprobado: boolean; existe: boolean } | null;
 type Avance = { name: string; updatedAt: string } | null;
 
 const JOB_NAMES: Record<JobKind, string> = {
   continuidad: 'Fotos de continuidad', autocorreccion: 'Autocorrección en vivo', musica: 'Música de la escena', montar: 'Montar el avance',
-  voces: 'Voces en off', rehacer: 'Rehacer tomas', decorado: 'Plano maestro del salón', 'decorado-aprobar': 'Aprobar el salón'
+  voces: 'Voces en off', rehacer: 'Rehacer tomas', decorado: 'Plano maestro del salón', 'decorado-aprobar': 'Aprobar el salón', 'revisar-archivos': 'Revisar y reparar archivos'
 };
 const dot = { verde: 'bg-emerald-400', amarillo: 'bg-amber-300', rojo: 'bg-red-400' } as const;
 const levelColor = { bloquea: 'text-red-300', riesgo: 'text-amber-200', aviso: 'text-slate-300' } as const;
@@ -177,6 +177,7 @@ export default function V7HarnessPanel({ filmId, scene, onChanged, part }: { fil
           }); }}>
           Montar la escena desde cero (todas las tomas)</button>
         <button type="button" className="button-secondary" disabled={!!busy || running} onClick={() => void start('voces')}>Voces en off (todo el episodio)</button>
+        <button type="button" className="button-secondary" disabled={!!busy || running} onClick={() => void start('revisar-archivos')}>Revisar y reparar archivos de {scene} · gratis</button>
       </div>
 
       {avance

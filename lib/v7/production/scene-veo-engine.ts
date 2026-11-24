@@ -746,12 +746,16 @@ async function submitLocked(filmId: string, plan: Awaited<ReturnType<typeof scen
 
 // ---------- recuperar (gratis: solo consulta la misma operación) ----------
 
-export async function resumeSceneShot(filmId: string, shotId: string) {
+/**
+ * Recupera la tarea de Google (gratis). Con redownload, vuelve a bajar el video de una toma ya terminada
+ * cuyo archivo local se dañó (disco lleno, descarga cortada): el dañado se archiva, no se borra.
+ */
+export async function resumeSceneShot(filmId: string, shotId: string, opts: { redownload?: boolean } = {}) {
   const { plan } = await planShot(filmId, shotId);
   return withSceneLock(filmId, plan.sceneLabel, async () => {
     const record = await readShotRecord(filmId, shotId);
     if (!record || record.provider !== 'veo') throw new Error('No hay una operación de Veo que recuperar en ' + shotId + '.');
-    if (record.status === 'review-required') return { shotId, status: record.status, videoReady: true };
+    if (record.status === 'review-required' && !opts.redownload) return { shotId, status: record.status, videoReady: true };
     if (!record.operationName) throw new Error('Solicitud sin ID de Google: resultado incierto. No reenviar; reconciliar.');
     if (record.operationName.startsWith(INTERACTION_PREFIX)) return resumeInteraction(googleClient('gemini'), filmId, record);
     const ai = googleClient(record.platform ?? 'gemini');
@@ -790,6 +794,10 @@ export async function resumeSceneShot(filmId: string, shotId: string) {
       const seconds = Number(info.format?.duration ?? 0);
       if (seconds < 2 || !info.streams?.some((s) => s.codec_type === 'video')) {
         throw new Error('El video de Veo no supera la verificación técnica.');
+      }
+      if (opts.redownload && existsSync(target)) {
+        await mkdir(attemptsDir(filmId, shotId), { recursive: true });
+        await rename(target, path.join(attemptsDir(filmId, shotId), record.revisionId + '-danado-' + Date.now() + '.mp4'));
       }
       await rename(temp, target);
     } finally {

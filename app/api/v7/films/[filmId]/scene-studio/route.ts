@@ -4,6 +4,7 @@ import {
   resumeSceneShot, resumeWholeScene, sceneLabels, savePromptRevision, sceneStudioBoard, submitSceneShot, submitWholeScene
 } from '@/lib/v7/production/scene-veo-engine';
 import { createReadStream } from 'node:fs';
+import { touchSceneChange } from '@/lib/v7/production/scene-changes';
 import { v7FilmRoot } from '@/lib/v7/storage/film-store';
 import path from 'node:path';
 import { listShotVersions, makeStillShot, removeStillShot, restoreShotVersion, shotVersionFile, useVeoVideo } from '@/lib/v7/production/author-photos';
@@ -142,6 +143,11 @@ export async function POST(request: Request, context: Context) {
     }
     if (body.action === 'resume') {
       return NextResponse.json({ ok: true, result: await resumeSceneShot(filmId, shotId), newGenerationRequests: 0 }, { headers: noStore });
+    }
+    if (body.action === 'redownload') {
+      const result = await resumeSceneShot(filmId, shotId, { redownload: true });
+      await touchSceneChange(filmId, shotId, 'video descargado de nuevo');
+      return NextResponse.json({ ok: true, result, newGenerationRequests: 0 }, { headers: noStore });
     }
     if (body.action === 'submit') {
       if (typeof body.revisionId !== 'string' || typeof body.authorization !== 'string') return fail(400, 'Falta la versión o la autorización.');

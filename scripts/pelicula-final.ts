@@ -784,7 +784,7 @@ async function montar() {
   if (repairedFiles.length) console.log('Reparadas al montar (archivo con problemas, ya corregido): ' + repairedFiles.join(', '));
   if (silentShots.length) console.log('AVISO: sin el sonido de su video (archivo dañado; la voz en off y la música sí van): ' + silentShots.join(', '));
   if (failedShots.length) console.log('NO SE PUDIERON MONTAR (la escena se montó sin ellas): ' + failedShots.join(' · ') +
-    '. Arréglalo en esa toma: «Versiones anteriores» → «Volver a esta versión», «Usar mis fotos y videos», o regenérala.');
+    '. Arréglalo: npm run revisar-archivos -- ' + key + ' --reparar, o en la toma «Volver a descargar de Google · gratis».');
   if (staleVoice.length) console.log('AVISO: la voz grabada NO coincide con el guion en ' + staleVoice.join(', ') + '. Ejecuta: npm run voces -- ' + key + ' y vuelve a montar.');
   if (missingVoice.length) console.log('Sin voz todavía: ' + missingVoice.join(', ') + '  ->  npm run voces -- ' + key + ' --generar');
 }

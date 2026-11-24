@@ -257,6 +257,10 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
                 <button type="button" className="button-secondary" disabled={!!busy || !shot.operationKnown || shot.videoReady}
                   onClick={() => void post({ action: 'resume', shotId: shot.shotId }, shot.shotId)}>
                   Recuperar misma tarea · gratis</button>
+                {shot.videoReady && shot.operationKnown && <button type="button" className="button-secondary" disabled={!!busy}
+                  title="Si el video de esta toma está dañado en tu PC, lo vuelve a bajar de Google sin pagar (el dañado se archiva)"
+                  onClick={() => void post({ action: 'redownload', shotId: shot.shotId }, shot.shotId).then((d) => { if (d) setSummary(shot.shotId + ': video descargado de nuevo de Google (gratis). La escena se vuelve a montar sola.'); })}>
+                  Volver a descargar de Google · gratis</button>}
                 {shot.videoReady && <a className="button-secondary" target="_blank" rel="noreferrer"
                   href={'/api/v7/films/' + encodeURIComponent(filmId) + '/scene-production/video?shotId=' + encodeURIComponent(shot.shotId)}>Ver video de Veo</a>}
                 <span className="text-xs text-slate-400">{shot.revisionId ? 'Versión ' + shot.revisionId.slice(0, 18) : 'Sin versión guardada'}</span>
