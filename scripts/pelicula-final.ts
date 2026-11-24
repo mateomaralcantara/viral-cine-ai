@@ -71,15 +71,40 @@ async function readJson<T>(file: string, fallback: T): Promise<T> {
   try { return JSON.parse(await readFile(file, 'utf8')) as T; } catch { return fallback; }
 }
 async function probe(file: string) {
-  const { stdout } = await run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', file]);
-  return Number(stdout.trim());
+  try {
+    const { stdout } = await run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', file]);
+    const n = Number(stdout.trim());
+    if (!Number.isFinite(n) || n <= 0) throw new Error('sin duración');
+    return n;
+  } catch {
+    throw new Error(`no se puede leer ${path.basename(file)}: el archivo está dañado o incompleto`);
+  }
 }
 async function hasAudio(file: string) {
-  const { stdout } = await run('ffprobe', ['-v', 'error', '-select_streams', 'a', '-show_entries', 'stream=index', '-of', 'csv=p=0', file]);
-  return stdout.trim().length > 0;
+  try {
+    const { stdout } = await run('ffprobe', ['-v', 'error', '-select_streams', 'a', '-show_entries', 'stream=index', '-of', 'csv=p=0', file]);
+    return stdout.trim().length > 0;
+  } catch { return false; }
 }
 async function ffmpeg(list: string[], cwd?: string) {
-  await run('ffmpeg', ['-nostdin', '-v', 'error', '-y', ...list], { cwd, maxBuffer: 1 << 24 });
+  try {
+    await run('ffmpeg', ['-nostdin', '-v', 'error', '-y', ...list], { cwd, maxBuffer: 1 << 24 });
+  } catch (e) {
+    // Mostrar el MOTIVO de FFmpeg (no solo el comando): disco lleno, archivo dañado, sin sonido…
+    const err = e as Error & { stderr?: string; signal?: string };
+    const why = (err.stderr || '').trim().split(/\r?\n/).filter(Boolean).slice(-4).join(' | ')
+      || (err.signal ? 'proceso detenido (' + err.signal + ')' : 'sin detalle');
+    const out = list[list.length - 1];
+    throw new Error(`FFmpeg falló al crear ${path.basename(out)}: ${why}`);
+  }
+}
+
+/** Copia limpia de un video con problemas de sonido o de contenedor (se vuelve a codificar). */
+async function cleanCopy(src: string, work: string, label: string) {
+  const out = path.join(work, `${label}-limpio.mp4`);
+  await ffmpeg(['-err_detect', 'ignore_err', '-i', src, '-map', '0:v:0', '-map', '0:a:0?', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18',
+    '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-ar', '48000', '-ac', '2', out]);
+  return out;
 }
 
 // ---------------------------------------------------------------- VOCES
@@ -546,6 +571,16 @@ async function montar() {
   const parts: string[] = [];
   const missingVideo: string[] = [];
   const staleVoice: string[] = [];
+  const repairedFiles: string[] = [];
+  const silentShots: string[] = [];
+  const failedShots: string[] = [];
+  // Disco casi lleno: ya rompió un montaje antes. Se avisa antes de empezar.
+  try {
+    const { statfs } = await import('node:fs/promises');
+    const fsInfo = await statfs(root);
+    const freeGb = (fsInfo.bavail * fsInfo.bsize) / 1e9;
+    if (freeGb < 2) console.log(`AVISO: quedan solo ${freeGb.toFixed(1)} GB libres en el disco. Si el montaje falla, libera espacio (borra montajes viejos de la carpeta final).`);
+  } catch { /* no se pudo medir */ }
   const notPassed: string[] = [];
   const strictGate = gateEnabled(film) && !flag('--sin-puerta');
   const missingVoice: string[] = [];
@@ -592,7 +627,27 @@ async function montar() {
       // su video trae voces: con voz en off se silencia por completo.
       const bornAsDialogue = (shot.visualPrompt ?? '').includes('«') || shot.metadata?.planB != null;
       const muteVideo = !onCamera && !!voice && (muteVideoUnder(speaker) || bornAsDialogue || await videoHasSpeech(label));
-      const p = await shotPart(work, ++i, label, src, voice, ambient, { onCamera, cameraVoice: !!camVoice, muteVideo, treatment: camVoice ? null : voiceTreatment(speaker) });
+      const partOpts = { onCamera, cameraVoice: !!camVoice, muteVideo, treatment: camVoice ? null : voiceTreatment(speaker) };
+      const index = ++i;
+      let p: Awaited<ReturnType<typeof shotPart>>;
+      try {
+        p = await shotPart(work, index, label, src, voice, ambient, partOpts);
+      } catch (first) {
+        // 1) Se repara el archivo (copia limpia) y se reintenta. 2) Si no, la toma va sin el sonido del video.
+        console.log(`  ${label}: problema con el archivo (${(first as Error).message.slice(0, 160)}). Reparándolo y reintentando…`);
+        try {
+          p = await shotPart(work, index, label, await cleanCopy(src, work, label), voice, ambient, partOpts);
+          repairedFiles.push(label);
+        } catch {
+          try {
+            p = await shotPart(work, index, label, src, voice, ambient, { ...partOpts, muteVideo: true });
+            silentShots.push(label);
+          } catch (last) {
+            failedShots.push(`${label} (${(last as Error).message.slice(0, 160)})`);
+            continue;
+          }
+        }
+      }
       parts.push(p.out);
       const line = (shot.spokenText ?? '').trim();
       if (line && voice && p.voiceSeconds && !camVoice) cues.push(...cuesForLine(line, cursor + VOICE_START_SECONDS, cursor + VOICE_START_SECONDS + p.voiceSeconds));
@@ -726,6 +781,10 @@ async function montar() {
   if (cues.length) console.log(`Subtítulos en español: ${cues.length} (${flag('--ingles') ? 'español + inglés' : 'español'}: pistas seleccionables en el MP4 y archivos .srt)` + (burned ? `\nVersión con subtítulos grabados: ${burned}` : '  ·  grabados en la imagen: --subtitulos-fijos' + (flag('--ingles') ? '' : '  ·  inglés: --ingles')));
   if (missingVideo.length) console.log('Sin video todavía: ' + missingVideo.join(', '));
   if (notPassed.length) console.log('NO ENTRAN (no pasaron la puerta de calidad ni las aprobó el autor): ' + notPassed.join(', ') + '. Corrige con npm run pulir, o apruébalas tú con npm run frase -- ' + key + ' --fijar <toma>.');
+  if (repairedFiles.length) console.log('Reparadas al montar (archivo con problemas, ya corregido): ' + repairedFiles.join(', '));
+  if (silentShots.length) console.log('AVISO: sin el sonido de su video (archivo dañado; la voz en off y la música sí van): ' + silentShots.join(', '));
+  if (failedShots.length) console.log('NO SE PUDIERON MONTAR (la escena se montó sin ellas): ' + failedShots.join(' · ') +
+    '. Arréglalo en esa toma: «Versiones anteriores» → «Volver a esta versión», «Usar mis fotos y videos», o regenérala.');
   if (staleVoice.length) console.log('AVISO: la voz grabada NO coincide con el guion en ' + staleVoice.join(', ') + '. Ejecuta: npm run voces -- ' + key + ' y vuelve a montar.');
   if (missingVoice.length) console.log('Sin voz todavía: ' + missingVoice.join(', ') + '  ->  npm run voces -- ' + key + ' --generar');
 }
