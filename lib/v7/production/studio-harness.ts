@@ -11,6 +11,7 @@ import { readV7FilmBundle, v7FilmRoot } from '@/lib/v7/storage/film-store';
 import { indexedScenes } from './scene-approval-board';
 import { latestPromptRevision, readShotRecord, savePromptRevision, sceneExposureUsd, shotReferencePath } from './scene-veo-engine';
 import { estimateFilmBudget } from '@/lib/v7/creation/budget-estimate';
+import { sceneChangedAt, touchSceneChange } from './scene-changes';
 import { isLocked, isRemoved, lockPath, lockShot, removeShot, restoreShot, unlockShot } from './shot-lock';
 import { originalShotVideo } from './shot-current-video';
 import { approvedSet, readSetSheet, setMasterPath } from './set-master';
@@ -148,6 +149,7 @@ export async function approveScene(filmId: string, sceneLabel: string) {
 /** Acciones del autor sobre una toma: aprobar (fijar), soltar, quitar del montaje o devolverla. */
 export async function shotAuthorAction(filmId: string, shotId: string, action: 'fijar' | 'soltar' | 'quitar' | 'devolver') {
   if (!/^E\d{2}-P\d{2}$/.test(shotId)) throw new Error('Toma inválida.');
+  await touchSceneChange(filmId, shotId, action + ' ' + shotId);
   const dir = path.join(v7FilmRoot(filmId), shotId.toLowerCase());
   if (action === 'fijar') await lockShot(dir, 'aprobada por el autor en el estudio');
   if (action === 'soltar') await unlockShot(dir);
@@ -205,6 +207,7 @@ export async function greenStatus(filmId: string, opts: { autoMount?: boolean } 
     const total = sc.shots.length;
     const verde = fijadas > 0 && fijadas + quitadas === total;
     const avance = await latestAvance(filmId, sc.label);
+    sceneLock = Math.max(sceneLock, await sceneChangedAt(filmId, sc.label));
     const avanceAlDia = !!avance && (await mtime(avance)) >= sceneLock;
     newestLock = Math.max(newestLock, sceneLock);
     let montando = false;

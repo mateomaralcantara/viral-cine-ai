@@ -12,6 +12,7 @@ import { indexedScenes } from './scene-approval-board';
 import { shotReferencePath } from './scene-veo-engine';
 import { isLocked, isRemoved } from './shot-lock';
 import { archiveFile } from './gemini-image';
+import { touchSceneChange } from './scene-changes';
 
 const run = promisify(execFile);
 const exists = (f: string) => access(f).then(() => true, () => false);
@@ -78,6 +79,7 @@ export async function uploadScenePhotos(filmId: string, sceneLabel: string, file
  * la foto ya es exactamente el plano que el autor quiere. La toma queda FIJADA (aprobada por el autor).
  */
 export async function makeStillShot(filmId: string, shotId: string) {
+  await touchSceneChange(filmId, shotId, 'plano fijo ' + shotId);
   const { film } = await readV7FilmBundle(filmId);
   const entry = indexedScenes(film).flatMap((x) => x.shots).find((x) => x.label === shotId);
   if (!entry) throw new Error('No existe la toma ' + shotId);
@@ -99,6 +101,7 @@ export async function makeStillShot(filmId: string, shotId: string) {
 
 /** Quitar el plano fijo: la toma vuelve a usar su video de Veo (si lo tiene) y queda libre para cambios. */
 export async function removeStillShot(filmId: string, shotId: string) {
+  await touchSceneChange(filmId, shotId, 'quitar material ' + shotId);
   const dir = path.join(v7FilmRoot(filmId), shotId.toLowerCase());
   await archiveFile(path.join(dir, shotId + '-plano-fijo.mp4'));
   await rm(path.join(dir, 'fijada.json'), { force: true });
@@ -132,6 +135,7 @@ export function photoSeconds(shotSeconds: number, photos: number, videoSeconds: 
  * No pasa por Veo, es gratis y la toma queda FIJADA. Lo anterior se archiva, no se borra.
  */
 export async function buildAuthorMaterial(filmId: string, shotId: string, files: Array<{ name: string; data: Buffer; type?: string }>) {
+  await touchSceneChange(filmId, shotId, 'material ' + shotId);
   const { film } = await readV7FilmBundle(filmId);
   const entry = indexedScenes(film).flatMap((x) => x.shots).find((x) => x.label === shotId);
   if (!entry) throw new Error('No existe la toma ' + shotId);
@@ -215,6 +219,7 @@ export async function shotVersionFile(filmId: string, shotId: string, id: string
  * El video actual no se borra: si era material tuyo se archiva; si era de Veo, sigue en su sitio por debajo.
  */
 export async function restoreShotVersion(filmId: string, shotId: string, id: string) {
+  await touchSceneChange(filmId, shotId, 'version ' + shotId);
   const src = await shotVersionFile(filmId, shotId, id);
   const dir = path.join(v7FilmRoot(filmId), shotId.toLowerCase());
   const target = path.join(dir, shotId + '-plano-fijo.mp4');
