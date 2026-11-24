@@ -113,6 +113,17 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
     } catch (e) { setMessage(e instanceof Error ? e.message : String(e)); setSummary(''); } finally { setBusy(''); }
   }
 
+  const [versions, setVersions] = useState<Record<string, Array<{ id: string; tipo: string; fecha: string }>>>({});
+  async function loadVersions(shotId: string) {
+    const r = await fetch(endpoint + '?scene=' + scene + '&versiones=' + shotId, { cache: 'no-store' });
+    const d = await r.json() as { ok: boolean; versiones?: Array<{ id: string; tipo: string; fecha: string }> };
+    if (d.ok) setVersions((v) => ({ ...v, [shotId]: d.versiones ?? [] }));
+  }
+  async function restoreVersion(shotId: string, versionId: string) {
+    const d = await post({ action: 'restaurar-version', shotId, versionId }, shotId);
+    if (d) { setSummary(shotId + ': volviste a la versión anterior. Es la que entra en la película y queda FIJADA.'); await loadVersions(shotId); }
+  }
+
   const statusColor = (s: string) => s === 'review-required' ? 'text-emerald-300'
     : s.startsWith('failed') ? 'text-red-300' : s === 'not-started' ? 'text-slate-400' : 'text-amber-200';
 
@@ -224,7 +235,7 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
                     onChange={(e) => { const fs = Array.from(e.target.files ?? []); e.target.value = ''; if (fs.length) void uploadShotMaterial(shot.shotId, fs); }}/>
                 </label>}
                 {(!shot.locked || shot.stillShot) && <span className="text-[10px] text-slate-500">(para elegir varios: Ctrl + clic)</span>}
-                <span className="text-xs text-slate-400">{shot.stillShot ? 'TOMA CON TU MATERIAL (sin Veo)' : shot.authorPhoto ? 'FOTO TUYA (manda: no se sustituye)' : shot.hasReference ? 'foto de continuidad' : 'Veo inventará la imagen'}</span>
+                <span className="text-xs text-slate-400">{shot.stillShot ? 'TOMA ELEGIDA POR TI (tu material o una versión anterior)' : shot.authorPhoto ? 'FOTO TUYA (manda: no se sustituye)' : shot.hasReference ? 'foto de continuidad' : 'Veo inventará la imagen'}</span>
                 {shot.authorPhoto && !shot.stillShot && <button type="button" className="rounded-lg border border-emerald-400/40 px-2 py-1 text-xs text-emerald-200" disabled={!!busy}
                   title="Para imágenes que Veo no acepta o cuando tu foto ya es el plano que quieres"
                   onClick={() => void post({ action: 'plano-fijo', shotId: shot.shotId }, shot.shotId).then((d) => { if (d) setSummary(shot.shotId + ': plano fijo con tu foto creado (gratis) y FIJADO. Entra así en la película.'); })}>
@@ -263,9 +274,22 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
                   Rehacer con foto nueva · ~US${(shot.estimatedUsd + 0.04).toFixed(2)}</button>}
               </div>}
               {shot.stillShot && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                <span className="text-emerald-300">Esta toma ya está resuelta con tu material: entra así en la película. Veo no se usa.</span>
+                <span className="text-emerald-300">Esta toma ya está resuelta con lo que elegiste: entra así en la película.</span>
                 <a className="button-secondary" target="_blank" rel="noreferrer" href={endpoint + '?scene=' + scene + '&tomaAutor=' + shot.shotId}>Ver mi toma</a>
               </div>}
+              <details className="mt-2 rounded-xl border border-white/10 p-2 text-xs" onToggle={(e) => { if ((e.target as HTMLDetailsElement).open) void loadVersions(shot.shotId); }}>
+                <summary className="cursor-pointer text-slate-300">Versiones anteriores de esta toma (ver y volver a una)</summary>
+                {!versions[shot.shotId] ? <p className="mt-2 text-slate-400">Cargando…</p>
+                  : !versions[shot.shotId].length ? <p className="mt-2 text-slate-400">No hay versiones anteriores.</p>
+                  : <div className="mt-2 grid gap-3 sm:grid-cols-2">{versions[shot.shotId].map((v) => (
+                    <div key={v.id} className="rounded-lg border border-white/10 p-2">
+                      <video controls preload="metadata" className="w-full rounded bg-black" src={endpoint + '?scene=' + scene + '&versiones=' + shot.shotId + '&id=' + encodeURIComponent(v.id)}/>
+                      <div className="mt-1 flex items-center justify-between gap-2">
+                        <span className="text-slate-400">{v.tipo === 'veo' ? 'Veo' : 'Tu material'} · {new Date(v.fecha).toLocaleString('es')}</span>
+                        <button type="button" className="button-secondary" disabled={!!busy} onClick={() => void restoreVersion(shot.shotId, v.id)}>Volver a esta versión</button>
+                      </div>
+                    </div>))}</div>}
+              </details>
               {shot.error && !shot.stillShot && <p className="mt-2 text-xs text-red-300">{shot.error}</p>}
               {shot.status === 'review-required' && shot.redoAuthorization && (
                 <details className="mt-3 rounded-xl border border-white/10 p-3">

@@ -182,3 +182,45 @@ export async function buildAuthorMaterial(filmId: string, shotId: string, files:
   await writeFile(path.join(dir, 'fijada.json'), JSON.stringify({ fijada: true, motivo: `material del autor (${saved.length} archivo/s, sin Veo)`, fecha: new Date().toISOString() }, null, 2) + '\n');
   return { shotId, archivos: saved.length, fotos: saved.filter((x) => !x.video).length, videos: saved.filter((x) => x.video).length, seconds: Math.round(await probeSeconds(final) * 10) / 10 };
 }
+
+// ---------- VERSIONES ANTERIORES de una toma: verlas y volver a una ----------
+
+export type ShotVersion = { id: string; tipo: 'veo' | 'material'; fecha: string; bytes: number };
+
+/** Videos anteriores de la toma (Veo archivados al rehacer y material tuyo reemplazado), del más nuevo al más viejo. */
+export async function listShotVersions(filmId: string, shotId: string): Promise<ShotVersion[]> {
+  const dir = path.join(v7FilmRoot(filmId), shotId.toLowerCase());
+  const out: ShotVersion[] = [];
+  const { readdir, stat } = await import('node:fs/promises');
+  for (const [sub, tipo] of [['veo-attempts', 'veo'], ['archivo', 'material']] as const) {
+    const names = await readdir(path.join(dir, sub)).catch(() => [] as string[]);
+    for (const n of names.filter((x) => x.endsWith('.mp4'))) {
+      if (sub === 'archivo' && !n.includes('-plano-fijo')) continue;
+      const st = await stat(path.join(dir, sub, n));
+      out.push({ id: sub + '/' + n, tipo, fecha: st.mtime.toISOString(), bytes: st.size });
+    }
+  }
+  return out.sort((a, b) => b.fecha.localeCompare(a.fecha));
+}
+
+/** Ruta segura de una versión (solo ids que existen en la lista). */
+export async function shotVersionFile(filmId: string, shotId: string, id: string) {
+  const known = await listShotVersions(filmId, shotId);
+  if (!known.some((v) => v.id === id)) throw new Error('Esa versión no existe.');
+  return path.join(v7FilmRoot(filmId), shotId.toLowerCase(), id);
+}
+
+/**
+ * Volver a una versión anterior: pasa a ser el video de la toma (lo que entra en la película) y la toma queda FIJADA.
+ * El video actual no se borra: si era material tuyo se archiva; si era de Veo, sigue en su sitio por debajo.
+ */
+export async function restoreShotVersion(filmId: string, shotId: string, id: string) {
+  const src = await shotVersionFile(filmId, shotId, id);
+  const dir = path.join(v7FilmRoot(filmId), shotId.toLowerCase());
+  const target = path.join(dir, shotId + '-plano-fijo.mp4');
+  const { copyFile } = await import('node:fs/promises');
+  await archiveFile(target);
+  await copyFile(src, target);
+  await writeFile(path.join(dir, 'fijada.json'), JSON.stringify({ fijada: true, motivo: 'el autor volvió a una versión anterior (' + id + ')', fecha: new Date().toISOString() }, null, 2) + '\n');
+  return { shotId, restaurada: id };
+}

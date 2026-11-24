@@ -6,7 +6,7 @@ import {
 import { createReadStream } from 'node:fs';
 import { v7FilmRoot } from '@/lib/v7/storage/film-store';
 import path from 'node:path';
-import { makeStillShot, removeStillShot } from '@/lib/v7/production/author-photos';
+import { listShotVersions, makeStillShot, removeStillShot, restoreShotVersion, shotVersionFile } from '@/lib/v7/production/author-photos';
 import { stat } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import {
@@ -39,6 +39,13 @@ export async function GET(request: Request, context: Context) {
     if (params.get('avance') === 'info') {
       const file = await latestAvance(filmId, scene);
       return NextResponse.json({ ok: true, avance: file ? { name: file.split(/[\\/]/).pop(), updatedAt: (await stat(file)).mtime.toISOString() } : null }, { headers: noStore });
+    }
+    // Versiones anteriores de una toma: la lista y cada video, para verlas y volver a una.
+    const versionsOf = params.get('versiones') ?? '';
+    if (/^E\d{2}-P\d{2}$/.test(versionsOf)) {
+      const id = params.get('id');
+      if (id) return serveFile(request, await shotVersionFile(filmId, versionsOf, id), 'video/mp4');
+      return NextResponse.json({ ok: true, versiones: await listShotVersions(filmId, versionsOf) }, { headers: noStore });
     }
     // La toma hecha con el material del autor (fotos y videos, sin Veo), para verla.
     const own = params.get('tomaAutor') ?? '';
@@ -105,6 +112,10 @@ export async function POST(request: Request, context: Context) {
       if (!kind) return fail(400, 'Trabajo desconocido.');
       const shots = Array.isArray(body.shots) ? body.shots.filter((x): x is string => typeof x === 'string').slice(0, 30) : [];
       return NextResponse.json({ ok: true, job: await startHarnessJob(filmId, scene, kind, { budgetUsd: Number(body.budgetUsd), shots }) }, { headers: noStore });
+    }
+    if (body.action === 'restaurar-version') {
+      if (typeof body.versionId !== 'string') return fail(400, 'Falta la versión.');
+      return NextResponse.json({ ok: true, result: await restoreShotVersion(filmId, shotId, body.versionId) }, { headers: noStore });
     }
     if (body.action === 'plano-fijo') {
       return NextResponse.json({ ok: true, result: await makeStillShot(filmId, shotId) }, { headers: noStore });
