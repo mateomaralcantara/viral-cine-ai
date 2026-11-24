@@ -6,7 +6,7 @@ import {
 import { createReadStream } from 'node:fs';
 import { v7FilmRoot } from '@/lib/v7/storage/film-store';
 import path from 'node:path';
-import { listShotVersions, makeStillShot, removeStillShot, restoreShotVersion, shotVersionFile } from '@/lib/v7/production/author-photos';
+import { listShotVersions, makeStillShot, removeStillShot, restoreShotVersion, shotVersionFile, useVeoVideo } from '@/lib/v7/production/author-photos';
 import { stat } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import {
@@ -112,6 +112,9 @@ export async function POST(request: Request, context: Context) {
       if (!kind) return fail(400, 'Trabajo desconocido.');
       const shots = Array.isArray(body.shots) ? body.shots.filter((x): x is string => typeof x === 'string').slice(0, 30) : [];
       return NextResponse.json({ ok: true, job: await startHarnessJob(filmId, scene, kind, { budgetUsd: Number(body.budgetUsd), shots }) }, { headers: noStore });
+    }
+    if (body.action === 'usar-veo') {
+      return NextResponse.json({ ok: true, result: await useVeoVideo(filmId, shotId) }, { headers: noStore });
     }
     if (body.action === 'restaurar-version') {
       if (typeof body.versionId !== 'string') return fail(400, 'Falta la versión.');

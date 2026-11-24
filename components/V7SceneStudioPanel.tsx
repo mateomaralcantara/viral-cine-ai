@@ -258,7 +258,7 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
                   onClick={() => void post({ action: 'resume', shotId: shot.shotId }, shot.shotId)}>
                   Recuperar misma tarea · gratis</button>
                 {shot.videoReady && <a className="button-secondary" target="_blank" rel="noreferrer"
-                  href={'/api/v7/films/' + encodeURIComponent(filmId) + '/scene-production/video?shotId=' + encodeURIComponent(shot.shotId)}>Ver MP4</a>}
+                  href={'/api/v7/films/' + encodeURIComponent(filmId) + '/scene-production/video?shotId=' + encodeURIComponent(shot.shotId)}>Ver video de Veo</a>}
                 <span className="text-xs text-slate-400">{shot.revisionId ? 'Versión ' + shot.revisionId.slice(0, 18) : 'Sin versión guardada'}</span>
               </div>
               {shot.videoReady && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
@@ -276,6 +276,9 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
               {shot.stillShot && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                 <span className="text-emerald-300">Esta toma ya está resuelta con lo que elegiste: entra así en la película.</span>
                 <a className="button-secondary" target="_blank" rel="noreferrer" href={endpoint + '?scene=' + scene + '&tomaAutor=' + shot.shotId}>Ver mi toma</a>
+                {shot.videoReady && <button type="button" className="button-primary" disabled={!!busy}
+                  onClick={() => { if (window.confirm(`¿Usar en la película el video de Veo de ${shot.shotId} (el de «Ver video de Veo»)? Lo que subiste queda archivado, no se borra.`)) void post({ action: 'usar-veo', shotId: shot.shotId }, shot.shotId).then((d) => { if (d) setSummary(shot.shotId + ': la película usa ahora el video de Veo (FIJADA). La escena se vuelve a montar sola.'); }); }}>
+                  Usar el video de Veo en la película</button>}
               </div>}
               <details className="mt-2 rounded-xl border border-white/10 p-2 text-xs" onToggle={(e) => { if ((e.target as HTMLDetailsElement).open) void loadVersions(shot.shotId); }}>
                 <summary className="cursor-pointer text-slate-300">Versiones anteriores de esta toma (ver y volver a una)</summary>

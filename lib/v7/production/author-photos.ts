@@ -108,6 +108,20 @@ export async function removeStillShot(filmId: string, shotId: string) {
   return { shotId };
 }
 
+/**
+ * USAR EL VIDEO DE VEO: quita el material del autor de la toma (queda archivado) y deja FIJADA la toma
+ * con su video de Veo (el de «Ver video de Veo»). Así entra en la película el video generado.
+ */
+export async function useVeoVideo(filmId: string, shotId: string) {
+  const dir = path.join(v7FilmRoot(filmId), shotId.toLowerCase());
+  const veo = [shotId + '-veo-candidato.mp4', shotId + '-runway-gen4-turbo.mp4'].map((f) => path.join(dir, f));
+  if (!(await Promise.all(veo.map(exists))).some(Boolean)) throw new Error(shotId + ' no tiene video de Veo.');
+  await removeStillShot(filmId, shotId);
+  await writeFile(path.join(dir, 'fijada.json'), JSON.stringify({ fijada: true, motivo: 'el autor eligió el video de Veo', fecha: new Date().toISOString() }, null, 2) + '\n');
+  await touchSceneChange(filmId, shotId, 'usar video de Veo ' + shotId);
+  return { shotId };
+}
+
 // ---------- MATERIAL DEL AUTOR: varias fotos y/o videos cortos para una toma (sin Veo) ----------
 
 const VIDEO_EXT = /\.(mp4|mov|m4v|webm|mkv|avi)$/i;
