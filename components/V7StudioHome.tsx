@@ -114,9 +114,10 @@ export default function V7StudioHome() {
         method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: form.title, story: form.story, durationMinutes: Number(form.durationMinutes), genre: form.genre, quality: form.quality })
       });
-      const body = await response.json() as { ok?: boolean; error?: string; nextUrl?: string; stats?: { scenes: number; shots: number; totalSeconds: number }; personajes?: string[]; presupuesto?: { total: number } };
+      const body = await response.json() as { ok?: boolean; error?: string; nextUrl?: string; stats?: { scenes: number; shots: number; totalSeconds: number }; personajes?: string[]; presupuesto?: { total: number }; aviso?: string };
       if (!response.ok || !body.ok || !body.nextUrl) throw new Error(body.error || 'No se pudo desglosar el guion.');
       setMessage(`Listo: ${body.stats?.scenes} escenas, ${body.stats?.shots} tomas, ${Math.round((body.stats?.totalSeconds ?? 0) / 60)} min · presupuesto estimado US$${body.presupuesto?.total.toFixed(2)}. Personajes: ${(body.personajes ?? []).join(', ')}. Abriendo el estudio…`);
+      if (body.aviso) { setMessage(body.aviso + ' Abriendo el estudio en 6 s…'); await new Promise((r) => setTimeout(r, 6000)); }
       window.location.href = body.nextUrl;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));

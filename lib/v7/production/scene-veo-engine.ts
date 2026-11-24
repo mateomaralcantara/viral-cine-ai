@@ -426,6 +426,7 @@ export async function sceneStudioBoard(filmId: string, sceneLabel: string) {
   return {
     ...plan,
     pendingShots: pending.map((s) => s.shotId),
+    characters: await readV7FilmBundle(filmId).then(({ film }) => film.characters.map((c) => ({ key: c.id.replace(/^.*-character-/, ''), name: c.name, image: !/sin imagen/i.test(c.appearance) })), () => []),
     sceneTotalUsd,
     sceneAuthorization: pending.length ? sceneAuthorizationPhrase(plan.sceneLabel, sceneTotalUsd) : null,
     model: veoSceneModel(),

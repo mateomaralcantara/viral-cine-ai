@@ -125,7 +125,8 @@
     "decorado": "node --import tsx scripts/decorado.ts",
     "rehacer": "node --import tsx scripts/rehacer.ts",
     "preparar": "node --import tsx scripts/preparar.ts",
-    "revisar-archivos": "node --import tsx scripts/revisar-archivos.ts"
+    "revisar-archivos": "node --import tsx scripts/revisar-archivos.ts",
+    "evaluar": "node --import tsx scripts/evaluar.ts"
   },
   "dependencies": {
     "@fal-ai/client": "^1.6.2",

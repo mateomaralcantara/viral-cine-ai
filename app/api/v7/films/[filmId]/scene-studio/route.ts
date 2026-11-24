@@ -5,6 +5,7 @@ import {
 } from '@/lib/v7/production/scene-veo-engine';
 import { createReadStream } from 'node:fs';
 import { touchSceneChange } from '@/lib/v7/production/scene-changes';
+import { addShotToScene } from '@/lib/v7/production/scene-shots';
 import { v7FilmRoot } from '@/lib/v7/storage/film-store';
 import path from 'node:path';
 import { listShotVersions, makeStillShot, removeStillShot, restoreShotVersion, shotVersionFile, useVeoVideo } from '@/lib/v7/production/author-photos';
@@ -113,6 +114,14 @@ export async function POST(request: Request, context: Context) {
       if (!kind) return fail(400, 'Trabajo desconocido.');
       const shots = Array.isArray(body.shots) ? body.shots.filter((x): x is string => typeof x === 'string').slice(0, 30) : [];
       return NextResponse.json({ ok: true, job: await startHarnessJob(filmId, scene, kind, { budgetUsd: Number(body.budgetUsd), shots }) }, { headers: noStore });
+    }
+    if (body.action === 'add-shot') {
+      const result = await addShotToScene(filmId, scene, {
+        title: String(body.title ?? ''), camera: String(body.camera ?? ''), description: String(body.description ?? ''),
+        speaker: typeof body.speaker === 'string' ? body.speaker : '', line: typeof body.line === 'string' ? body.line : '',
+        onCamera: body.onCamera !== false, seconds: Number(body.seconds) as 4 | 6 | 8
+      });
+      return NextResponse.json({ ok: true, result }, { headers: noStore });
     }
     if (body.action === 'usar-veo') {
       return NextResponse.json({ ok: true, result: await useVeoVideo(filmId, shotId) }, { headers: noStore });

@@ -17,6 +17,7 @@ type StudioBoard = {
   tariffConfigured: boolean; ratePerSecondUsd: number | null; capUsd: number;
   exposureUsd: number; remainingUsd: number; shots: StudioShot[];
   pendingShots: string[]; sceneTotalUsd: number; sceneAuthorization: string | null;
+  characters?: Array<{ key: string; name: string; image: boolean }>;
 };
 
 
@@ -122,6 +123,13 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
   async function restoreVersion(shotId: string, versionId: string) {
     const d = await post({ action: 'restaurar-version', shotId, versionId }, shotId);
     if (d) { setSummary(shotId + ': volviste a la versión anterior. Es la que entra en la película y queda FIJADA.'); await loadVersions(shotId); }
+  }
+
+  const [newShot, setNewShot] = useState({ title: '', camera: 'Plano medio', description: '', speaker: '', line: '', onCamera: true, seconds: 6 });
+  async function addShot() {
+    const d = await post({ action: 'add-shot', scene, ...newShot }, 'add-shot');
+    const r = (d as { result?: { label: string } } | null)?.result;
+    if (r) { setSummary(`${r.label} añadida al final de ${scene}. Genérala, o ponle tus fotos/videos.`); setNewShot({ ...newShot, title: '', description: '', line: '' }); }
   }
 
   const statusColor = (s: string) => s === 'review-required' ? 'text-emerald-300'
@@ -337,6 +345,30 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
           );
         })}
       </div>
+      {board && !board.legacy && <details className="mt-5 rounded-2xl border border-cyan-400/40 p-4">
+        <summary className="cursor-pointer text-lg font-black">+ Añadir toma a {scene} (planos del guion que faltan)</summary>
+        <p className="mt-1 text-xs text-slate-400">Se añade al final de la escena; las tomas que ya tienen video no cambian. Gratis.</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <input className="rounded-lg border border-white/20 bg-slate-950 p-2 text-sm text-white" placeholder="Título (p. ej. El policía llama a la central)" value={newShot.title} onChange={(e) => setNewShot({ ...newShot, title: e.target.value })}/>
+          <select className="rounded-lg border border-white/20 bg-slate-950 p-2 text-sm text-white" value={newShot.camera} onChange={(e) => setNewShot({ ...newShot, camera: e.target.value })}>
+            {['Plano general', 'Plano medio', 'Primer plano', 'Plano detalle', 'Plano medio corto', 'Travelling lento'].map((c) => <option key={c}>{c}</option>)}
+          </select>
+          <textarea className="rounded-lg border border-white/20 bg-slate-950 p-2 text-sm text-white sm:col-span-2" rows={3} placeholder="Qué se ve (nombra a los personajes por su nombre)" value={newShot.description} onChange={(e) => setNewShot({ ...newShot, description: e.target.value })}/>
+          <select className="rounded-lg border border-white/20 bg-slate-950 p-2 text-sm text-white" value={newShot.speaker} onChange={(e) => setNewShot({ ...newShot, speaker: e.target.value })}>
+            <option value="">Nadie habla</option>
+            {(board.characters ?? []).map((c) => <option key={c.key} value={c.key}>{c.name}{c.image ? '' : ' (voz en off)'}</option>)}
+          </select>
+          <select className="rounded-lg border border-white/20 bg-slate-950 p-2 text-sm text-white" value={String(newShot.seconds)} onChange={(e) => setNewShot({ ...newShot, seconds: Number(e.target.value) })}>
+            {[4, 6, 8].map((n) => <option key={n} value={n}>{n} segundos</option>)}
+          </select>
+          {newShot.speaker && <>
+            <input className="rounded-lg border border-white/20 bg-slate-950 p-2 text-sm text-white sm:col-span-2" placeholder="Lo que dice (texto exacto del guion)" value={newShot.line} onChange={(e) => setNewShot({ ...newShot, line: e.target.value })}/>
+            <label className="text-sm text-slate-300"><input type="checkbox" checked={newShot.onCamera} onChange={(e) => setNewShot({ ...newShot, onCamera: e.target.checked })}/> Lo dice en cámara (si no, voz en off)</label>
+          </>}
+        </div>
+        <button type="button" className="button-primary mt-3" disabled={!!busy || newShot.title.trim().length < 2 || newShot.description.trim().length < 15} onClick={() => void addShot()}>
+          Añadir esta toma a {scene}</button>
+      </details>}
       <p className="mt-4 text-xs text-slate-400">
         Cuando un video está listo, apruébalo y monta la escena en la pestaña «Escenas», como en E02.
       </p>

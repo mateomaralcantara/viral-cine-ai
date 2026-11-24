@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { localAdminAuthorized, localOriginAllowed } from '@/lib/v7/security/local-studio-session';
-import { normalizeBreakdown, requestBreakdown, slugKey } from '@/lib/v7/creation/script-breakdown';
+import { countMarkedShots, normalizeBreakdown, requestBreakdown, slugKey } from '@/lib/v7/creation/script-breakdown';
 import { estimateFilmBudget } from '@/lib/v7/creation/budget-estimate';
 import { buildShortFilmBundle, shortFilmStats } from '@/lib/v7/presets/short-film-builder';
 import { saveV7FilmBundle, v7FilmBundleExists } from '@/lib/v7/storage/film-store';
@@ -50,8 +50,11 @@ export async function POST(request: Request) {
       order++;
     }
     const stats = shortFilmStats(spec);
+    const marked = countMarkedShots(story);
+    const aviso = marked > 0 && stats.shots < marked
+      ? `Tu guion marca ${marked} planos y el desglose creó ${stats.shots} tomas: revisa cada escena y añade los que falten con «+ Añadir toma».` : '';
     return NextResponse.json({
-      ok: true, filmId, model, stats,
+      ok: true, filmId, model, stats, aviso,
       personajes: spec.characters.filter((x) => !/sin imagen/i.test(x.appearance)).map((c) => c.name),
       presupuesto: estimateFilmBudget({ seconds: stats.totalSeconds, shots: stats.shots, quality: quality as 'cine' }),
       nextUrl: '/v7/films/' + encodeURIComponent(filmId) + '?tab=studio'

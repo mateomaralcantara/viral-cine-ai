@@ -38,6 +38,7 @@ export function buildBreakdownPrompt(input: { title: string; story: string; minu
     'REGLAS:',
     '- Respeta el texto del autor: los diálogos se copian tal cual, en orden, sin resumir ni inventar.',
     '- Escenas = secuencias del guion. Tomas de 4, 6 u 8 segundos (segundos).',
+    '- MUY IMPORTANTE: si el guion numera o marca planos/tomas (PLANO 1, P01, TOMA 2, SHOT 3, «Plano general:»…), crea EXACTAMENTE una toma por cada plano, en el mismo orden. Nunca juntes dos planos en una toma ni te saltes ninguno.',
     '- tipo «dialogo»: el personaje lo dice EN CÁMARA. tipo «voz»: voz en off (narrador, recuerdos, voces sin cuerpo). tipo «imagen»: sin voz (frase vacía).',
     '- Una frase larga se reparte en varias tomas consecutivas (unas 14 letras por segundo).',
     '- descripcion: solo lo VISIBLE, en una frase, nombrando a los personajes por su nombre. Nada de letras, carteles ni texto legible.',
@@ -104,7 +105,8 @@ export function normalizeBreakdown(raw: unknown, meta: { filmId: string; title: 
       const shown = visible(desc + ' ' + (t.tipo === 'dialogo' && speaker ? speaker.name : ''));
       for (const c of shown) if (!cast.includes(c.key)) cast.push(c.key);
       const looks = shown.map((c) => `${c.name}: ${c.appearance}.`).join(' ');
-      const wardrobe = shown.length && s.vestuario ? ` Vestuario: ${s.vestuario.trim().replace(/\.$/, '')}.` : '';
+      const protagonist = [...chars.values()].find((c) => c.image);
+      const wardrobe = s.vestuario && protagonist && shown.some((c) => c.key === protagonist.key) ? ` Vestuario: ${s.vestuario.trim().replace(/\.$/, '')}.` : '';
       const base = `En ${(s.lugar || 'el lugar de la escena').trim()}, ${desc}. ${looks}${wardrobe}`.replace(/\s+/g, ' ').trim();
       if (t.tipo === 'dialogo' && line && speaker?.image) {
         for (const [i, part] of splitToFit(line, (x) => onCameraSeconds(x) !== null).entries()) {
@@ -128,7 +130,10 @@ export function normalizeBreakdown(raw: unknown, meta: { filmId: string; title: 
   });
   if (!scenes.length) throw new Error('El desglose no produjo ninguna escena. Revisa que el guion tenga escenas y diálogos.');
   return {
-    id: meta.filmId, title: meta.title, premise: (r.premisa || '').trim() || meta.title, genre: meta.genre, audience: 'Público adulto', visualStyle: style,
+    id: meta.filmId, title: meta.title,
+    // El guion guardado exige una premisa de al menos 20 letras y un género de al menos 2.
+    premise: [((r.premisa || '').trim()), `${meta.title}: ${scenes[0].summary || scenes[0].title}`].find((x) => x.length >= 20) ?? `${meta.title}, película producida con ViralCine.`,
+    genre: meta.genre.trim().length >= 2 ? meta.genre.trim() : 'Drama', audience: 'Público adulto', visualStyle: style,
     continuityNotes: ['Misma cara de cada personaje en todas las tomas (ficha oficial)', 'Sin texto en pantalla'],
     metadata: { serie: meta.serie, format: 'pelicula', creationMode: 'desglose-ia', qualityPreset: meta.quality ?? 'cine', puertaDeCalidad: true, continuidadObligatoria: true },
     characters: [...chars.values()].map((c) => ({ key: c.key, name: c.name, age: c.age, role: c.role, appearance: c.appearance, voice: c.voice })),
@@ -160,4 +165,9 @@ export async function requestBreakdown(ai: GoogleGenAI, input: { title: string; 
     }
   }
   throw new Error(`No se pudo desglosar el guion (probados: ${tried.join(', ')}): ` + lastError.replace(/\s+/g, ' ').slice(0, 220));
+}
+
+/** Planos que el autor marcó en cada escena del guion (PLANO 1, P01, TOMA 2…), para comprobar el desglose. */
+export function countMarkedShots(story: string) {
+  return (story.match(/^\s*(?:\*\*)?\s*(?:PLANO|TOMA|SHOT)\s*\d+|^\s*P\d{2}\b/gim) ?? []).length;
 }
