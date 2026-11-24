@@ -4,6 +4,7 @@ import {
   resumeSceneShot, resumeWholeScene, sceneLabels, savePromptRevision, sceneStudioBoard, submitSceneShot, submitWholeScene
 } from '@/lib/v7/production/scene-veo-engine';
 import { createReadStream } from 'node:fs';
+import { makeStillShot, removeStillShot } from '@/lib/v7/production/author-photos';
 import { stat } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import {
@@ -95,6 +96,12 @@ export async function POST(request: Request, context: Context) {
       if (!kind) return fail(400, 'Trabajo desconocido.');
       const shots = Array.isArray(body.shots) ? body.shots.filter((x): x is string => typeof x === 'string').slice(0, 30) : [];
       return NextResponse.json({ ok: true, job: await startHarnessJob(filmId, scene, kind, { budgetUsd: Number(body.budgetUsd), shots }) }, { headers: noStore });
+    }
+    if (body.action === 'plano-fijo') {
+      return NextResponse.json({ ok: true, result: await makeStillShot(filmId, shotId) }, { headers: noStore });
+    }
+    if (body.action === 'quitar-plano-fijo') {
+      return NextResponse.json({ ok: true, result: await removeStillShot(filmId, shotId) }, { headers: noStore });
     }
     if (body.action === 'approve-scene') {
       return NextResponse.json({ ok: true, result: await approveScene(filmId, scene) }, { headers: noStore });

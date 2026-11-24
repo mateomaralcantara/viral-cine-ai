@@ -16,8 +16,11 @@ export async function fileSha256(file: string) {
   return hash.digest('hex');
 }
 
+/** Plano fijo hecho con la foto del autor (sin Veo): si existe, es el video de la toma. */
+export const stillShotPath = (dir: string, label: string) => path.join(dir, label + '-plano-fijo.mp4');
+
 export async function originalShotVideo(dir: string, label: string) {
-  for (const f of [label + '-runway-gen4-turbo.mp4', label + '-veo-candidato.mp4']) {
+  for (const f of [label + '-plano-fijo.mp4', label + '-runway-gen4-turbo.mp4', label + '-veo-candidato.mp4']) {
     if (await exists(path.join(dir, f))) return path.join(dir, f);
   }
   return null;

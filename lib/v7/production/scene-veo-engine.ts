@@ -417,6 +417,7 @@ export async function sceneStudioBoard(filmId: string, sceneLabel: string) {
       removed: await isRemoved(shotDir(filmId, shot.shotId)),
       hasReference: Boolean(reference),
       authorPhoto: existsSync(path.join(shotDir(filmId, shot.shotId), 'foto-del-autor.json')),
+      stillShot: existsSync(path.join(shotDir(filmId, shot.shotId), shot.shotId + '-plano-fijo.mp4')),
       gate: await readFile(path.join(shotDir(filmId, shot.shotId), 'puerta.json'), 'utf8').then((t) => JSON.parse(t) as { pass: boolean; reasons: string[] }, () => null)
     };
   }));

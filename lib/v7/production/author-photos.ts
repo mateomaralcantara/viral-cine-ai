@@ -71,3 +71,36 @@ export async function uploadScenePhotos(filmId: string, sceneLabel: string, file
   }
   return { results };
 }
+
+/**
+ * PLANO FIJO CON LA FOTO DEL AUTOR (gratis, sin Veo): la foto con un acercamiento lento de cine,
+ * de la duración de la toma. Para imágenes que Veo no acepta (p. ej. una escena del crimen) o cuando
+ * la foto ya es exactamente el plano que el autor quiere. La toma queda FIJADA (aprobada por el autor).
+ */
+export async function makeStillShot(filmId: string, shotId: string) {
+  const { film } = await readV7FilmBundle(filmId);
+  const entry = indexedScenes(film).flatMap((x) => x.shots).find((x) => x.label === shotId);
+  if (!entry) throw new Error('No existe la toma ' + shotId);
+  const dir = path.join(v7FilmRoot(filmId), shotId.toLowerCase());
+  const ref = shotReferencePath(filmId, shotId);
+  if (!(await exists(ref))) throw new Error(shotId + ' no tiene foto: súbela primero con «Subir mi foto».');
+  const seconds = Math.max(2, entry.shot.durationSeconds);
+  const frames = Math.round(seconds * 24);
+  const out = path.join(dir, shotId + '-plano-fijo.mp4');
+  const tmp = out + '.tmp.mp4';
+  // Acercamiento lento y centrado (Ken Burns) en alta resolución para que no tiemble.
+  const zoom = `scale=3840:2160:force_original_aspect_ratio=increase,crop=3840:2160,zoompan=z='min(1+0.10*on/${frames},1.10)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=1280x720:fps=24,format=yuv420p`;
+  await run('ffmpeg', ['-nostdin', '-v', 'error', '-y', '-loop', '1', '-i', ref, '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo',
+    '-filter_complex', `[0:v]${zoom}[v]`, '-map', '[v]', '-map', '1:a', '-t', String(seconds), '-c:v', 'libx264', '-crf', '18', '-preset', 'medium', '-c:a', 'aac', '-shortest', tmp]);
+  await rename(tmp, out);
+  await writeFile(path.join(dir, 'fijada.json'), JSON.stringify({ fijada: true, motivo: 'plano fijo con la foto del autor (sin Veo)', fecha: new Date().toISOString() }, null, 2) + '\n');
+  return { shotId, seconds, file: out };
+}
+
+/** Quitar el plano fijo: la toma vuelve a usar su video de Veo (si lo tiene) y queda libre para cambios. */
+export async function removeStillShot(filmId: string, shotId: string) {
+  const dir = path.join(v7FilmRoot(filmId), shotId.toLowerCase());
+  await archiveFile(path.join(dir, shotId + '-plano-fijo.mp4'));
+  await rm(path.join(dir, 'fijada.json'), { force: true });
+  return { shotId };
+}

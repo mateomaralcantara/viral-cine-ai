@@ -10,7 +10,7 @@ type StudioShot = {
   promptText: string; revisionId: string | null; revisionUsed: boolean;
   mode: 'text-to-video' | 'image-to-video'; estimatedUsd: number | null;
   authorization: string | null; redoAuthorization: string | null; videoReady: boolean;
-  locked?: boolean; removed?: boolean; hasReference?: boolean; authorPhoto?: boolean; gate?: { pass: boolean; reasons: string[] } | null;
+  locked?: boolean; removed?: boolean; hasReference?: boolean; authorPhoto?: boolean; stillShot?: boolean; gate?: { pass: boolean; reasons: string[] } | null;
 };
 type StudioBoard = {
   sceneLabel: string; sceneLabels?: string[]; platform?: 'gemini' | 'vertex'; platformProblem?: string | null; frozen?: boolean; title: string; legacy: boolean; model: string; providerEnabled: boolean;
@@ -200,7 +200,13 @@ export default function V7SceneStudioPanel({ filmId }: { filmId: string }) {
                   ? <a href={endpoint + '/fotos?shot=' + shot.shotId} target="_blank" rel="noreferrer" title="Foto de partida">
                       <img alt={'Foto de partida ' + shot.shotId} className="h-16 rounded-lg border border-white/20" src={endpoint + '/fotos?shot=' + shot.shotId + '&v=' + (photoStamp[shot.shotId] ?? 0)}/></a>
                   : <span className="flex h-16 w-28 items-center justify-center rounded-lg border border-dashed border-white/20 text-[10px] text-slate-500">sin foto</span>}
-                <span className="text-xs text-slate-400">{shot.authorPhoto ? 'FOTO TUYA (manda: no se sustituye)' : shot.hasReference ? 'foto de continuidad' : 'Veo inventará la imagen'}</span>
+                <span className="text-xs text-slate-400">{shot.stillShot ? 'PLANO FIJO CON TU FOTO (sin Veo)' : shot.authorPhoto ? 'FOTO TUYA (manda: no se sustituye)' : shot.hasReference ? 'foto de continuidad' : 'Veo inventará la imagen'}</span>
+                {shot.authorPhoto && !shot.stillShot && <button type="button" className="rounded-lg border border-emerald-400/40 px-2 py-1 text-xs text-emerald-200" disabled={!!busy}
+                  title="Para imágenes que Veo no acepta o cuando tu foto ya es el plano que quieres"
+                  onClick={() => void post({ action: 'plano-fijo', shotId: shot.shotId }, shot.shotId).then((d) => { if (d) setSummary(shot.shotId + ': plano fijo con tu foto creado (gratis) y FIJADO. Entra así en la película.'); })}>
+                  Usar mi foto como plano fijo · gratis, sin Veo</button>}
+                {shot.stillShot && <button type="button" className="rounded-lg border border-white/20 px-2 py-1 text-xs" disabled={!!busy}
+                  onClick={() => void post({ action: 'quitar-plano-fijo', shotId: shot.shotId }, shot.shotId)}>Quitar plano fijo</button>}
                 {!shot.locked && <label className="cursor-pointer rounded-lg border border-white/20 px-2 py-1 text-xs hover:border-white/40">
                   {shot.authorPhoto ? 'Cambiar mi foto' : 'Subir mi foto'}
                   <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={!!busy}
