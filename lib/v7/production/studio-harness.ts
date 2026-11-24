@@ -146,6 +146,33 @@ export async function approveScene(filmId: string, sceneLabel: string) {
   return { fijadas: done, sinVideo };
 }
 
+/**
+ * MONTAR LA ESCENA DESDE CERO: devuelve al montaje TODAS sus tomas, archiva los avances anteriores
+ * (no se borran) y monta la escena nueva. No cambia ningún video ni ninguna elección de versión.
+ */
+export async function rebuildScene(filmId: string, sceneLabel: string) {
+  const { film } = await readV7FilmBundle(filmId);
+  const sc = indexedScenes(film).find((s) => s.label === sceneLabel);
+  if (!sc) throw new Error('No existe la escena ' + sceneLabel);
+  const devueltas: string[] = [];
+  const tomas: Array<{ label: string; fuente: string }> = [];
+  for (const { label } of sc.shots) {
+    const dir = path.join(v7FilmRoot(filmId), label.toLowerCase());
+    if (await isRemoved(dir)) { await restoreShot(dir); devueltas.push(label); }
+    const video = await originalShotVideo(dir, label);
+    tomas.push({ label, fuente: !video ? 'SIN VIDEO' : video.endsWith('-plano-fijo.mp4') ? 'tu material / versión elegida' : 'Veo' });
+  }
+  const finalDir = path.join(v7FilmRoot(filmId), 'final');
+  const archive = path.join(finalDir, 'archivo');
+  for (const f of (await readdir(finalDir).catch(() => [] as string[])).filter((x) => x.startsWith(`avance-${sceneLabel}-`))) {
+    await mkdir(archive, { recursive: true });
+    await import('node:fs/promises').then((m) => m.rename(path.join(finalDir, f), path.join(archive, f)));
+  }
+  await touchSceneChange(filmId, sceneLabel, 'montaje desde cero');
+  const job = await startHarnessJob(filmId, sceneLabel, 'montar');
+  return { devueltas, tomas, job };
+}
+
 /** Acciones del autor sobre una toma: aprobar (fijar), soltar, quitar del montaje o devolverla. */
 export async function shotAuthorAction(filmId: string, shotId: string, action: 'fijar' | 'soltar' | 'quitar' | 'devolver') {
   if (!/^E\d{2}-P\d{2}$/.test(shotId)) throw new Error('Toma inválida.');

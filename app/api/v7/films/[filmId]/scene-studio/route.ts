@@ -10,7 +10,7 @@ import { listShotVersions, makeStillShot, removeStillShot, restoreShotVersion, s
 import { stat } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import {
-  applyPreflight, approveScene, greenStatus, HARNESS_JOBS, harnessJob, latestAvance, latestEpisode, scenePreflight, setMasterInfo, shotAuthorAction, startHarnessJob, type HarnessJobKind
+  applyPreflight, approveScene, greenStatus, rebuildScene, HARNESS_JOBS, harnessJob, latestAvance, latestEpisode, scenePreflight, setMasterInfo, shotAuthorAction, startHarnessJob, type HarnessJobKind
 } from '@/lib/v7/production/studio-harness';
 
 export const runtime = 'nodejs';
@@ -122,6 +122,9 @@ export async function POST(request: Request, context: Context) {
     }
     if (body.action === 'quitar-plano-fijo') {
       return NextResponse.json({ ok: true, result: await removeStillShot(filmId, shotId) }, { headers: noStore });
+    }
+    if (body.action === 'rehacer-montaje') {
+      return NextResponse.json({ ok: true, result: await rebuildScene(filmId, scene) }, { headers: noStore });
     }
     if (body.action === 'approve-scene') {
       return NextResponse.json({ ok: true, result: await approveScene(filmId, scene) }, { headers: noStore });

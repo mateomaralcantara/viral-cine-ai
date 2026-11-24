@@ -170,6 +170,12 @@ export default function V7HarnessPanel({ filmId, scene, onChanged, part }: { fil
       <div className="mt-3 flex flex-wrap gap-2">
         <button type="button" className="button-secondary" disabled={!!busy || running} onClick={() => void start('musica')}>5a · Música de la escena · céntimos</button>
         <button type="button" className="button-secondary" disabled={!!busy || running} onClick={() => void start('montar')}>5b · Montar el avance · gratis</button>
+        <button type="button" className="button-primary" disabled={!!busy || running}
+          onClick={() => { if (window.confirm(`¿Montar ${scene} desde cero? Se devuelven al montaje TODAS sus tomas y se rehace el video de la escena (gratis). No cambia ningún video ni las versiones que elegiste.`)) void post({ action: 'rehacer-montaje' }, 'rebuild').then(async (d) => {
+            const r = d?.result as { devueltas?: string[]; tomas?: Array<{ label: string; fuente: string }> } | undefined;
+            if (r) { setNote(`Montando ${scene} desde cero.${r.devueltas?.length ? ' Devueltas al montaje: ' + r.devueltas.join(', ') + '.' : ''} Tomas: ${(r.tomas ?? []).map((t) => `${t.label} (${t.fuente})`).join(' · ')}`); onChanged(); await loadJob(); }
+          }); }}>
+          Montar la escena desde cero (todas las tomas)</button>
         <button type="button" className="button-secondary" disabled={!!busy || running} onClick={() => void start('voces')}>Voces en off (todo el episodio)</button>
       </div>
 
