@@ -4,7 +4,7 @@ import { PRIMERA_PAGINA_ID } from '@/lib/v7/presets/la-primera-pagina';
 import { EPISODIO_1_ID } from '@/lib/v7/presets/convidados-episodio-1';
 import { EPISODIO_2_ID } from '@/lib/v7/presets/convidados-episodio-2';
 
-export const FILM_KEYS: Record<string, string> = {
+const REGISTERED: Record<string, string> = {
   convidados: CONVIDADOS_ID,
   episodio1: EPISODIO_1_ID,
   episodio2: EPISODIO_2_ID,
@@ -12,7 +12,15 @@ export const FILM_KEYS: Record<string, string> = {
   'dos-toques': 'film-dos-toques-de-bocina-v7'
 };
 
-/** Nombre corto de una película a partir de su id (para lanzar los agentes desde el estudio). */
+/** Las películas creadas desde la web (desglose del guion) se nombran por su id: film-<nombre>-v7. */
+const FILM_ID = /^film-[a-z0-9][a-z0-9-]{1,80}-v\d+$/;
+
+/** Nombres cortos de las películas conocidas; además acepta directamente cualquier id de película válido. */
+export const FILM_KEYS: Record<string, string> = new Proxy(REGISTERED, {
+  get: (target, k) => (typeof k === 'string' ? target[k] ?? (FILM_ID.test(k) ? k : undefined) : undefined)
+});
+
+/** Nombre con el que los agentes reciben la película (su nombre corto, o su id si se creó desde la web). */
 export function filmKeyFor(filmId: string) {
-  return Object.entries(FILM_KEYS).find(([, id]) => id === filmId)?.[0] ?? null;
+  return Object.entries(REGISTERED).find(([, id]) => id === filmId)?.[0] ?? (FILM_ID.test(filmId) ? filmId : null);
 }

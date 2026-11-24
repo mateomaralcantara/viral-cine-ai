@@ -40,14 +40,19 @@ export async function GET(request: Request, context: Context) {
     if (params.get('avance') === '1') {
       const file = await latestAvance(filmId, scene);
       if (!file) return fail(404, 'Todavía no hay avance de ' + scene + '. Pulsa «Montar el avance».');
-      return serveFile(request, file, 'video/mp4');
+      return serveFile(request, file, 'video/mp4', params.get('descargar') === '1');
     }
     // Escenas en verde: el estudio pregunta cada pocos segundos; las verdes se montan solas (gratis).
     if (params.get('estado') === '1') return NextResponse.json({ ok: true, estado: await greenStatus(filmId, { autoMount: true }) }, { headers: noStore });
     if (params.get('episodio') === '1') {
       const file = await latestEpisode(filmId);
       if (!file) return fail(404, 'Todavía no hay episodio completo montado.');
-      return serveFile(request, file, 'video/mp4');
+      // Variantes para descargar: con subtítulos grabados, o los subtítulos sueltos (español / inglés).
+      const tipo = params.get('tipo');
+      const variant = tipo === 'subtitulada' ? file.replace(/\.mp4$/, '-subtitulada.mp4')
+        : tipo === 'srt' ? file.replace(/\.mp4$/, '.srt') : tipo === 'en.srt' ? file.replace(/\.mp4$/, '.en.srt') : file;
+      if (!(await stat(variant).catch(() => null))) return fail(404, 'Ese archivo no existe para el último episodio montado.');
+      return serveFile(request, variant, variant.endsWith('.srt') ? 'application/x-subrip' : 'video/mp4', params.get('descargar') === '1');
     }
     if (params.get('decorado') === 'info') return NextResponse.json({ ok: true, decorado: await setMasterInfo(filmId).then((d) => d && { ...d, file: undefined }) }, { headers: noStore });
     if (params.get('decorado') === '1') {
@@ -117,16 +122,18 @@ export async function POST(request: Request, context: Context) {
 }
 
 /** Sirve un archivo local con soporte de rangos (para poder avanzar y retroceder en el video). */
-async function serveFile(request: Request, file: string, type: string) {
+async function serveFile(request: Request, file: string, type: string, download = false) {
   const size = (await stat(file)).size;
+  // Descargar al PC: el navegador guarda el archivo con su nombre real en vez de abrirlo.
+  const disposition: Record<string, string> = download ? { 'Content-Disposition': `attachment; filename="${file.split(/[\\/]/).pop()!.replace(/[^\w.-]/g, '_')}"` } : {};
   const range = /bytes=(\d*)-(\d*)/.exec(request.headers.get('range') || '');
   if (range) {
     const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
     const end = range[1] && range[2] ? Math.min(size - 1, Number(range[2])) : size - 1;
     if (!(start >= 0 && start <= end && end < size)) return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${size}` } });
     const stream = Readable.toWeb(createReadStream(file, { start, end })) as ReadableStream;
-    return new Response(stream, { status: 206, headers: { ...noStore, 'Content-Type': type, 'Accept-Ranges': 'bytes', 'Content-Length': String(end - start + 1), 'Content-Range': `bytes ${start}-${end}/${size}` } });
+    return new Response(stream, { status: 206, headers: { ...noStore, ...disposition, 'Content-Type': type, 'Accept-Ranges': 'bytes', 'Content-Length': String(end - start + 1), 'Content-Range': `bytes ${start}-${end}/${size}` } });
   }
   const stream = Readable.toWeb(createReadStream(file)) as ReadableStream;
-  return new Response(stream, { headers: { ...noStore, 'Content-Type': type, 'Accept-Ranges': 'bytes', 'Content-Length': String(size) } });
+  return new Response(stream, { headers: { ...noStore, ...disposition, 'Content-Type': type, 'Accept-Ranges': 'bytes', 'Content-Length': String(size) } });
 }

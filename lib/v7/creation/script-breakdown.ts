@@ -1,0 +1,157 @@
+/**
+ * DESGLOSE DEL GUION CON IA: un guion pegado en la web se convierte en una película lista
+ * para el estudio (escenas, tomas, diálogos en cámara, voces en off, personajes, vestuario, música).
+ * El modelo propone el desglose; esta función lo normaliza con las reglas aprendidas en los episodios:
+ *  - tomas de 4, 6 u 8 s; una frase dicha en cámara SIEMPRE cabe en su toma (si no, se reparte);
+ *  - quien no tiene imagen (narrador, voces) habla en off; bocas cerradas en las tomas sin diálogo;
+ *  - cada toma nombra a sus personajes con su aspecto fijo y el vestuario de la escena;
+ *  - nunca texto ni subtítulos en pantalla.
+ */
+import type { GoogleGenAI } from '@google/genai';
+import type { ShortFilmBeat, ShortFilmSpec } from '@/lib/v7/presets/short-film-builder';
+import { speechSeconds, VOICE_START_SECONDS, VOICE_TAIL_SECONDS } from '@/lib/v7/production/film-voice-mix';
+
+export const BREAKDOWN_SCHEMA = {
+  type: 'object',
+  properties: {
+    premisa: { type: 'string' },
+    estilo: { type: 'string' },
+    personajes: { type: 'array', items: { type: 'object', properties: {
+      clave: { type: 'string' }, nombre: { type: 'string' }, edad: { type: 'number' }, rol: { type: 'string' },
+      apariencia: { type: 'string' }, voz: { type: 'string' }, tieneImagen: { type: 'boolean' }
+    }, required: ['clave', 'nombre', 'edad', 'rol', 'apariencia', 'voz', 'tieneImagen'] } },
+    escenas: { type: 'array', items: { type: 'object', properties: {
+      titulo: { type: 'string' }, resumen: { type: 'string' }, lugar: { type: 'string' }, vestuario: { type: 'string' },
+      reparto: { type: 'array', items: { type: 'string' } }, musica: { type: 'string' }, musicaPrompt: { type: 'string' },
+      tomas: { type: 'array', items: { type: 'object', properties: {
+        titulo: { type: 'string' }, tipo: { type: 'string', enum: ['dialogo', 'voz', 'imagen'] }, personaje: { type: 'string' },
+        frase: { type: 'string' }, camara: { type: 'string' }, descripcion: { type: 'string' }, segundos: { type: 'number' }
+      }, required: ['titulo', 'tipo', 'personaje', 'frase', 'camara', 'descripcion', 'segundos'] } }
+    }, required: ['titulo', 'resumen', 'lugar', 'vestuario', 'reparto', 'musica', 'musicaPrompt', 'tomas'] } }
+  },
+  required: ['premisa', 'estilo', 'personajes', 'escenas']
+} as const;
+
+export function buildBreakdownPrompt(input: { title: string; story: string; minutes: number; genre: string }) {
+  return [
+    `Eres el primer ayudante de dirección de una productora. Desglosa este guion en un plan de rodaje para una película de unos ${input.minutes} minutos («${input.title}», ${input.genre}).`,
+    'REGLAS:',
+    '- Respeta el texto del autor: los diálogos se copian tal cual, en orden, sin resumir ni inventar.',
+    '- Escenas = secuencias del guion. Tomas de 4, 6 u 8 segundos (segundos).',
+    '- tipo «dialogo»: el personaje lo dice EN CÁMARA. tipo «voz»: voz en off (narrador, recuerdos, voces sin cuerpo). tipo «imagen»: sin voz (frase vacía).',
+    '- Una frase larga se reparte en varias tomas consecutivas (unas 14 letras por segundo).',
+    '- descripcion: solo lo VISIBLE, en una frase, nombrando a los personajes por su nombre. Nada de letras, carteles ni texto legible.',
+    '- personajes: clave corta en minúsculas sin acentos (p. ej. «martin»); apariencia física fija y concreta (edad, pelo, rasgos); voz descrita; tieneImagen=false para narrador y voces sin cuerpo. Incluye siempre un «narrador» aunque no hable.',
+    '- vestuario: el de los protagonistas en esa escena. musicaPrompt: en inglés, instrumental, sin voces.',
+    '\nGUION:\n' + input.story
+  ].join('\n');
+}
+
+type Raw = {
+  premisa?: string; estilo?: string;
+  personajes?: Array<{ clave?: string; nombre?: string; edad?: number; rol?: string; apariencia?: string; voz?: string; tieneImagen?: boolean }>;
+  escenas?: Array<{ titulo?: string; resumen?: string; lugar?: string; vestuario?: string; reparto?: string[]; musica?: string; musicaPrompt?: string;
+    tomas?: Array<{ titulo?: string; tipo?: string; personaje?: string; frase?: string; camara?: string; descripcion?: string; segundos?: number }> }>;
+};
+
+export const slugKey = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'personaje';
+type Sec = 4 | 6 | 8;
+const onCameraSeconds = (line: string): Sec | null => { const n = speechSeconds(line) + 0.6; return n <= 4 ? 4 : n <= 6 ? 6 : n <= 8 ? 8 : null; };
+const voiceOverSeconds = (line: string): Sec | null => { const n = speechSeconds(line) + VOICE_START_SECONDS + VOICE_TAIL_SECONDS; return n <= 4 ? 4 : n <= 6 ? 6 : n <= 8 / 0.75 ? 8 : null; };
+const snap = (n: number): Sec => (n <= 4 ? 4 : n <= 6 ? 6 : 8);
+
+/** Parte una frase por oraciones, comas o, en último caso, por la mitad, hasta que quepa. */
+export function splitToFit(line: string, fits: (s: string) => boolean): string[] {
+  if (fits(line)) return [line];
+  const pieces = line.match(/[^.!?…]+[.!?…]+[»"]?\s*|[^.!?…]+$/g)?.map((x) => x.trim()).filter(Boolean) ?? [line];
+  const parts = pieces.length > 1 ? pieces : line.split(/(?<=,)\s+/);
+  const out: string[] = []; let cur = '';
+  for (const p of parts) { const next = cur ? cur + ' ' + p : p; if (cur && !fits(next)) { out.push(cur); cur = p; } else cur = next; }
+  if (cur) out.push(cur);
+  return out.flatMap((p) => {
+    if (fits(p) || !p.includes(' ')) return [p];
+    const mid = p.length / 2; const spaces = [...p.matchAll(/ /g)].map((m) => m.index!);
+    const at = spaces.reduce((a, b) => (Math.abs(b - mid) < Math.abs(a - mid) ? b : a));
+    return splitToFit(p.slice(0, at).trim() + '…', fits).concat(splitToFit(p.slice(at).trim(), fits));
+  });
+}
+
+/** Convierte la propuesta del modelo en un guion de producción válido (ShortFilmSpec). */
+export function normalizeBreakdown(raw: unknown, meta: { filmId: string; title: string; genre: string; serie: string; quality?: string }): ShortFilmSpec {
+  const r = (typeof raw === 'string' ? JSON.parse(raw) : raw) as Raw;
+  const chars = new Map<string, { key: string; name: string; age: number; role: string; appearance: string; voice: string; image: boolean }>();
+  for (const p of r.personajes ?? []) {
+    const key = slugKey(p.clave || p.nombre || '');
+    if (chars.has(key)) continue;
+    chars.set(key, { key, name: (p.nombre || key).trim(), age: Math.max(1, Math.round(Number(p.edad) || 40)), role: (p.rol || '').trim() || 'Personaje',
+      appearance: p.tieneImagen === false ? 'Voz en off, sin imagen' : (p.apariencia || '').trim() || 'aspecto según el guion', voice: (p.voz || '').trim() || 'Voz natural.', image: p.tieneImagen !== false });
+  }
+  if (!chars.has('narrador')) chars.set('narrador', { key: 'narrador', name: 'Narrador', age: 55, role: 'Narrador', appearance: 'Voz en off, sin imagen', voice: 'Voz cinematográfica sobria.', image: false });
+  const style = `${(r.estilo || 'Cine dramático de alto presupuesto, fotorrealista').trim().replace(/\.$/, '')}, formato 16:9.`;
+  const LIMPIO = 'Sin subtítulos ni texto en pantalla.';
+
+  const scenes = (r.escenas ?? []).filter((s) => (s.tomas ?? []).length).map((s) => {
+    const cast = [...new Set((s.reparto ?? []).map(slugKey).filter((k) => chars.has(k)))];
+    const visible = (txt: string) => [...chars.values()].filter((c) => c.image && new RegExp('\\b' + c.name.split(/\s+/)[0].normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() + '\\b').test(txt.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()));
+    const beats: ShortFilmBeat[] = [];
+    for (const t of s.tomas ?? []) {
+      const camera = (t.camara || 'Plano medio').trim().replace(/\.$/, '');
+      const desc = (t.descripcion || '').trim().replace(/\.$/, '');
+      const who = slugKey(t.personaje || '');
+      const speaker = chars.get(who);
+      const line = (t.frase || '').trim();
+      if (speaker && !cast.includes(who)) cast.push(who);
+      const shown = visible(desc + ' ' + (t.tipo === 'dialogo' && speaker ? speaker.name : ''));
+      for (const c of shown) if (!cast.includes(c.key)) cast.push(c.key);
+      const looks = shown.map((c) => `${c.name}: ${c.appearance}.`).join(' ');
+      const wardrobe = shown.length && s.vestuario ? ` Vestuario: ${s.vestuario.trim().replace(/\.$/, '')}.` : '';
+      const base = `En ${(s.lugar || 'el lugar de la escena').trim()}, ${desc}. ${looks}${wardrobe}`.replace(/\s+/g, ' ').trim();
+      if (t.tipo === 'dialogo' && line && speaker?.image) {
+        for (const [i, part] of splitToFit(line, (x) => onCameraSeconds(x) !== null).entries()) {
+          beats.push({ title: `${t.titulo || 'Diálogo'}${i ? ` (${i + 1})` : ''}`, camera, onCamera: true, seconds: onCameraSeconds(part) ?? 8, voice: who, line: part,
+            prompt: `${camera}. ${base} ${speaker.name} dice en español, con ${speaker.voice.replace(/\.$/, '').toLowerCase()}: «${part}». ${style} ${LIMPIO}` });
+        }
+      } else if (line && (t.tipo === 'voz' || t.tipo === 'dialogo')) {
+        const voice = speaker ? who : 'narrador';
+        for (const [i, part] of splitToFit(line, (x) => voiceOverSeconds(x) !== null).entries()) {
+          beats.push({ title: `${t.titulo || 'Voz'}${i ? ` (${i + 1})` : ''}`, camera, seconds: voiceOverSeconds(part) ?? 8, voice, line: part,
+            prompt: `${camera}. ${base} Bocas cerradas. ${style} ${LIMPIO}` });
+        }
+      } else {
+        beats.push({ title: t.titulo || 'Imagen', camera, seconds: snap(Number(t.segundos) || 6), voice: 'narrador', line: '',
+          prompt: `${camera}. ${base} Bocas cerradas. ${style} ${LIMPIO}` });
+      }
+    }
+    if (!cast.includes('narrador')) cast.push('narrador');
+    return { title: (s.titulo || 'Escena').trim(), summary: (s.resumen || '').trim() || (s.titulo || ''), location: (s.lugar || '').trim(), wardrobe: (s.vestuario || '').trim(),
+      cast, beats, music: (s.musica || '').trim() || undefined, musicPrompt: (s.musicaPrompt || '').trim() || undefined };
+  });
+  if (!scenes.length) throw new Error('El desglose no produjo ninguna escena. Revisa que el guion tenga escenas y diálogos.');
+  return {
+    id: meta.filmId, title: meta.title, premise: (r.premisa || '').trim() || meta.title, genre: meta.genre, audience: 'Público adulto', visualStyle: style,
+    continuityNotes: ['Misma cara de cada personaje en todas las tomas (ficha oficial)', 'Sin texto en pantalla'],
+    metadata: { serie: meta.serie, format: 'pelicula', creationMode: 'desglose-ia', qualityPreset: meta.quality ?? 'cine', puertaDeCalidad: true, continuidadObligatoria: true },
+    characters: [...chars.values()].map((c) => ({ key: c.key, name: c.name, age: c.age, role: c.role, appearance: c.appearance, voice: c.voice })),
+    scenes
+  };
+}
+
+export const BREAKDOWN_MODELS = process.env.V7_BREAKDOWN_MODEL?.trim() ? [process.env.V7_BREAKDOWN_MODEL.trim()] : ['gemini-2.5-pro', 'gemini-2.5-flash'];
+
+/** Pide el desglose al modelo (unos céntimos). */
+export async function requestBreakdown(ai: GoogleGenAI, input: { title: string; story: string; minutes: number; genre: string }) {
+  let lastError = '';
+  for (const model of BREAKDOWN_MODELS) {
+    try {
+      const res = await ai.models.generateContent({
+        model, contents: [{ role: 'user', parts: [{ text: buildBreakdownPrompt(input) }] }],
+        config: { temperature: 0.3, maxOutputTokens: 60000, responseMimeType: 'application/json', responseJsonSchema: BREAKDOWN_SCHEMA }
+      });
+      return { raw: res.text ?? '', model };
+    } catch (e) {
+      lastError = String((e as Error)?.message ?? e);
+      if (!/404|NOT_FOUND|not found|is not supported/i.test(lastError)) break;
+    }
+  }
+  throw new Error('No se pudo desglosar el guion: ' + lastError.replace(/\s+/g, ' ').slice(0, 220));
+}
