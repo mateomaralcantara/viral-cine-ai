@@ -334,10 +334,16 @@ async function writeRecord(filmId: string, record: SceneVeoRecord) {
   try { await rename(temp, target); } catch (e) { await unlink(temp).catch(() => undefined); throw e; }
 }
 
+const SCENE_LOCK_STALE_MS = 10 * 60 * 1000;
+
 async function withSceneLock<T>(filmId: string, sceneLabel: string, work: () => Promise<T>): Promise<T> {
   const dir = path.join(v7FilmRoot(filmId), 'scenes', sceneLabel.toLowerCase());
   await mkdir(dir, { recursive: true });
   const file = path.join(dir, '.veo-scene.lock');
+  // Un candado de hace más de 10 min es de un proceso que se cerró a medias (Ctrl+C, apagón):
+  // ninguna operación real lo tiene tanto tiempo (enviar o descargar tarda segundos). Se retira.
+  const age = await stat(file).then((st) => Date.now() - st.mtimeMs).catch(() => -1);
+  if (age > SCENE_LOCK_STALE_MS) await unlink(file).catch(() => undefined);
   const handle = await open(file, 'wx').catch((e: NodeJS.ErrnoException) => {
     if (e.code === 'EEXIST') throw new Error('Ya hay una operación de Veo en curso en esta escena. Espera y recupera la misma tarea.');
     throw e;
