@@ -405,9 +405,12 @@ export async function sceneStudioBoard(filmId: string, sceneLabel: string) {
     const revision = await latestPromptRevision(filmId, shot.shotId);
     const reference = await optionalReference(filmId, shot.shotId);
     const estimatedUsd = rate === null ? null : estimateShotUsd(shot.editSeconds, rate);
+    // Fijada o quitada sin video de Veo (p. ej. con tu material): ya no está «en cola»; el
+    // despachador nunca la enviará, y contarla como en cola dejaba la cola esperando para siempre.
+    const settled = await isLocked(shotDir(filmId, shot.shotId)) || await isRemoved(shotDir(filmId, shot.shotId));
     return {
       ...shot,
-      status: record?.provider === 'veo' ? record.status : record ? 'other-provider' : queued.has(shot.shotId) ? 'queued' : 'not-started',
+      status: record?.provider === 'veo' ? record.status : record ? 'other-provider' : settled ? 'other-provider' : queued.has(shot.shotId) ? 'queued' : 'not-started',
       operationKnown: Boolean(record?.operationName),
       error: record?.error ?? null,
       promptText: revision?.promptText ?? shot.defaultPrompt,
