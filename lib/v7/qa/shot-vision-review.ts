@@ -112,12 +112,15 @@ export function normalizeReview(raw: unknown, opts: { onCamera?: boolean } = {})
   if (textoEnPantalla && !problemas.some((p) => p.tipo.includes('texto'))) problemas.push({ tipo: 'texto en pantalla', gravedad: 'critico', descripcion: 'Aparece texto o letras en la imagen.' });
   if (bocasHablando && !problemas.some((p) => p.tipo.includes('boca'))) problemas.push({ tipo: 'bocas', gravedad: 'medio', descripcion: 'Algún personaje mueve los labios como si hablara.' });
   const puntuacion = clamp(r.puntuacion);
+  // A veces el modelo da «guion» e «identidad» de 0 a 1 (1 = perfecto) aunque la nota vaya de 0 a 10:
+  // un 9.5/10 con «guion 1/10» es esa confusión, no un fallo. Se pasa a la escala de 10.
+  const tenScale = (n: unknown) => { const v = Number(n); return Number.isFinite(v) && v > 0 && v <= 1 && puntuacion >= 6 ? v * 10 : n; };
   const critical = problemas.some((p) => p.gravedad === 'critico');
   const veredicto: ShotReview['veredicto'] = critical || puntuacion < 6 ? 'rehacer' : puntuacion >= 8 && !bocasHablando ? 'aprobar' : 'revisar';
   return {
     puntuacion,
-    coincideConGuion: clamp(r.coincideConGuion),
-    identidad: r.identidad == null ? null : clamp(r.identidad),
+    coincideConGuion: clamp(tenScale(r.coincideConGuion)),
+    identidad: r.identidad == null ? null : clamp(tenScale(r.identidad)),
     textoEnPantalla, bocasHablando, problemas, veredicto,
     motivo: String(r.motivo ?? ''),
     promptSugerido: veredicto === 'rehacer' ? String(r.promptSugerido ?? '').trim() : ''

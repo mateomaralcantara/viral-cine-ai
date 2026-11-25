@@ -269,7 +269,8 @@ async function main() {
           const n = (await celebrityBlocks(label)) + 1;
           let how = '';
           if (n === 1 && await anchorFrameAsReference(label)) how = 'foto de partida = fotograma de una toma ya aprobada (Veo ya aceptó esa cara)';
-          else if (n <= 2) { await runScript('continuidad.ts', ['--tomas', label, '--generar']); how = 'foto de continuidad nueva'; }
+          // Sin retratos aprobados no se puede crear otra foto: reenviar la misma solo se vuelve a bloquear.
+          else if (n <= 2 && (await approvedSheets(serie)).length) { await runScript('continuidad.ts', ['--tomas', label, '--generar']); how = 'foto de continuidad nueva'; }
           else { await textOnlyByFilter(label); how = 'sin foto (Google confunde la cara con una persona famosa): solo texto con la descripción fija; la puerta revisará la cara'; }
           revisionId = (await savePromptRevision(filmId, label, current)).revisionId;
           note(label, 'BLOQUEADA', `parecido a persona famosa (intento ${n}) → ${how} · Google no cobró el bloqueo`);

@@ -97,3 +97,14 @@ test('importar tomas: el mismo diálogo se reconoce aunque cambie la descripció
   assert.ok(shotSimilarity(a, b) >= 0.7);
   assert.ok(shotSimilarity(a, c) < 0.35);
 });
+
+test('revisor: «guion 1» y «cara 1» con nota 9.5 son la escala 0–1, no un suspenso', async () => {
+  const { normalizeReview } = await import('../lib/v7/qa/shot-vision-review');
+  const base = { textoEnPantalla: false, bocasHablando: false, problemas: [], veredicto: 'aprobar', motivo: '', promptSugerido: '' };
+  const r = normalizeReview({ ...base, puntuacion: 9.5, coincideConGuion: 1, identidad: 1 }, { onCamera: true });
+  assert.equal(r.coincideConGuion, 10);
+  assert.equal(r.identidad, 10);
+  const bad = normalizeReview({ ...base, puntuacion: 4, coincideConGuion: 1, identidad: 0 }, { onCamera: true });
+  assert.equal(bad.coincideConGuion, 1, 'una toma mala sigue suspendiendo');
+  assert.equal(normalizeReview({ ...base, puntuacion: 9, coincideConGuion: 8, identidad: 9 }).coincideConGuion, 8);
+});
